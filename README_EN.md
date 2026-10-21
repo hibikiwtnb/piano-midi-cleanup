@@ -55,18 +55,20 @@ On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CP
 
 ### `bpmfix.command`
 
-BPM fixing plus first beat adjustment.
+BPM fixing, then BPM and first beat adjustment in a browser workbench.
 
 Usage:
 
-1. If you already know the BPM, enter it in the terminal; otherwise press Return and Essentia detects a fixed BPM from the source audio.
-2. Choose the source audio file (used for BPM detection and for listening to the first beat).
-3. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
-4. The first beat page opens in the browser: play the source audio with a metronome, press "設為播放位置" at the first downbeat, fine-tune with +-1 beat and +-10 ms, then press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
+1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
+2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
+3. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
+4. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 
-`first_beat_ui.py` serves the page from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. Saving moves the whole MIDI earlier so the chosen time lands on a bar line; if pickup notes would start before 0, whole bars are added in front. BPM, channels and tick-0 meta events are unchanged. The first beat result is appended to `*_stats.txt`.
+`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `mu2000_playback.py` opens a virtual MIDI port named `pianotrans-tools` and starts the headless S-MU2000 `live` engine on it in the background. Sound goes to the system default output; MU2000.app and an IAC bus are not needed.
 
-The `pianotrans.command` pipeline only runs the BPM fix and does not open the first beat page.
+Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
+
+The `pianotrans.command` pipeline only runs the BPM fix and does not open the workbench.
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
 
@@ -265,7 +267,9 @@ Shared helpers:
 ```text
 bpmfix_utils.py
 first_beat_ui.py
-first_beat_ui.html
+mu2000_playback.py
+web/result.js
+web/result.css
 midi_stats.py
 detect_chords_tonal.js
 ```
@@ -287,12 +291,14 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference
+~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8"
 ```
 
 ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
 Tonal.js chord detection requires Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
+
+Realtime workbench playback needs the S-MU2000 emulator (`app/bin/live` and `roms`), by default at `$HOME/Music/S-MU2000-mac`; `PIANOTRANS_MU2000_DIR` overrides it. The virtual MIDI port needs `python-rtmidi` (included in the install command).
 
 Vendored Tonal.js:
 
@@ -311,6 +317,7 @@ Overridable environment variables:
 ```text
 PIANOTRANS_BPM_ENV
 PIANOTRANS_BPM_PYTHON
+PIANOTRANS_MU2000_DIR
 ```
 
 ## Notes

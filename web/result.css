@@ -1,0 +1,66 @@
+html, body { height:100%; }
+html body { padding:0; background:#fff; }
+body .share-shell { max-width:1600px; height:100%; min-height:0; display:flex; flex-direction:column; }
+body .muscriptor-instrument-selector {
+  background:#fff; border:1px solid #d5dce3;
+  border-radius:6px; padding:12px 14px; box-shadow:none;
+}
+body .muscriptor-instrument-selector label > span:first-child {
+  color:#0069aa; font-size:13px; font-weight:700;
+}
+body .muscriptor-instrument-selector .info {
+  color:#555; font-size:12px; line-height:1.4;
+}
+body .muscriptor-instrument-selector [data-testid="token"] {
+  background:#edf6fc; border:1px solid #b7d8ee;
+  border-radius:4px; color:#24445b; font-size:12px;
+}
+body .muscriptor-instrument-selector input {
+  color:#222; background:#fff; font-size:12px; min-height:34px;
+}
+.msr-root, .msr-host { min-height:0; background:#fff; }
+.msr-root { flex:1 1 auto; margin:6px 3px; color:#222; font-family:Arial,Helvetica,'Noto Sans TC',sans-serif; }
+.msr-host { height:100%; display:flex; flex-direction:column; }
+.msr-source { color:#0069aa; font-weight:600; background:#fff; border:1px solid #d5dce3; border-radius:6px; padding:9px 12px; margin-bottom:10px; }
+.msr-toolbar { flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
+.msr-btn { box-sizing:border-box; background:#fff; color:#0069aa; border:1px solid #1683bd; border-radius:4px; padding:6px 11px; cursor:pointer; box-shadow:none; font:inherit; line-height:1.25; }
+.msr-btn:hover { background:#edf7fc; border-color:#0069aa; color:#00527f; }
+.msr-btn:active { background:#dcedf7; }
+.msr-btn:disabled { opacity:.4; cursor:default; }
+.msr-btn.active { color:#fff; border-color:#0069aa; background:#0069aa; box-shadow:none; }
+.msr-toolbar > .msr-btn:first-child { color:#fff; border-color:#0069aa; background:#0069aa; }
+.msr-toolbar > .msr-btn:first-child:hover { border-color:#00527f; background:#005f91; }
+.msr-delay { display:flex; align-items:center; gap:5px; color:#333; white-space:nowrap; }
+.msr-delay input { width:62px; height:32px; box-sizing:border-box; color:#234; border:1px solid #b9c4cc; border-radius:4px; background:#fff; padding:4px 7px; }
+.msr-delay input:focus { outline:2px solid rgba(0,105,170,.18); border-color:#1683bd; }
+.msr-clock { font-family:monospace; color:#334; border:1px solid #d5dce3; border-radius:4px; background:#f7f9fa; padding:6px 9px; }
+.msr-status { margin-left:auto; max-width:420px; min-width:0; overflow:hidden; color:#4b5963; font-size:12px; line-height:32px; text-align:right; text-overflow:ellipsis; white-space:nowrap; }
+.msr-audio { position:absolute; width:1px; height:1px; opacity:.01; pointer-events:none; }
+.msr-grid { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,340px); gap:12px; margin-top:6px; }
+.msr-roll-scroll { height:100%; min-height:0; overflow:auto; border:1px solid #8ba5bf; border-radius:3px; background:#fff; scrollbar-color:#9aafc2 #edf2f6; scrollbar-width:thin; }
+.msr-roll-scroll::-webkit-scrollbar { width:12px; height:12px; }
+.msr-roll-scroll::-webkit-scrollbar-track { background:#edf2f6; border-radius:3px; }
+.msr-roll-scroll::-webkit-scrollbar-thumb { background:#9aafc2; border-radius:3px; border:2px solid #edf2f6; }
+.msr-roll-scroll::-webkit-scrollbar-thumb:hover { background:#7895ae; }
+.msr-roll-world { position:relative; }
+.msr-roll-viewport { position:sticky; left:0; overflow:hidden; }
+.msr-roll { display:block; cursor:crosshair; }
+.msr-playhead { position:absolute; top:0; bottom:0; width:1px; background:#f00000; pointer-events:none; will-change:transform; }
+.msr-instruments { border:1px solid #d5dce3; border-radius:6px; background:#fff; padding:12px; align-self:start; box-shadow:none; }
+.msr-instruments h3 { margin:0 0 9px; color:#243746; font-size:15px; font-weight:600; }
+.msr-row { display:flex; align-items:center; gap:8px; min-height:32px; padding:6px 2px; border-top:1px solid #e6eaed; }
+.msr-row:first-of-type { border-top:0; }
+.msr-row.undetected { opacity:.38; text-decoration:line-through; }
+.msr-swatch { flex:0 0 11px; width:11px; height:11px; border:1px solid rgba(0,0,0,.22); }
+.msr-instrument-info { flex:1 1 auto; min-width:0; }
+.msr-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:Arial,Helvetica,'Noto Sans TC',sans-serif; font-size:14px; line-height:1.35; color:#243746; }
+.msr-meta { margin-top:2px; color:#6a7780; font-family:Arial,Helvetica,'Noto Sans TC',sans-serif; font-size:12px; line-height:1.3; }
+.msr-row .msr-btn { flex:0 0 auto; min-width:30px; padding:4px 7px; text-align:center; }
+.msr-row.muted .msr-name { opacity:.2; }
+.msr-pianometer { flex:0 0 auto; display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,340px); gap:12px; margin-top:4px; }
+.msr-pianometer-main { grid-column:1; position:relative; min-width:0; padding-top:20px; border:1px solid #8ba5bf; border-radius:3px; overflow:hidden; background:#27333c; box-sizing:border-box; }
+.msr-chord { position:absolute; top:0; left:0; right:0; height:20px; overflow:hidden; color:#fff; font-family:monospace; font-size:14px; font-weight:700; line-height:20px; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
+.msr-keyboard { display:block; max-width:100%; background:#fafafa; }
+@media (max-width:760px) {
+  .msr-grid, .msr-pianometer { grid-template-columns:1fr; }
+}

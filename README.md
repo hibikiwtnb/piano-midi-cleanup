@@ -54,18 +54,20 @@ MPS -> CUDA -> CPU
 
 ### `bpmfix.command`
 
-BPM 修正加第一拍位置調整。
+BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 使用方式：
 
-1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，讓 Essentia 從原音訊偵測固定 BPM。
-2. 選擇原音訊檔（偵測 BPM 和第一拍試聽都用它）。
-3. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
-4. 瀏覽器自動打開第一拍頁面：播放原曲加節拍器，在第一個強拍時按「設為播放位置」，再用 ±1 拍、±10ms 微調，按「寫入 MIDI」直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
+1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
+2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
+3. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
+4. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 
-第一拍頁面由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。寫入時整份 MIDI 往前平移，讓所選時間落在小節線上；有弱起音落到 0 之前時，在前面補整數小節。BPM、channel 和 tick 0 的 meta event 不變。第一拍結果會追加到 `*_stats.txt`。
+工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `mu2000_playback.py` 建立名為 `pianotrans-tools` 的虛擬 MIDI 埠，並在背景啟動 S-MU2000 的 `live`（無視窗）接收它，聲音從系統預設輸出播出，不需要先開 MU2000.app 或設定 IAC。
 
-`pianotrans.command` pipeline 只做 BPM 修正，不開第一拍頁面。
+寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
+
+`pianotrans.command` pipeline 只做 BPM 修正，不開工作台。
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
 
@@ -264,7 +266,9 @@ generate_chord_review.py
 ```text
 bpmfix_utils.py
 first_beat_ui.py
-first_beat_ui.html
+mu2000_playback.py
+web/result.js
+web/result.css
 midi_stats.py
 detect_chords_tonal.js
 ```
@@ -286,12 +290,14 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference
+~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8"
 ```
 
 ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
 Tonal.js chord detection requires Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
+
+工作台的即時播放需要 S-MU2000 模擬器（含 `app/bin/live` 和 `roms`），預設位置 `$HOME/Music/S-MU2000-mac`，可用 `PIANOTRANS_MU2000_DIR` 覆蓋。虛擬 MIDI 埠需要 `python-rtmidi`（已列在安裝指令中）。
 
 Vendored Tonal.js:
 
@@ -310,6 +316,7 @@ $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 ```text
 PIANOTRANS_BPM_ENV
 PIANOTRANS_BPM_PYTHON
+PIANOTRANS_MU2000_DIR
 ```
 
 ## Notes

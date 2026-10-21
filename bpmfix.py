@@ -49,19 +49,21 @@ def ask_known_bpm():
 
 def main():
     print('--------------------------------------------------------------------------------')
-    print('MIDI BPMFix using Essentia BPM detection, then first beat in the browser')
-    print('Enter a known BPM first, or press Return to detect it from the source audio.')
+    print('MIDI BPMFix using Essentia BPM detection, then BPM and first beat in the browser')
+    print('Enter a known BPM first. If unknown, press Return and choose audio for detection.')
     print('--------------------------------------------------------------------------------')
 
     try:
         target_bpm = ask_known_bpm()
-        audio_path = choose_audio()
-        if not audio_path:
-            print('No audio selected.')
-            return 1
-        if not os.path.isfile(audio_path):
-            messagebox.showerror('BPMFix', 'Audio file does not exist.')
-            return 1
+        audio_path = None
+        if target_bpm is None:
+            audio_path = choose_audio()
+            if not audio_path:
+                print('No audio selected.')
+                return 1
+            if not os.path.isfile(audio_path):
+                messagebox.showerror('BPMFix', 'Audio file does not exist.')
+                return 1
 
         midi_path = choose_midi()
         if not midi_path:
@@ -72,7 +74,7 @@ def main():
             return 1
 
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
-        first_beat = run_first_beat_ui(audio_path, output_path)
+        first_beat = run_first_beat_ui(output_path)
         report = format_first_beat_stats(output_path, first_beat)
         with open(bpmfix_report_path_for(midi_path), 'a', encoding='utf-8') as file:
             file.write('\n\n' + report + '\n')
@@ -88,7 +90,8 @@ def main():
             output=output_path,
             confidence='N/A' if confidence is None else '{:.3f}'.format(confidence),
             first_beat='not changed' if first_beat is None else '{:.3f}s'.format(first_beat['first_beat_seconds']),
-            **bpm_info,
+            bpm=bpm_info['bpm'] if first_beat is None else first_beat['bpm'],
+            source=bpm_info['source'],
         ),
     )
     return 0
