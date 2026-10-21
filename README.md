@@ -1,7 +1,9 @@
 # Pianotrans Run Tools
 [English README](README_EN.md)
 
-這個目錄包含增加了 Apple GPU / MPS 支持的 Pianotrans 轉錄入口，以及圍繞轉錄結果新增的 BPM 修正、MIDI 統計、保守規則清理、初步分手 / MIDI channel 標記、MIDI review 匯出工具。所有 `.command` 檔都可以直接雙擊執行。
+這個目錄包含 Pianotrans 轉錄入口（含 Apple GPU / MPS 版），以及轉錄結果的後處理工具：BPM 修正、第一拍對齊（瀏覽器工作台加 S-MU2000 即時播放）、調號、保守規則清理、分手（兩隻手或三隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。所有 `.command` 檔都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
+
+固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
 
 ## Main Pipeline
 
@@ -40,6 +42,32 @@ song_bpmfix_cleaned.mid
 
 如果 `song.mid` 已存在，流程不會重新轉錄；只會補缺失的 stats、BPM-fixed MIDI、cleaned MIDI。
 
+這個 pipeline 只做 BPM 修正，不對齊第一拍、不寫調號，分手固定兩隻手，也不裁短重疊。
+
+### 建議的後處理順序
+
+轉錄完成後，對 `song_bpmfix_cleaned.mid` 依序執行（全部直接覆寫同一個檔案，不會多出 MIDI）：
+
+```text
+1. midi_workbench.command：對齊第一拍（自動或手動），第一拍有移動時重寫調號
+2. key_signature.command：第一拍沒移動時補寫調號
+3. hand_split_channels.command：需要三隻手的曲子用 --hands 3 重新分手
+4. trim_overlaps.command：裁短踏板造成的重疊
+5. note_text_review.py / pianoroll_snapshot.command：檢查結果
+```
+
+裁短只移動音尾，重跑分手不會恢復原本的音長；要回到裁短前的狀態，需從 `song_bpmfix.mid` 重新清理，或用 git 還原（見 Test Data）。
+
+非交互執行（agent 用）：
+
+```bash
+python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python key_signature.py song_bpmfix_cleaned.mid
+python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python trim_overlaps.py song_bpmfix_cleaned.mid
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+```
+
 ### `pianotrans_mps.command`
 
 保留的 Apple GPU / MPS 支持版入口，流程與 `pianotrans.command` 相同，但設備選擇順序為：
@@ -61,7 +89,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
 2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
 3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
-4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
+4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音（第二右手併入右手）、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
 5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
 
@@ -69,7 +97,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
 
-`pianotrans.command` pipeline 只做 BPM 修正，不開工作台。
+`pianotrans.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號、不開工作台。
 
 自動對齊第一拍只看 BPM 修正後的 MIDI（不需要原音訊），假設固定 4/4：
 
@@ -400,6 +428,18 @@ web/result.js
 web/result.css
 midi_stats.py
 detect_chords_tonal.js
+vendor/tonal.min.js
+```
+
+`hand_split_channels.py` 也提供讀取音符、分組和 channel 對應給其他工具使用。
+
+## Test Data
+
+`testdata/` 放以 git 管理版本的 MIDI 組（原始轉錄、`_bpmfix`、`_bpmfix_cleaned`、`_stats.txt`，部分附文字 review）。工具直接覆寫其中的 MIDI，前後差異用 git 比對；需要回到某一步時用 git 還原。
+
+```text
+La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*：
+  lalal.ai v6 鋼琴分離 + Pianotrans，BPM 135，手動對齊第一拍，三隻手分手，已裁短重疊
 ```
 
 ## Dependencies
@@ -419,8 +459,10 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8"
+~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
 ```
+
+`pianoroll_snapshot.py` 用 Pillow 畫圖。
 
 ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
@@ -453,4 +495,5 @@ PIANOTRANS_MU2000_DIR
 - `pianotrans.py` 會依序嘗試 CUDA、CPU。
 - `pianotrans_mps.py` 會依序嘗試 MPS、CUDA、CPU；在 Apple Silicon 且 PyTorch MPS 可用時會使用 Apple GPU。
 - BPM 修正以固定 BPM 為前提，不建立 tempo map。
+- 小節計算一律假設 4/4，3/4 等拍號尚未支援；調號只寫大調，小調以關係大調表示。
 - 規則清理是低風險 preprocessing；後續更複雜的判斷應放在 feature extraction 或 ML classifier 等更高階流程中。

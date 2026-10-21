@@ -2,7 +2,9 @@
 
 [Chinese README](README.md)
 
-This folder contains Pianotrans transcription entrypoints with added Apple GPU / MPS support, plus post-processing tools for BPM fixing, MIDI statistics, conservative rule-based cleanup, provisional hand-splitting / MIDI channel marking, and MIDI review export. All `.command` files are intended to be double-clickable.
+This folder contains Pianotrans transcription entrypoints (including an Apple GPU / MPS version) plus post-processing tools: BPM fixing, first beat alignment (browser workbench with realtime S-MU2000 playback), key signatures, conservative rule-based cleanup, hand split (two or three hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. All `.command` files are double-clickable, and every tool also has a dialog-free command line for agents.
+
+4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
 
 ## Main Pipeline
 
@@ -41,6 +43,32 @@ song_bpmfix_cleaned.mid
 
 If `song.mid` already exists, the pipeline does not run transcription again. It only fills in missing stats, BPM-fixed MIDI, and cleaned MIDI.
 
+This pipeline only fixes the BPM: it does not align the first beat or write key signatures, splits into two hands only, and does not trim overlaps.
+
+### Suggested post-processing order
+
+After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overwrites the same file, so no extra MIDI is created):
+
+```text
+1. midi_workbench.command: align the first beat (automatic or by hand); key signatures are rewritten when it moves
+2. key_signature.command: write key signatures when the first beat did not move
+3. hand_split_channels.command: split again with --hands 3 for songs that need three hands
+4. trim_overlaps.command: trim overlaps left by the sustain pedal
+5. note_text_review.py / pianoroll_snapshot.command: check the result
+```
+
+Trimming only moves note ends, and splitting hands again does not restore the original lengths; to go back before trimming, clean again from `song_bpmfix.mid` or restore with git (see Test Data).
+
+Non-interactive (for agents):
+
+```bash
+python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python key_signature.py song_bpmfix_cleaned.mid
+python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python trim_overlaps.py song_bpmfix_cleaned.mid
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+```
+
 ### `pianotrans_mps.command`
 
 Preserved Apple GPU / MPS-capable entrypoint. It runs the same pipeline as `pianotrans.command`, but uses this device selection order:
@@ -62,7 +90,7 @@ Usage:
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
 3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
-4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
+4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right), and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
@@ -70,7 +98,7 @@ Usage:
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
 
-The `pianotrans.command` pipeline only runs the BPM fix and does not open the workbench.
+The `pianotrans.command` pipeline only runs the BPM fix: it does not align the first beat, write key signatures, or open the workbench.
 
 Automatic first beat alignment uses only the BPM-fixed MIDI (no audio) and assumes a fixed 4/4:
 
@@ -401,6 +429,18 @@ web/result.js
 web/result.css
 midi_stats.py
 detect_chords_tonal.js
+vendor/tonal.min.js
+```
+
+`hand_split_channels.py` also provides note reading, onset grouping and the channel mapping to the other tools.
+
+## Test Data
+
+`testdata/` holds MIDI sets kept under git (original transcription, `_bpmfix`, `_bpmfix_cleaned`, `_stats.txt`, some with a note text review). Tools overwrite the MIDI there in place; compare steps with git and restore with git when needed.
+
+```text
+La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*:
+  lalal.ai v6 piano stem + Pianotrans, BPM 135, first beat aligned by hand, three-hand split, overlaps trimmed
 ```
 
 ## Dependencies
@@ -420,8 +460,10 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8"
+~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
 ```
+
+`pianoroll_snapshot.py` draws with Pillow.
 
 ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
@@ -454,4 +496,5 @@ PIANOTRANS_MU2000_DIR
 - `pianotrans.py` tries CUDA, then CPU.
 - `pianotrans_mps.py` tries MPS, then CUDA, then CPU; on Apple Silicon with PyTorch MPS available, it uses Apple GPU.
 - BPM fixing assumes a fixed BPM and does not build a tempo map.
+- Bars always assume 4/4; 3/4 and other meters are not supported yet. Key signatures are written as major keys; minor keys appear as their relative major.
 - Rule cleanup is conservative preprocessing. More complex decisions should be handled by later feature extraction or ML/classifier workflows.
