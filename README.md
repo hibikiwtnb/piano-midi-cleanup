@@ -166,6 +166,8 @@ channel 2 = MIDI channel 3
 
 ### `generate_midi_review.py`
 
+開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
+
 只讀取已完成後處理的 MIDI，輸出英文 Markdown 格式的 score facts table。它不修改 MIDI。
 
 命令：
@@ -194,6 +196,8 @@ MIDI_REVIEW_SPEC.md
 ```
 
 ### `generate_chord_review.command`
+
+開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
 
 只讀取已完成後處理的 MIDI，輸出英文 Markdown 格式的 vertical chord chart。它不修改 MIDI。
 

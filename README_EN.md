@@ -167,6 +167,8 @@ This step is intended to make the MIDI easier to inspect and edit in Logic Pro s
 
 ### `generate_midi_review.py`
 
+Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
+
 Reads a processed MIDI and writes a compact English Markdown score facts table. It does not modify the MIDI.
 
 Command:
@@ -195,6 +197,8 @@ MIDI_REVIEW_SPEC.md
 ```
 
 ### `generate_chord_review.command`
+
+Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
 
 Reads a processed MIDI and writes an English Markdown vertical chord chart. It does not modify the MIDI.
 
