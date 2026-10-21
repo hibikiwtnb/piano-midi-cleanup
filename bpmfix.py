@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox
 
 from bpmfix_utils import apply_bpm_fix, bpmfix_report_path_for
 from first_beat_ui import append_first_beat_stats, auto_align_first_beat, run_first_beat_ui
+from key_signature import apply_key_signatures
 
 
 def choose_audio():
@@ -50,7 +51,7 @@ def ask_known_bpm():
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description='Fix MIDI BPM, align the first beat, then optionally open the workbench. '
+        description='Fix MIDI BPM, align the first beat, optionally open the workbench, then write key signatures. '
                     'Without input_midi the tool asks with dialogs.',
     )
     parser.add_argument('input_midi', nargs='?', help='MIDI to fix; writes *_bpmfix.mid next to it.')
@@ -59,6 +60,7 @@ def parse_args(argv):
     source.add_argument('--audio', help='Source audio for Essentia BPM detection.')
     parser.add_argument('--no-auto-first-beat', action='store_true', help='Skip the automatic first beat alignment.')
     parser.add_argument('--workbench', action='store_true', help='Open the browser workbench after fixing.')
+    parser.add_argument('--no-key-signature', action='store_true', help='Skip key signature detection.')
     return parser.parse_args(argv)
 
 
@@ -79,6 +81,8 @@ def run_non_interactive(args):
         auto_align_first_beat(output_path, report_path=report_path)
     if args.workbench:
         append_first_beat_stats(output_path, run_first_beat_ui(output_path), report_path=report_path)
+    if not args.no_key_signature:
+        apply_key_signatures(output_path, report_path=report_path)
     print('Output: {}'.format(output_path))
     return 0
 
@@ -118,6 +122,7 @@ def main(argv=None):
         auto_align_first_beat(output_path, report_path=report_path)
         first_beat = run_first_beat_ui(output_path)
         append_first_beat_stats(output_path, first_beat, report_path=report_path)
+        apply_key_signatures(output_path, report_path=report_path)
     except Exception as error:
         messagebox.showerror('BPMFix failed', str(error))
         raise

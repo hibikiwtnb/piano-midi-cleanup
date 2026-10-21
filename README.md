@@ -63,6 +63,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
 4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
 5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
+6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
 
 工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `mu2000_playback.py` 建立名為 `pianotrans-tools` 的虛擬 MIDI 埠，並在背景啟動 S-MU2000 的 `live`（無視窗）接收它，聲音從系統預設輸出播出，不需要先開 MU2000.app 或設定 IAC。
 
@@ -88,7 +89,7 @@ python bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --workbench
+python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
 ```
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
@@ -215,12 +216,33 @@ channel 2 = MIDI channel 3
 1. 選擇 MIDI（通常是 `*_bpmfix.mid` 或 `*_bpmfix_cleaned.mid`）。
 2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
 
-結果會追加到來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。
+結果會追加到來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。第一拍有移動時會重新寫入調號（`--no-key-signature` 關閉）。
 
 非交互執行（agent 用）：只自動對齊、不開工作台並直接覆寫：
 
 ```bash
 python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+```
+
+### `key_signature.command`
+
+依每 4 小節一段判斷調號並寫入 MIDI 的 key signature event（直接覆寫），讓 Logic 樂譜在轉調處換調號。需要已對齊小節的 MIDI（BPM 修正加第一拍對齊之後）。
+
+判斷方式：
+
+```text
+1. 從弱起之後的第一個完整小節開始，每 4 小節一段（弱起音算進第一段）
+2. 每段對 12 個大調調號計算需要臨時記號的音符數（關係小調共用調號）
+3. Viterbi 選臨時記號總數最少的路徑；每次換調額外計 4 個音的成本，只在段落交界換調
+4. 6 / 7 個升降號的同音異名調用 F# 和 Db
+```
+
+原有的 key signature event 會全部替換；每段的調號、臨時記號數追加到來源轉錄的 `*_stats.txt`。固定假設 4/4。
+
+非交互執行：
+
+```bash
+python key_signature.py song_bpmfix_cleaned.mid
 ```
 
 ### `generate_midi_review.py`
@@ -299,6 +321,7 @@ midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
 midi_workbench.py
+key_signature.py
 generate_midi_review.py
 generate_chord_review.py
 ```

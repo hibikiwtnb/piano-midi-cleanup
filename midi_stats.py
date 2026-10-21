@@ -14,6 +14,15 @@ def stats_path_for(midi_path):
     return filename + '_stats.txt'
 
 
+def source_stats_path_for(midi_path):
+    """Stats file of the source transcription: song_bpmfix_cleaned.mid -> song_stats.txt."""
+    filename, _ = os.path.splitext(midi_path)
+    for suffix in ('_cleaned', '_bpmfix'):
+        if filename.endswith(suffix):
+            filename = filename[:-len(suffix)]
+    return filename + '_stats.txt'
+
+
 def note_name(note_number):
     octave = note_number // 12 - 1
     return '{}{}'.format(NOTE_NAMES[note_number % 12], octave)

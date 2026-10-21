@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from first_beat_ui import append_first_beat_stats, auto_align_first_beat, run_first_beat_ui
+from key_signature import apply_key_signatures
 
 
 def choose_midi():
@@ -26,6 +27,8 @@ def parse_args(argv):
     parser.add_argument('input_midi', nargs='?', help='MIDI to modify in place.')
     parser.add_argument('--auto-first-beat', action='store_true', help='Align the first beat from the MIDI first.')
     parser.add_argument('--no-workbench', action='store_true', help='Do not open the browser workbench.')
+    parser.add_argument('--no-key-signature', action='store_true',
+                        help='Do not rewrite key signatures after the first beat moves.')
     return parser.parse_args(argv)
 
 
@@ -35,10 +38,16 @@ def main(argv=None):
         if not os.path.isfile(args.input_midi):
             print('MIDI file does not exist: {}'.format(args.input_midi))
             return 1
+        moved = False
         if args.auto_first_beat:
-            auto_align_first_beat(args.input_midi)
+            moved = auto_align_first_beat(args.input_midi) is not None
         if not args.no_workbench:
-            append_first_beat_stats(args.input_midi, run_first_beat_ui(args.input_midi))
+            result = run_first_beat_ui(args.input_midi)
+            append_first_beat_stats(args.input_midi, result)
+            moved = moved or result is not None
+        if moved and not args.no_key_signature:
+            # Shifting moves the old key signature events off the bar lines.
+            apply_key_signatures(args.input_midi)
         return 0
 
     print('--------------------------------------------------------------------------------')
@@ -57,6 +66,8 @@ def main(argv=None):
     try:
         result = run_first_beat_ui(midi_path)
         report = append_first_beat_stats(midi_path, result)
+        if result is not None:
+            apply_key_signatures(midi_path)
     except Exception as error:
         messagebox.showerror('MIDI Workbench failed', str(error))
         raise

@@ -16,6 +16,7 @@ from pathlib import Path
 import mido
 
 from bpmfix_utils import estimate_first_beat, format_auto_first_beat_stats
+from midi_stats import source_stats_path_for
 from mu2000_playback import MidiPlayback, Mu2000Live, read_midi_events
 
 
@@ -242,17 +243,8 @@ def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay):
     }
 
 
-def stats_path_for_midi(midi_path):
-    """Stats file of the source transcription: song_bpmfix_cleaned.mid -> song_stats.txt."""
-    stem = str(Path(midi_path).with_suffix(''))
-    for suffix in ('_cleaned', '_bpmfix'):
-        if stem.endswith(suffix):
-            stem = stem[:-len(suffix)]
-    return stem + '_stats.txt'
-
-
 def append_first_beat_stats(midi_path, result, report_path=None):
-    report_path = report_path or stats_path_for_midi(midi_path)
+    report_path = report_path or source_stats_path_for(midi_path)
     report = format_first_beat_stats(midi_path, result)
     with open(report_path, 'a', encoding='utf-8') as file:
         file.write('\n\n' + report + '\n')
@@ -269,7 +261,7 @@ def auto_align_first_beat(midi_path, report_path=None):
         return None
     bpm = mido.tempo2bpm(midi_tempo(mido.MidiFile(midi_path)))
     result = build_bpm_fixed_midi(midi_path, bpm, estimate['first_beat_seconds'])
-    report_path = report_path or stats_path_for_midi(midi_path)
+    report_path = report_path or source_stats_path_for(midi_path)
     report = format_auto_first_beat_stats(midi_path, estimate, result)
     with open(report_path, 'a', encoding='utf-8') as file:
         file.write('\n\n' + report + '\n')

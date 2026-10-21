@@ -64,6 +64,7 @@ Usage:
 3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
 4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
+6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
 `first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `mu2000_playback.py` opens a virtual MIDI port named `pianotrans-tools` and starts the headless S-MU2000 `live` engine on it in the background. Sound goes to the system default output; MU2000.app and an IAC bus are not needed.
 
@@ -89,7 +90,7 @@ python bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --workbench
+python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
 ```
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
@@ -216,12 +217,33 @@ Usage:
 1. Choose a MIDI file (usually `*_bpmfix.mid` or `*_bpmfix_cleaned.mid`).
 2. Adjust it in the workbench and press "寫入 MIDI" to overwrite the chosen file in place. "取消" leaves it unchanged.
 
-The result is appended to the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog.
+The result is appended to the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog. When the first beat moves, key signatures are written again (`--no-key-signature` skips it).
 
 Non-interactive use (for agents): auto-align only, without the workbench, overwriting in place:
 
 ```bash
 python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+```
+
+### `key_signature.command`
+
+Detects the key signature per 4-bar phrase and writes key signature events into the MIDI in place, so Logic score view changes key at modulations. The MIDI must be bar-aligned (after the BPM fix and first beat alignment).
+
+Method:
+
+```text
+1. Phrases of 4 bars start at the first full bar after any pickup (pickup notes count into the first phrase)
+2. For each phrase, count the notes that need accidentals under each of the 12 major key signatures (relative minors share them)
+3. Viterbi picks the path with the fewest accidentals; each key change costs 4 extra notes, and keys only change at phrase boundaries
+4. F# and Db are used for the 6- and 7-accidental enharmonic pairs
+```
+
+Existing key signature events are replaced. Each segment's key and accidental count is appended to the source transcription `*_stats.txt`. 4/4 is assumed.
+
+Non-interactive use:
+
+```bash
+python key_signature.py song_bpmfix_cleaned.mid
 ```
 
 ### `generate_midi_review.py`
@@ -300,6 +322,7 @@ midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
 midi_workbench.py
+key_signature.py
 generate_midi_review.py
 generate_chord_review.py
 ```
