@@ -7,14 +7,16 @@ from tkinter import filedialog, messagebox
 import mido
 
 from hand_split_channels import (
-    CHANNELS, HARD_SPAN, MAX_FINGERS, RIGHT_HAND_CHANNEL, collect_notes, group_notes,
+    CHANNELS, HARD_SPAN, MAX_FINGERS, collect_notes, group_notes,
 )
 from midi_stats import source_stats_path_for
 
 
-# Right-hand fast figure: at least FAST_FIGURE_MIN_ONSETS onset groups, each within FAST_FIGURE_BEATS of the previous.
+# Fast figure: at least FAST_FIGURE_MIN_ONSETS onset groups, each within FAST_FIGURE_BEATS of the previous.
 FAST_FIGURE_BEATS = 0.5
 FAST_FIGURE_MIN_ONSETS = 3
+# Hands that get the fast figure rule; on the left hand it also cuts bass notes held under a broken chord.
+DEFAULT_FAST_FIGURE_HANDS = ('right', 'second_right')
 # An onset whose notes over all hands have at least this many pitch classes is a harmony change.
 HARMONY_MIN_PITCH_CLASSES = 3
 HAND_NAMES = {channel: hand.replace('_', ' ') for hand, channel in CHANNELS.items()}
@@ -121,7 +123,7 @@ def write_note_ends(midi_file, notes):
             previous_tick = tick
 
 
-def trim_overlaps_in_place(midi_path):
+def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     for note in notes:
@@ -130,10 +132,11 @@ def trim_overlaps_in_place(midi_path):
     groups_by_channel = hand_groups(notes)
 
     peaks_before = {channel: max_sounding(groups) for channel, groups in groups_by_channel.items()}
+    fast_figure_channels = {CHANNELS[hand] for hand in fast_figure_hands}
     counts = {}
     for channel, groups in sorted(groups_by_channel.items()):
         channel_counts = counts.setdefault(channel, {})
-        if channel == RIGHT_HAND_CHANNEL:
+        if channel in fast_figure_channels:
             trim_fast_figures(groups, midi_file.ticks_per_beat, channel_counts)
         trim_chord_changes(groups, channel_counts)
     peaks_after = {channel: max_sounding(groups) for channel, groups in groups_by_channel.items()}
@@ -142,6 +145,7 @@ def trim_overlaps_in_place(midi_path):
     midi_file.save(midi_path)
     return {
         'midi_path': midi_path,
+        'fast_figure_hands': fast_figure_hands,
         'notes': {channel: sum(len(group) for group in groups) for channel, groups in groups_by_channel.items()},
         'counts': counts,
         'peaks_before': peaks_before,
@@ -153,7 +157,8 @@ def format_trim_stats(stats):
     lines = [
         'MIDI overlap trim stats',
         'MIDI: {}'.format(stats['midi_path']),
-        'Fast figure: right hand, {} or more onset groups each within {} beat'.format(
+        'Fast figure: {}; {} or more onset groups each within {} beat'.format(
+            ', '.join(hand.replace('_', ' ') for hand in stats['fast_figure_hands']),
             FAST_FIGURE_MIN_ONSETS, FAST_FIGURE_BEATS),
     ]
     for channel in sorted(stats['notes']):
@@ -167,8 +172,8 @@ def format_trim_stats(stats):
     return '\n'.join(lines)
 
 
-def apply_overlap_trim(midi_path, report_path=None):
-    stats = trim_overlaps_in_place(midi_path)
+def apply_overlap_trim(midi_path, report_path=None, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS):
+    stats = trim_overlaps_in_place(midi_path, fast_figure_hands=fast_figure_hands)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_trim_stats(stats)
     with open(report_path, 'a', encoding='utf-8') as file:
@@ -196,6 +201,8 @@ def main(argv=None):
     )
     parser.add_argument('input_midi', nargs='?', help='Hand-split MIDI to modify in place. Without it a dialog opens.')
     parser.add_argument('--report', help='Report path (default: the source transcription *_stats.txt).')
+    parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=DEFAULT_FAST_FIGURE_HANDS,
+                        help='Hands that get the fast figure rule (default: right second_right).')
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
@@ -206,7 +213,7 @@ def main(argv=None):
         print('MIDI file does not exist: {}'.format(midi_path))
         return 1
 
-    stats = apply_overlap_trim(midi_path, report_path=args.report)
+    stats = apply_overlap_trim(midi_path, report_path=args.report, fast_figure_hands=args.fast_figure_hands)
     if not args.input_midi:
         messagebox.showinfo('Trim Overlaps complete', format_trim_stats(stats))
     return 0

@@ -219,7 +219,7 @@ python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 分手之後執行：把踏板延音造成、同一隻手內重疊的音裁短，直接修改 MIDI。只移動音尾，不刪音、不動起音。每隻手（channel）分開處理，起音相差 50 ms 內的音視為同一組。
 
 ```text
-快速音型（只限右手）：連續 3 組以上、每組間隔 0.5 拍以內的起音；音型內每個音最晚在右手下一組起音結束
+快速音型（預設右手和第二右手）：連續 3 組以上、每組間隔 0.5 拍以內的起音；音型內每個音最晚在同一隻手下一組起音結束
 換和聲：某個起音時刻所有手合起來有 3 個以上不同音名時，這隻手還在響、音名不在其中的音在此結束（相當於換踏板）
 換和弦：一隻手彈新的和弦或八度（2 個音以上）時，上一個和弦還在響的音在此結束
 按不住：還在響的音加上新的音超過 5 個，或跨度超過 14 半音時，還在響的音在此結束
@@ -231,7 +231,10 @@ python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 
 ```bash
 python trim_overlaps.py song_bpmfix_cleaned.mid
+python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
 ```
+
+`--fast-figure-hands` 指定套用快速音型的手。左手預設不套，因為它也會截斷分解和弦下按著的低音。
 
 ### `midi_workbench.command`
 

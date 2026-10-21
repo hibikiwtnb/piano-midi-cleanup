@@ -220,7 +220,7 @@ python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
 
 ```text
-Fast figure (right hand only): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next right-hand onset group
+Fast figure (right and second right hand by default): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next onset group of the same hand
 Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, sounding notes of the hand whose pitch class is not among them end there (like a pedal change)
 Chord change: when a hand plays a new chord or octave (2 or more notes), notes of its previous chord still sounding end there
 Out of reach: when the sounding notes plus the new ones exceed 5 notes or span more than 14 semitones, the sounding notes end there
@@ -232,7 +232,10 @@ Non-interactive:
 
 ```bash
 python trim_overlaps.py song_bpmfix_cleaned.mid
+python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
 ```
+
+`--fast-figure-hands` picks the hands that get the fast figure rule. The left hand is off by default because the rule also cuts bass notes held under a broken chord.
 
 ### `midi_workbench.command`
 
