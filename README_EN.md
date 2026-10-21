@@ -176,18 +176,21 @@ All percentages use `Original notes` as the denominator.
 
 ### `hand_split_channels.command`
 
-Marks provisional left/right hand assignment directly on a cleaned MIDI file by changing note channels only.
+Marks a provisional hand split directly on a cleaned MIDI file by changing note channels only. Two hands by default; for songs that need three hands add `--hands 3` for a second right hand.
 
 It does not create separate instrument tracks and does not remove notes.
 
-Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and only "lowest k notes to the left hand, the rest to the right hand" splits are considered. The lowest-cost path over the whole song is chosen. Cost terms:
+First a blob line is found for every beat: on a piano roll the bass and middle notes often form one blob and the fast broken chords another above it, with an empty pitch band in between. For each beat (with the onsets of one beat on each side) each candidate line is scored by its distance to the nearest notes above and below, and Viterbi keeps the line in the widest empty band while charging 0.5 per semitone it moves.
+
+Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and cut into one contiguous slice per hand (two hands: left, right; three hands: left, second right, right). The lowest-cost path over the whole song is chosen. Cost terms:
 
 ```text
 Hand span: free up to 12 semitones, heavily penalized beyond 14
 Register: left hand above D4, right hand below G3, by distance
 Movement speed: change of hand position divided by time since that hand's previous onset (an idle hand moves cheaply)
 Fast runs: once a hand has played 3 or more consecutive single notes each < 0.25 s apart, each extra simultaneous note costs more (a dyad inside a fast right-hand single-note run tends to go to an idle left hand)
-Crossing: left-hand top note above right-hand bottom note
+Blob: 4 per note when the top hand (right) gets a note below the blob line or another hand gets one above it; scaled down where the empty band is narrower than 4 semitones on each side
+Second right hand: with three hands, 1 per note given to it, so it is used only when needed
 ```
 
 The report shows the number of groups with a hand span over 12 semitones and the number of multi-note hands left inside fast runs. All weights are constants at the top of the file.
@@ -196,17 +199,21 @@ Channel mapping:
 
 ```text
 MIDI channel 1 = right hand
+MIDI channel 2 = second right hand (only with --hands 3)
 MIDI channel 3 = left hand
+MIDI channel 4 = reserved for a left-hand bass voice (not used yet)
 ```
 
-For libraries such as `mido`, this means:
+For 0-based libraries such as `mido`, channels 0, 1, 2 and 3 are MIDI channels 1, 2, 3 and 4.
 
-```text
-channel 0 = MIDI channel 1
-channel 2 = MIDI channel 3
+This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view; with three hands Logic needs a staff style that includes channel 2.
+
+Non-interactive:
+
+```bash
+python hand_split_channels.py song_bpmfix_cleaned.mid
+python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
-
-This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view.
 
 ### `midi_workbench.command`
 
@@ -313,7 +320,7 @@ Each bar has 4 fixed rows. If multiple onset events appear inside the same beat,
 
 ### `note_text_review.py`
 
-Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` / `L`, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
+Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` right, `S` second right, `L` left, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
 
 ```bash
 python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97

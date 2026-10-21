@@ -1,4 +1,5 @@
 import argparse
+import bisect
 import os
 import sys
 import tkinter as tk
@@ -32,12 +33,30 @@ FAST_RUN_SECONDS = 0.25
 FAST_RUN_MIN_NOTES = 3
 FAST_RUN_EXTRA_NOTE_COST = 3.0
 
-CROSSING_COST_PER_SEMITONE = 3.0
 MAX_FINGERS = 5
 EXTRA_FINGER_COST = 20.0
 
+# Register line between the lower and upper blob of notes, one per beat, chosen by Viterbi
+# to run through the widest empty pitch band around each beat.
+BLOB_LOWEST_LINE = 21
+BLOB_HIGHEST_LINE = 108
+BLOB_CONTEXT_BEATS = 1
+BLOB_MAX_GAP = 12
+BLOB_LINE_MOVE_COST = 0.5
+# Per note on the wrong side of the line: upper hand below it, other hands above it.
+# Scaled down where the empty band is narrower than BLOB_CLEAR_GAP semitones on each side.
+BLOB_SIDE_COST = 4.0
+BLOB_CLEAR_GAP = 4
+
+# With three hands, each note given to the second right hand costs this, so it is used only when needed.
+SECOND_HAND_NOTE_COST = 1.0
+
 RIGHT_HAND_CHANNEL = 0
+SECOND_RIGHT_HAND_CHANNEL = 1
 LEFT_HAND_CHANNEL = 2
+# Hands from low to high; each onset group gives each hand a contiguous slice of its sorted pitches.
+HANDS = {2: ('left', 'right'), 3: ('left', 'second_right', 'right')}
+CHANNELS = {'left': LEFT_HAND_CHANNEL, 'second_right': SECOND_RIGHT_HAND_CHANNEL, 'right': RIGHT_HAND_CHANNEL}
 
 
 def collect_tempo_changes(midi_file):
@@ -203,86 +222,154 @@ def hand_cost(pitches, onset, last_pitch, last_onset, run_length):
     return cost
 
 
-def split_cost(left_pitches, right_pitches, onset, state):
-    cost = hand_cost(left_pitches, onset, state['left_pitch'], state['left_onset'], state['left_run'])
-    cost += hand_cost(right_pitches, onset, state['right_pitch'], state['right_onset'], state['right_run'])
-    cost += register_cost(left_pitches, right_pitches)
-    if left_pitches and right_pitches and left_pitches[-1] > right_pitches[0]:
-        cost += (left_pitches[-1] - right_pitches[0]) * CROSSING_COST_PER_SEMITONE
-    return cost
+def line_scores(pitches):
+    """Half-width of the empty band around each line, or 0 when one side has no notes."""
+    scores = []
+    for line in range(BLOB_LOWEST_LINE, BLOB_HIGHEST_LINE + 1):
+        index = bisect.bisect_left(pitches, line)
+        if index == 0 or index == len(pitches):
+            scores.append(0.0)
+        else:
+            scores.append(min(line - 0.5 - pitches[index - 1], pitches[index] - line + 0.5, BLOB_MAX_GAP))
+    return scores
 
 
-def next_state(state, left_pitches, right_pitches, onset, cost, split_index, parent):
-    new_state = dict(state)
-    if left_pitches:
-        new_state['left_pitch'] = sum(left_pitches) / len(left_pitches)
-        new_state['left_run'] = next_run_length(left_pitches, onset, state['left_onset'], state['left_run'])
-        new_state['left_onset'] = onset
-    if right_pitches:
-        new_state['right_pitch'] = sum(right_pitches) / len(right_pitches)
-        new_state['right_run'] = next_run_length(right_pitches, onset, state['right_onset'], state['right_run'])
-        new_state['right_onset'] = onset
-    new_state['cost'] = state['cost'] + cost
-    new_state['split_index'] = split_index
-    new_state['parent'] = parent
+def best_previous_lines(totals):
+    """For each line, the previous line maximising total minus the move cost (linear distance transform)."""
+    best = list(range(len(totals)))
+
+    def value(previous, line):
+        return totals[previous] - BLOB_LINE_MOVE_COST * abs(line - previous)
+
+    for line in range(1, len(totals)):
+        if value(best[line - 1], line) > value(best[line], line):
+            best[line] = best[line - 1]
+    for line in range(len(totals) - 2, -1, -1):
+        if value(best[line + 1], line) > value(best[line], line):
+            best[line] = best[line + 1]
+    return best
+
+
+def blob_lines(notes, ticks_per_beat):
+    """Per beat (line pitch, clarity): notes below the line form the lower blob, the rest the upper blob."""
+    if not notes:
+        return []
+    beats = max(note['start_ticks'] for note in notes) // ticks_per_beat + 1
+    onsets = [[] for _ in range(beats)]
+    for note in notes:
+        onsets[note['start_ticks'] // ticks_per_beat].append(note['note'])
+
+    beat_scores = []
+    for beat in range(beats):
+        window = onsets[max(0, beat - BLOB_CONTEXT_BEATS):beat + BLOB_CONTEXT_BEATS + 1]
+        beat_scores.append(line_scores(sorted(pitch for pitches in window for pitch in pitches)))
+
+    totals = list(beat_scores[0])
+    back = []
+    for scores in beat_scores[1:]:
+        best = best_previous_lines(totals)
+        back.append(best)
+        totals = [totals[previous] - BLOB_LINE_MOVE_COST * abs(line - previous) + scores[line]
+                  for line, previous in enumerate(best)]
+    path = [max(range(len(totals)), key=lambda line: totals[line])]
+    for best in reversed(back):
+        path.append(best[path[-1]])
+    path.reverse()
+    return [(BLOB_LOWEST_LINE + line, min(scores[line], BLOB_CLEAR_GAP) / BLOB_CLEAR_GAP)
+            for line, scores in zip(path, beat_scores)]
+
+
+def blob_cost(slices, blob):
+    line, clarity = blob
+    wrong = sum(1 for pitch in slices[-1] if pitch < line)
+    wrong += sum(1 for pitches in slices[:-1] for pitch in pitches if pitch >= line)
+    return wrong * BLOB_SIDE_COST * clarity
+
+
+def split_cost(slices, onset, state, blob):
+    cost = sum(hand_cost(pitches, onset, state['pitch'][hand], state['onset'][hand], state['run'][hand])
+               for hand, pitches in enumerate(slices))
+    cost += register_cost(slices[0], slices[-1])
+    if len(slices) == 3:
+        cost += len(slices[1]) * SECOND_HAND_NOTE_COST
+    return cost + blob_cost(slices, blob)
+
+
+def next_state(state, slices, onset, cost, cuts, parent):
+    new_state = {
+        'pitch': list(state['pitch']),
+        'onset': list(state['onset']),
+        'run': list(state['run']),
+        'cost': state['cost'] + cost,
+        'cuts': cuts,
+        'parent': parent,
+    }
+    for hand, pitches in enumerate(slices):
+        if pitches:
+            new_state['pitch'][hand] = sum(pitches) / len(pitches)
+            new_state['run'][hand] = next_run_length(pitches, onset, state['onset'][hand], state['run'][hand])
+            new_state['onset'][hand] = onset
     return new_state
 
 
-def search_splits(groups):
-    """Beam search over onset groups; each group sends its lowest k notes to the left hand."""
+def cut_options(size, hands):
+    if hands == 2:
+        return [(cut,) for cut in range(size + 1)]
+    return [(low, high) for low in range(size + 1) for high in range(low, size + 1)]
+
+
+def search_splits(groups, hands, blobs, ticks_per_beat):
+    """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
     beam = [{
-        'left_pitch': None,
-        'left_onset': None,
-        'left_run': 0,
-        'right_pitch': None,
-        'right_onset': None,
-        'right_run': 0,
+        'pitch': [None] * hands,
+        'onset': [None] * hands,
+        'run': [0] * hands,
         'cost': 0.0,
-        'split_index': None,
+        'cuts': None,
         'parent': None,
     }]
 
     for group in groups:
         pitches = sorted(note['note'] for note in group)
         onset = group[0]['start_seconds']
+        blob = blobs[group[0]['start_ticks'] // ticks_per_beat]
         candidates = []
         for state in beam:
-            for split_index in range(len(pitches) + 1):
-                left_pitches = pitches[:split_index]
-                right_pitches = pitches[split_index:]
-                cost = split_cost(left_pitches, right_pitches, onset, state)
-                candidates.append(next_state(
-                    state, left_pitches, right_pitches, onset, cost, split_index, state,
-                ))
+            for cuts in cut_options(len(pitches), hands):
+                bounds = (0,) + cuts + (len(pitches),)
+                slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
+                cost = split_cost(slices, onset, state, blob)
+                candidates.append(next_state(state, slices, onset, cost, cuts, state))
         candidates.sort(key=lambda item: item['cost'])
         beam = candidates[:BEAM_WIDTH]
 
-    split_indexes = []
+    cuts_per_group = []
     state = beam[0]
     while state['parent'] is not None:
-        split_indexes.append(state['split_index'])
+        cuts_per_group.append(state['cuts'])
         state = state['parent']
-    split_indexes.reverse()
-    return split_indexes
+    cuts_per_group.reverse()
+    return cuts_per_group
 
 
-def assign_groups(groups):
-    for group, split_index in zip(groups, search_splits(groups)):
+def assign_groups(groups, hands, blobs, ticks_per_beat):
+    names = HANDS[hands]
+    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat)):
         ordered = sorted(group, key=lambda note: note['note'])
         for index, note in enumerate(ordered):
-            note['hand'] = 'left' if index < split_index else 'right'
+            note['hand'] = names[sum(1 for cut in cuts if index >= cut)]
 
 
 def summarize_groups(groups):
     wide_span_groups = 0
     fast_run_chords = 0
-    last_onset = {'left': None, 'right': None}
-    run_length = {'left': 0, 'right': 0}
+    last_onset = {hand: None for hand in CHANNELS}
+    run_length = {hand: 0 for hand in CHANNELS}
 
     for group in groups:
         onset = group[0]['start_seconds']
         wide = False
-        for hand in ('left', 'right'):
+        for hand in CHANNELS:
             pitches = [note['note'] for note in group if note['hand'] == hand]
             if not pitches:
                 continue
@@ -300,28 +387,27 @@ def summarize_groups(groups):
 
 def apply_channels(notes):
     for note in notes:
-        channel = RIGHT_HAND_CHANNEL if note['hand'] == 'right' else LEFT_HAND_CHANNEL
+        channel = CHANNELS[note['hand']]
         note['start_message'].channel = channel
         note['end_message'].channel = channel
 
 
-def split_hands_in_place(midi_path):
+def split_hands_in_place(midi_path, hands=2):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
-    assign_groups(groups)
+    blobs = blob_lines(notes, midi_file.ticks_per_beat)
+    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat)
     apply_channels(notes)
     midi_file.save(midi_path)
 
-    right_notes = sum(1 for note in notes if note['hand'] == 'right')
-    left_notes = sum(1 for note in notes if note['hand'] == 'left')
     wide_span_groups, fast_run_chords = summarize_groups(groups)
 
     stats = {
         'midi_path': midi_path,
+        'hands': hands,
         'total_notes': len(notes),
-        'right_notes': right_notes,
-        'left_notes': left_notes,
+        'hand_notes': {hand: sum(1 for note in notes if note['hand'] == hand) for hand in HANDS[hands]},
         'onset_groups': len(groups),
         'wide_span_groups': wide_span_groups,
         'fast_run_chords': fast_run_chords,
@@ -335,14 +421,16 @@ def format_split_stats(stats):
         'MIDI provisional hand split stats',
         'MIDI: {}'.format(stats['midi_path']),
         'Original notes: {}'.format(total_notes),
-        'Channel 1 / right hand notes: {} ({:.2%})'.format(
-            stats['right_notes'],
-            stats['right_notes'] / total_notes if total_notes else 0.0,
-        ),
-        'Channel 3 / left hand notes: {} ({:.2%})'.format(
-            stats['left_notes'],
-            stats['left_notes'] / total_notes if total_notes else 0.0,
-        ),
+        'Hands: {}'.format(stats['hands']),
+    ]
+    for hand in reversed(HANDS[stats['hands']]):
+        lines.append('Channel {} / {} hand notes: {} ({:.2%})'.format(
+            CHANNELS[hand] + 1,
+            hand.replace('_', ' '),
+            stats['hand_notes'][hand],
+            stats['hand_notes'][hand] / total_notes if total_notes else 0.0,
+        ))
+    lines += [
         'Onset groups: {}'.format(stats['onset_groups']),
         'Groups with a hand span > {} semitones: {}'.format(COMFORT_SPAN, stats['wide_span_groups']),
         'Multi-note hand inside a fast run (< {:.2f}s): {}'.format(
@@ -371,8 +459,8 @@ def write_split_report(stats, report_path=None, append=False):
             print('Writing hand split report: {}'.format(report_path))
 
 
-def apply_hand_split(midi_path, report_path=None, append_report=False):
-    stats = split_hands_in_place(midi_path)
+def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2):
+    stats = split_hands_in_place(midi_path, hands=hands)
     write_split_report(stats, report_path=report_path, append=append_report)
     return stats
 
@@ -394,6 +482,8 @@ def main(argv=None):
     parser.add_argument('input_midi', nargs='?', help='Input MIDI file to modify in place.')
     parser.add_argument('--report', help='Optional report path.')
     parser.add_argument('--append-report', action='store_true', help='Append to report instead of overwriting.')
+    parser.add_argument('--hands', type=int, choices=sorted(HANDS), default=2,
+                        help='Number of hands: 3 adds a second right hand on channel 2 (default: 2).')
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
@@ -405,7 +495,7 @@ def main(argv=None):
         return 1
 
     try:
-        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report)
+        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report, hands=args.hands)
     except Exception as error:
         messagebox.showerror('Hand Split failed', str(error))
         raise

@@ -3,7 +3,7 @@ import sys
 
 import mido
 
-from hand_split_channels import LEFT_HAND_CHANNEL, RIGHT_HAND_CHANNEL, collect_notes, group_notes
+from hand_split_channels import LEFT_HAND_CHANNEL, RIGHT_HAND_CHANNEL, SECOND_RIGHT_HAND_CHANNEL, collect_notes, group_notes
 from midi_stats import note_name
 
 
@@ -13,6 +13,8 @@ BEATS_PER_BAR = 4
 def hand_label(channel):
     if channel == RIGHT_HAND_CHANNEL:
         return 'R'
+    if channel == SECOND_RIGHT_HAND_CHANNEL:
+        return 'S'
     if channel == LEFT_HAND_CHANNEL:
         return 'L'
     return '?'

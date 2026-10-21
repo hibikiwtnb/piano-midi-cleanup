@@ -175,18 +175,21 @@ Rule removals:
 
 ### `hand_split_channels.command`
 
-只做初步左右手分配，直接在清理後 MIDI 上修改 note channel。
+只做初步分手，直接在清理後 MIDI 上修改 note channel。預設兩隻手；需要三隻手的曲子加 `--hands 3`，多一個第二右手。
 
 它不拆成多個 instrument track，也不刪除 note。
 
-分配方式是成本最小化的 beam search：起音相差 50 ms 內的音視為同一組，每組由低到高排序後，只考慮「最低 k 個音給左手、其餘給右手」的分法，再在整首曲子上選總成本最低的路徑。成本包括：
+先找每一拍的分團線：鋼琴捲簾上低音、中音常擠成一團，高音的分解和弦在上方另成一團，兩團之間是一段空白音域。對每一拍（含前後各一拍的起音）計算每條分界線到上下最近音的距離，再用 Viterbi 讓分界線盡量走在最寬的空白中、且每移動一個半音付 0.5 的成本。
+
+分配方式是成本最小化的 beam search：起音相差 50 ms 內的音視為同一組，每組由低到高排序後切成每隻手一段（兩隻手：左手、右手；三隻手：左手、第二右手、右手），再在整首曲子上選總成本最低的路徑。成本包括：
 
 ```text
 單手跨度：12 半音內不計，超過 14 半音大幅加重
 音域：左手高於 D4、右手低於 G3 時依距離計算
 移動速度：手的位置變化除以該手距離上一個起音的時間（空閒的手移動較便宜）
 快速段落：該手已連續彈 3 個以上間隔 < 0.25 s 的單音時，每多一個同時音都加成本（右手快速單音中的雙音傾向交給空閒的左手）
-交叉：左手最高音高於右手最低音
+分團：最上面那隻手（右手）拿到分團線以下的音、其他手拿到分團線以上的音，每個音 4；分界線上下的空白小於 4 半音時按比例減輕
+第二右手：三隻手時，每個交給第二右手的音 1，只在需要時才用
 ```
 
 報告會輸出單手跨度超過 12 半音的組數，以及快速段落中仍為多音的次數。所有權重都是檔案開頭的常數。
@@ -195,17 +198,21 @@ channel 對應：
 
 ```text
 MIDI channel 1 = right hand
+MIDI channel 2 = second right hand（只在 --hands 3）
 MIDI channel 3 = left hand
+MIDI channel 4 = 保留給左手低音聲部（尚未使用）
 ```
 
-對 `mido` 這類 0-based channel 的 library 來說：
+對 `mido` 這類 0-based channel 的 library 來說，channel 0、1、2、3 分別是 MIDI channel 1、2、3、4。
 
-```text
-channel 0 = MIDI channel 1
-channel 2 = MIDI channel 3
+這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯；三隻手時需要另外在 Logic 設定含 channel 2 的譜表樣式。
+
+非交互執行：
+
+```bash
+python hand_split_channels.py song_bpmfix_cleaned.mid
+python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
-
-這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯。
 
 ### `midi_workbench.command`
 
@@ -312,7 +319,7 @@ NoteCount
 
 ### `note_text_review.py`
 
-只讀取已對齊小節的 MIDI，把音符印成文字，每個起音群組一行：小節、拍位，再由低到高列出每個音的手（`R` / `L`，未分手為 `?`）、音名和長度（拍）。它不修改 MIDI，也不屬於預設流程，用於檢查分手、調號等問題時手動執行。固定假設 4/4。
+只讀取已對齊小節的 MIDI，把音符印成文字，每個起音群組一行：小節、拍位，再由低到高列出每個音的手（`R` 右手、`S` 第二右手、`L` 左手，未分手為 `?`）、音名和長度（拍）。它不修改 MIDI，也不屬於預設流程，用於檢查分手、調號等問題時手動執行。固定假設 4/4。
 
 ```bash
 python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
