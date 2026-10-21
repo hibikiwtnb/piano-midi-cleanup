@@ -10,6 +10,52 @@ Average velocity: 69.93
 Max polyphony: 15
 
 
+MIDI BPMFix stats
+Audio: N/A
+Input MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem.mid
+Output MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix.mid
+Original BPM: 120.00
+BPM source: manual
+Raw detected BPM: N/A
+Beat-phase BPM: N/A
+Beat-phase coherence: N/A
+Rounding: N/A (manual BPM)
+Applied BPM: 117.85
+Estimated end drift: N/A (manual BPM)
+Detection confidence: N/A (manual BPM)
+Detected beats: N/A (manual BPM)
+
+
+MIDI auto first beat stats
+MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix.mid
+Estimated first beat: -0.385s
+8th-grid onset coherence: 0.033
+Bass onset share on beats 1-4: 0.28 0.25 0.22 0.25
+Shift ticks: 291
+Padding bars: 0
+
+
+MIDI key signature stats
+MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: F (accidental notes 0 of 177)
+- Bar 13: Bb (accidental notes 3 of 94)
+- Bar 17: F (accidental notes 28 of 519)
+- Bar 36: F# (accidental notes 9 of 515), inside a crowded phrase
+- Bar 53: A (accidental notes 6 of 84)
+- Bar 56: F (accidental notes 37 of 896), inside a crowded phrase
+- Bar 85: B (accidental notes 5 of 95)
+- Bar 89: F# (accidental notes 0 of 144)
+- Bar 93: A (accidental notes 13 of 168)
+- Bar 97: F (accidental notes 0 of 164)
+- Bar 101: Bb (accidental notes 11 of 112)
+- Bar 105: F (accidental notes 11 of 495)
+- Bar 125: F# (accidental notes 11 of 528)
+- Bar 141: F (accidental notes 2 of 189)
+- Bar 145: Bb (accidental notes 11 of 218)
+Accidental notes: 147 of 4398 (3.34%)
+
+
 MIDI rule cleaning stats
 Input: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix.mid
 Output: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix_cleaned.mid
@@ -26,16 +72,16 @@ Rule removals:
 MIDI provisional hand split stats
 MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix_cleaned.mid
 Original notes: 4274
-Channel 1 / right hand notes: 2676 (62.61%)
-Channel 3 / left hand notes: 1598 (37.39%)
-Rule assignments:
-- pitch <= 52: 826 (19.33%)
-- pitch >= 67: 1799 (42.09%)
-- group relative lower note: 575 (13.45%)
-- group relative higher note: 575 (13.45%)
-- closer to previous left hand pitch: 188 (4.40%)
-- closer to previous right hand pitch: 146 (3.42%)
-- fallback pitch < 60: 43 (1.01%)
-- fallback pitch >= 60: 122 (2.85%)
-Span exceeded groups: 166
-Span reassignments: 174
+Hands: 2
+Channel 1 / right hand notes: 2942 (68.83%)
+Channel 3 / left hand notes: 1332 (31.17%)
+Onset groups: 1410
+Groups with a hand span > 12 semitones: 57
+Multi-note hand inside a fast run (< 0.25s): 34
+
+
+MIDI overlap trim stats
+MIDI: testdata/miteiken_horizon_lalai_v5_raw_lalai_stem_bpmfix_cleaned.mid
+Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 2942 notes, fast figure 999, harmony change 63, chord change 126, outer line 45, out of reach 70, most notes sounding 11 -> 6
+- Channel 3 / left: 1332 notes, fast figure 0, harmony change 46, chord change 79, outer line 49, out of reach 45, most notes sounding 7 -> 6

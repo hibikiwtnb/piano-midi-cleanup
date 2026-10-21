@@ -17,37 +17,69 @@ Output MIDI: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lala
 Original BPM: 120.00
 BPM source: manual
 Raw detected BPM: N/A
+Beat-phase BPM: N/A
+Beat-phase coherence: N/A
+Rounding: N/A (manual BPM)
 Applied BPM: 106.00
+Estimated end drift: N/A (manual BPM)
 Detection confidence: N/A (manual BPM)
 Detected beats: N/A (manual BPM)
+
+
+MIDI auto first beat stats
+MIDI: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix.mid
+Estimated first beat: -0.639s
+8th-grid onset coherence: 0.359
+Bass onset share on beats 1-4: 0.50 0.07 0.34 0.09
+Shift ticks: 434
+Padding bars: 0
+
+
+MIDI key signature stats
+MIDI: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: Eb (accidental notes 13 of 194)
+- Bar 11: F# (accidental notes 4 of 148), inside a crowded phrase
+- Bar 18: E (accidental notes 45 of 606)
+- Bar 46: F# (accidental notes 42 of 469)
+- Bar 66: E (accidental notes 32 of 414)
+- Bar 86: F# (accidental notes 8 of 314)
+- Bar 98: A (accidental notes 8 of 101)
+- Bar 103: B (accidental notes 35 of 189), inside a crowded phrase
+- Bar 110: D (accidental notes 11 of 121)
+- Bar 114: C (accidental notes 3 of 123)
+- Bar 118: Eb (accidental notes 3 of 138)
+- Bar 126: F# (accidental notes 40 of 585)
+- Bar 150: A (accidental notes 0 of 38)
+Accidental notes: 244 of 3440 (7.09%)
 
 
 MIDI rule cleaning stats
 Input: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix.mid
 Output: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix_cleaned.mid
 Original notes: 3440
-Removed notes: 221 (6.42%)
-Kept notes: 3219 (93.58%)
+Removed notes: 227 (6.60%)
+Kept notes: 3213 (93.40%)
 Rule removals:
-- Duration < 0.030s: 197 (5.73%)
+- Duration < 0.030s: 201 (5.84%)
 - Velocity < 20: 6 (0.17%)
-- Velocity < 35 and duration < 0.080s: 18 (0.52%)
+- Velocity < 35 and duration < 0.080s: 20 (0.58%)
 - Pitch outside 21-108: 0 (0.00%)
 
 
 MIDI provisional hand split stats
 MIDI: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix_cleaned.mid
-Original notes: 3219
-Channel 1 / right hand notes: 2259 (70.18%)
-Channel 3 / left hand notes: 960 (29.82%)
-Rule assignments:
-- pitch <= 52: 273 (8.48%)
-- pitch >= 67: 1551 (48.18%)
-- group relative lower note: 453 (14.07%)
-- group relative higher note: 453 (14.07%)
-- closer to previous left hand pitch: 191 (5.93%)
-- closer to previous right hand pitch: 91 (2.83%)
-- fallback pitch < 60: 23 (0.71%)
-- fallback pitch >= 60: 184 (5.72%)
-Span exceeded groups: 50
-Span reassignments: 54
+Original notes: 3213
+Hands: 2
+Channel 1 / right hand notes: 2242 (69.78%)
+Channel 3 / left hand notes: 971 (30.22%)
+Onset groups: 1115
+Groups with a hand span > 12 semitones: 13
+Multi-note hand inside a fast run (< 0.25s): 5
+
+
+MIDI overlap trim stats
+MIDI: testdata/A song for You! You_ You!! (Off Vocal)_piano_split_by_lalalai_bpmfix_cleaned.mid
+Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 2242 notes, fast figure 366, harmony change 33, chord change 89, outer line 55, out of reach 29, most notes sounding 12 -> 5
+- Channel 3 / left: 971 notes, fast figure 0, harmony change 25, chord change 28, outer line 24, out of reach 26, most notes sounding 6 -> 4
