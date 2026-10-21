@@ -13,6 +13,8 @@ BEATS_PER_BAR = 4
 PHRASE_BARS = 4
 # A key change must save more accidentals than this to be taken.
 CHANGE_COST = 4
+# A phrase whose accidentals exceed this share of its notes is checked bar by bar for a key change inside it.
+CROWDED_RATIO = 0.10
 MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
 # Major key signatures; F# and Db are used for the 6- and 7-accidental enharmonic pairs.
 KEY_SIGNATURES = (
@@ -104,41 +106,57 @@ def detect_key_segments(midi_path):
     costs = accidental_costs(counts)
     path = choose_signatures(costs)
     bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
-    segments = []
+    phrase_ticks = bar_ticks * PHRASE_BARS
+    pieces = []
     for index, key in enumerate(path):
+        tick = 0 if index == 0 else start_tick + index * phrase_ticks
         notes = sum(counts[index])
+        if index == 0 or costs[index][key] <= notes * CROWDED_RATIO:
+            pieces.append((tick, key, notes, costs[index][key], False))
+        else:
+            pieces.extend(split_crowded_phrase(midi_file, tick, bar_ticks, path, index))
+
+    segments = []
+    for tick, key, notes, cost, inside in pieces:
         if segments and segments[-1]['key_index'] == key:
             segments[-1]['notes'] += notes
-            segments[-1]['accidentals'] += costs[index][key]
+            segments[-1]['accidentals'] += cost
             continue
-        tick = 0 if index == 0 else start_tick + index * PHRASE_BARS * bar_ticks
         segments.append({
             'key_index': key,
             'key': KEY_SIGNATURES[key][0],
             'tick': tick,
             'bar': tick // bar_ticks + 1,
             'notes': notes,
-            'accidentals': costs[index][key],
-            'moved_early': False,
+            'accidentals': cost,
+            'inside_phrase': inside,
         })
-
-    # A bar leading into a new key may already be in it: change one bar early if that saves accidentals.
-    for previous, segment in zip(segments, segments[1:]):
-        lead_tick = segment['tick'] - bar_ticks
-        if lead_tick <= previous['tick']:
-            continue
-        lead = bar_pitch_counts(midi_file, lead_tick, segment['tick'])
-        old_cost = accidentals(lead, previous['key_index'])
-        new_cost = accidentals(lead, segment['key_index'])
-        if new_cost < old_cost:
-            previous['notes'] -= sum(lead)
-            previous['accidentals'] -= old_cost
-            segment['notes'] += sum(lead)
-            segment['accidentals'] += new_cost
-            segment['tick'] = lead_tick
-            segment['bar'] -= 1
-            segment['moved_early'] = True
     return segments
+
+
+def split_crowded_phrase(midi_file, tick, bar_ticks, path, index):
+    """Split a crowded phrase at the bar line that gives the fewest accidentals, using the neighbouring keys."""
+    bars = [bar_pitch_counts(midi_file, tick + bar * bar_ticks, tick + (bar + 1) * bar_ticks)
+            for bar in range(PHRASE_BARS)]
+    first_keys = {path[index - 1], path[index]}
+    second_keys = {path[index]} | ({path[index + 1]} if index + 1 < len(path) else set())
+    best = None
+    for split in range(1, PHRASE_BARS):
+        for first in first_keys:
+            for second in second_keys:
+                cost = (sum(accidentals(bar, first) for bar in bars[:split])
+                        + sum(accidentals(bar, second) for bar in bars[split:]))
+                if best is None or cost < best[0]:
+                    best = (cost, split, first, second)
+    cost, split, first, second = best
+    whole = sum(accidentals(bar, path[index]) for bar in bars)
+    if cost >= whole:
+        return [(tick, path[index], sum(map(sum, bars)), whole, False)]
+    return [
+        (tick, first, sum(map(sum, bars[:split])), sum(accidentals(bar, first) for bar in bars[:split]), False),
+        (tick + split * bar_ticks, second, sum(map(sum, bars[split:])),
+         sum(accidentals(bar, second) for bar in bars[split:]), first != second),
+    ]
 
 
 def write_key_signatures(midi_path, segments):
@@ -173,7 +191,7 @@ def format_key_stats(midi_path, segments):
     for segment in segments:
         lines.append('- Bar {}: {} (accidental notes {} of {}){}'.format(
             segment['bar'], segment['key'], segment['accidentals'], segment['notes'],
-            ', one bar before the phrase boundary' if segment['moved_early'] else ''))
+            ', inside a crowded phrase' if segment['inside_phrase'] else ''))
     total_notes = sum(segment['notes'] for segment in segments)
     total_accidentals = sum(segment['accidentals'] for segment in segments)
     lines.append('Accidental notes: {} of {} ({:.2%})'.format(
