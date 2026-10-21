@@ -55,14 +55,18 @@ On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CP
 
 ### `bpmfix.command`
 
-Runs BPM detection and MIDI BPM fixing only.
+BPM fixing plus first beat adjustment.
 
 Usage:
 
-1. If you already know the BPM, enter it in the terminal.
-2. If you do not know the BPM, press Return, then choose the source audio file for Essentia BPM detection.
-3. Choose the MIDI file to fix.
-4. The tool writes `*_bpmfix.mid`.
+1. If you already know the BPM, enter it in the terminal; otherwise press Return and Essentia detects a fixed BPM from the source audio.
+2. Choose the source audio file (used for BPM detection and for listening to the first beat).
+3. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
+4. The first beat page opens in the browser: play the source audio with a metronome, press "設為播放位置" at the first downbeat, fine-tune with +-1 beat and +-10 ms, then press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
+
+`first_beat_ui.py` serves the page from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. Saving moves the whole MIDI earlier so the chosen time lands on a bar line; if pickup notes would start before 0, whole bars are added in front. BPM, channels and tick-0 meta events are unchanged. The first beat result is appended to `*_stats.txt`.
+
+The `pianotrans.command` pipeline only runs the BPM fix and does not open the first beat page.
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
 
@@ -177,18 +181,6 @@ channel 2 = MIDI channel 3
 
 This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view.
 
-### `first_beat_shift.command`
-
-Adjusts the first beat position so the first downbeat of the source audio lands on a bar line.
-
-Usage:
-
-1. Choose a BPM-fixed MIDI (usually `*_bpmfix_cleaned.mid`).
-2. The terminal shows the BPM and the first note time; enter the time in seconds of bar 1 beat 1 in the source audio.
-3. Output `*_firstbeat.mid`.
-
-The whole MIDI is moved earlier by that time; BPM and channels are unchanged. If notes would start before 0 (a pickup), whole bars are added in front. Meta events at tick 0, such as tempo, stay at 0.
-
 ### `generate_midi_review.py`
 
 Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
@@ -264,7 +256,6 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
-first_beat_shift.py
 generate_midi_review.py
 generate_chord_review.py
 ```
@@ -273,6 +264,8 @@ Shared helpers:
 
 ```text
 bpmfix_utils.py
+first_beat_ui.py
+first_beat_ui.html
 midi_stats.py
 detect_chords_tonal.js
 ```

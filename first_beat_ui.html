@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Beat</title>
+<style>
+  :root { --bg: #ffffff; --fg: #18212f; --muted: #6b7380; --line: #d9dde3; --bar: #5b6472;
+          --right: #1976d2; --left: #e07b00; --head: #d32f2f; --panel: #f4f6f8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15181d; --fg: #e6e9ee; --muted: #9aa3ae; --line: #2c323a; --bar: #8a94a1;
+            --right: #5aa7ff; --left: #ffa53d; --head: #ff5c5c; --panel: #1d2127; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px system-ui, 'Noto Sans TC', sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px;
+           background: var(--panel); border-bottom: 1px solid var(--line); }
+  header .title { font-weight: 600; margin-right: 8px; }
+  button { font: inherit; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+           background: var(--bg); color: var(--fg); cursor: pointer; }
+  button.primary { background: var(--right); border-color: var(--right); color: #fff; }
+  input[type=number] { width: 90px; font: inherit; padding: 3px 6px; border: 1px solid var(--line);
+                       border-radius: 6px; background: var(--bg); color: var(--fg); }
+  .group { display: flex; gap: 4px; align-items: center; padding-right: 10px; border-right: 1px solid var(--line); }
+  .group:last-child { border-right: 0; }
+  #status { color: var(--muted); padding: 6px 12px; }
+  #scroll { overflow-x: auto; overflow-y: hidden; }
+  canvas { display: block; position: sticky; left: 0; }
+</style>
+</head>
+<body>
+<header>
+  <span class="title" id="name"></span>
+  <div class="group">
+    <button id="play">播放</button>
+    <label><input type="checkbox" id="click" checked> 節拍器</label>
+  </div>
+  <div class="group">
+    第一拍 <input type="number" id="first" step="0.001" value="0"> 秒
+    <button data-beat="-1">-1 拍</button>
+    <button data-beat="1">+1 拍</button>
+    <button data-ms="-10">-10ms</button>
+    <button data-ms="10">+10ms</button>
+    <button id="here">設為播放位置</button>
+  </div>
+  <div class="group">
+    <button id="zoomout">縮小</button>
+    <button id="zoomin">放大</button>
+  </div>
+  <div class="group">
+    <button id="cancel">取消</button>
+    <button id="save" class="primary">寫入 MIDI</button>
+  </div>
+</header>
+<div id="status">載入中...</div>
+<div id="scroll"><div id="spacer"><canvas id="roll"></canvas></div></div>
+<script>
+(function () {
+  var session, buffer, ctx, source = null, playStart = 0, playOffset = 0, playhead = 0;
+  var pps = 80, firstBeat = 0, clickTimer = null, nextClick = 0, done = false;
+  var scroll = document.getElementById('scroll'), canvas = document.getElementById('roll');
+  var spacer = document.getElementById('spacer'), statusEl = document.getElementById('status');
+  var firstInput = document.getElementById('first'), playButton = document.getElementById('play');
+  var clickBox = document.getElementById('click');
+  var HEIGHT = 420, TOP = 22;
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function beatSeconds() { return 60 / session.bpm; }
+  function barSeconds() { return beatSeconds() * session.beats_per_bar; }
+  function duration() { return buffer ? buffer.duration : 0; }
+  function playing() { return source !== null; }
+  function now() { return playing() ? playOffset + ctx.currentTime - playStart : playhead; }
+
+  function paddingBars() {
+    if (!session.notes.length) return 0;
+    var earliest = session.notes[0][0];
+    return earliest < firstBeat ? Math.ceil((firstBeat - earliest) / barSeconds() - 1e-9) : 0;
+  }
+
+  function setFirstBeat(value) {
+    firstBeat = Math.round(value * 1000) / 1000;
+    firstInput.value = firstBeat.toFixed(3);
+    if (playing()) restartClicks();
+    draw();
+  }
+
+  function resize() {
+    canvas.width = scroll.clientWidth;
+    canvas.height = HEIGHT;
+    spacer.style.width = Math.max(scroll.clientWidth, duration() * pps + 40) + 'px';
+    spacer.style.height = HEIGHT + 'px';
+    draw();
+  }
+
+  function draw() {
+    if (!session) return;
+    var g = canvas.getContext('2d'), w = canvas.width, left = scroll.scrollLeft;
+    var t0 = left / pps, t1 = (left + w) / pps, x = function (t) { return t * pps - left; };
+    g.fillStyle = css('--bg'); g.fillRect(0, 0, w, HEIGHT);
+
+    var low = 21, high = 108;
+    if (session.notes.length) {
+      low = Math.min.apply(null, session.notes.map(function (n) { return n[2]; })) - 2;
+      high = Math.max.apply(null, session.notes.map(function (n) { return n[2]; })) + 2;
+    }
+    var rowH = (HEIGHT - TOP) / (high - low + 1);
+    var y = function (p) { return TOP + (high - p) * rowH; };
+
+    var beat = beatSeconds(), perBar = session.beats_per_bar, pad = paddingBars();
+    var firstIndex = Math.floor((t0 - firstBeat) / beat), lastIndex = Math.ceil((t1 - firstBeat) / beat);
+    g.font = '11px system-ui'; g.textBaseline = 'top';
+    for (var i = firstIndex; i <= lastIndex; i++) {
+      var tx = x(firstBeat + i * beat), isBar = ((i % perBar) + perBar) % perBar === 0;
+      g.fillStyle = isBar ? css('--bar') : css('--line');
+      g.fillRect(Math.round(tx), isBar ? 0 : TOP, 1, HEIGHT);
+      if (isBar) {
+        var bar = Math.floor(i / perBar) + 1 + pad;
+        if (bar >= 1) { g.fillStyle = css('--fg'); g.fillText(String(bar), tx + 3, 4); }
+      }
+    }
+
+    session.notes.forEach(function (n) {
+      if (n[1] < t0 || n[0] > t1) return;
+      g.fillStyle = n[3] === 'left' ? css('--left') : css('--right');
+      g.fillRect(x(n[0]), y(n[2]), Math.max(2, (n[1] - n[0]) * pps), Math.max(2, rowH - 1));
+    });
+
+    g.fillStyle = css('--head');
+    g.fillRect(Math.round(x(now())), 0, 2, HEIGHT);
+  }
+
+  function clickAt(when, accent) {
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = accent ? 2000 : 1200;
+    gain.gain.setValueAtTime(0.6, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(when); osc.stop(when + 0.06);
+  }
+
+  function restartClicks() {
+    var beat = beatSeconds();
+    nextClick = Math.ceil((now() - firstBeat) / beat - 1e-6);
+  }
+
+  function scheduleClicks() {
+    if (!playing() || !clickBox.checked) return;
+    var beat = beatSeconds(), horizon = now() + 0.15;
+    while (firstBeat + nextClick * beat < horizon) {
+      var songTime = firstBeat + nextClick * beat;
+      if (songTime >= now() - 0.01) {
+        var perBar = session.beats_per_bar;
+        clickAt(playStart + songTime - playOffset, ((nextClick % perBar) + perBar) % perBar === 0);
+      }
+      nextClick += 1;
+    }
+  }
+
+  function start(at) {
+    stop();
+    if (ctx.state === 'suspended') ctx.resume();
+    source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    playOffset = Math.max(0, Math.min(at, duration()));
+    playStart = ctx.currentTime + 0.05;
+    source.start(playStart, playOffset);
+    source.onended = function () { if (source) { playhead = now(); source = null; playButton.textContent = '播放'; } };
+    restartClicks();
+    clickTimer = setInterval(scheduleClicks, 25);
+    playButton.textContent = '停止';
+    tick();
+  }
+
+  function stop() {
+    if (!source) return;
+    playhead = now();
+    var old = source; source = null; old.stop();
+    clearInterval(clickTimer);
+    playButton.textContent = '播放';
+  }
+
+  function tick() {
+    if (!playing()) { draw(); return; }
+    var x = now() * pps;
+    if (x < scroll.scrollLeft || x > scroll.scrollLeft + canvas.width * 0.85) scroll.scrollLeft = x - canvas.width * 0.15;
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  function post(path, data) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+
+  function finish(path, data, message) {
+    if (done) return;
+    stop();
+    post(path, data).then(function (result) {
+      done = true;
+      document.querySelectorAll('button, input').forEach(function (e) { e.disabled = true; });
+      statusEl.textContent = typeof message === 'function' ? message(result) : message;
+    }).catch(function (e) { statusEl.textContent = '失敗：' + e.message; });
+  }
+
+  playButton.onclick = function () { if (playing()) stop(); else start(playhead); };
+  document.getElementById('here').onclick = function () { setFirstBeat(now()); };
+  document.querySelectorAll('[data-beat]').forEach(function (b) {
+    b.onclick = function () { setFirstBeat(firstBeat + Number(b.dataset.beat) * beatSeconds()); };
+  });
+  document.querySelectorAll('[data-ms]').forEach(function (b) {
+    b.onclick = function () { setFirstBeat(firstBeat + Number(b.dataset.ms) / 1000); };
+  });
+  firstInput.onchange = function () { var v = parseFloat(firstInput.value); if (isFinite(v)) setFirstBeat(v); };
+  clickBox.onchange = function () { if (playing()) restartClicks(); };
+  document.getElementById('zoomin').onclick = function () { zoom(1.5); };
+  document.getElementById('zoomout').onclick = function () { zoom(1 / 1.5); };
+  document.getElementById('save').onclick = function () {
+    finish('/save', { first_beat: firstBeat }, function (r) {
+      return '已寫入 ' + session.midi_name + '（補 ' + r.padding_bars + ' 小節）。可以關閉此頁。';
+    });
+  };
+  document.getElementById('cancel').onclick = function () {
+    finish('/cancel', {}, '已取消，MIDI 未修改。可以關閉此頁。');
+  };
+  scroll.addEventListener('scroll', draw);
+  window.addEventListener('resize', resize);
+  canvas.addEventListener('click', function (e) {
+    var t = (scroll.scrollLeft + e.offsetX) / pps;
+    if (playing()) start(t); else { playhead = t; draw(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (done || e.target === firstInput) return;
+    if (e.code === 'Space') { e.preventDefault(); playButton.onclick(); }
+  });
+
+  function zoom(factor) {
+    var center = now();
+    pps = Math.max(10, Math.min(800, pps * factor));
+    resize();
+    scroll.scrollLeft = center * pps - canvas.width / 2;
+  }
+
+  fetch('/session').then(function (r) { return r.json(); }).then(function (data) {
+    session = data;
+    document.getElementById('name').textContent = data.midi_name;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return fetch('/audio').then(function (r) { return r.arrayBuffer(); });
+  }).then(function (bytes) {
+    return new Promise(function (resolve, reject) { ctx.decodeAudioData(bytes, resolve, reject); });
+  }).then(function (decoded) {
+    buffer = decoded;
+    statusEl.textContent = session.audio_name + ' / BPM ' + session.bpm.toFixed(2) +
+      ' / 播放中按「設為播放位置」把第一個強拍設為第 1 小節第 1 拍，空白鍵播放或停止';
+    setFirstBeat(0);
+    resize();
+  }).catch(function (e) { statusEl.textContent = '載入失敗：' + e; });
+})();
+</script>
+</body>
+</html>

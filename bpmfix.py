@@ -3,14 +3,15 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from bpmfix_utils import apply_bpm_fix
+from bpmfix_utils import apply_bpm_fix, bpmfix_report_path_for
+from first_beat_ui import format_first_beat_stats, run_first_beat_ui
 
 
 def choose_audio():
     root = tk.Tk()
     root.withdraw()
     return filedialog.askopenfilename(
-        title='Choose source audio for BPM detection',
+        title='Choose source audio for BPM detection and first beat',
         filetypes=[
             ('Audio files', '*.flac *.mp3 *.wav *.ape *.m4a *.aif *.aiff'),
             ('All files', '*.*'),
@@ -48,21 +49,19 @@ def ask_known_bpm():
 
 def main():
     print('--------------------------------------------------------------------------------')
-    print('MIDI BPMFix using Essentia BPM detection')
-    print('Enter a known BPM first. If unknown, press Return and choose audio for detection.')
+    print('MIDI BPMFix using Essentia BPM detection, then first beat in the browser')
+    print('Enter a known BPM first, or press Return to detect it from the source audio.')
     print('--------------------------------------------------------------------------------')
 
     try:
         target_bpm = ask_known_bpm()
-        audio_path = None
-        if target_bpm is None:
-            audio_path = choose_audio()
-            if not audio_path:
-                print('No audio selected.')
-                return 1
-            if not os.path.isfile(audio_path):
-                messagebox.showerror('BPMFix', 'Audio file does not exist.')
-                return 1
+        audio_path = choose_audio()
+        if not audio_path:
+            print('No audio selected.')
+            return 1
+        if not os.path.isfile(audio_path):
+            messagebox.showerror('BPMFix', 'Audio file does not exist.')
+            return 1
 
         midi_path = choose_midi()
         if not midi_path:
@@ -73,6 +72,11 @@ def main():
             return 1
 
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
+        first_beat = run_first_beat_ui(audio_path, output_path)
+        report = format_first_beat_stats(output_path, first_beat)
+        with open(bpmfix_report_path_for(midi_path), 'a', encoding='utf-8') as file:
+            file.write('\n\n' + report + '\n')
+        print(report)
     except Exception as error:
         messagebox.showerror('BPMFix failed', str(error))
         raise
@@ -80,9 +84,10 @@ def main():
     confidence = bpm_info.get('confidence')
     messagebox.showinfo(
         'BPMFix complete',
-        'BPM: {bpm:.2f}\nSource: {source}\nConfidence: {confidence}\nOutput:\n{output}'.format(
+        'BPM: {bpm:.2f}\nSource: {source}\nConfidence: {confidence}\nFirst beat: {first_beat}\nOutput:\n{output}'.format(
             output=output_path,
             confidence='N/A' if confidence is None else '{:.3f}'.format(confidence),
+            first_beat='not changed' if first_beat is None else '{:.3f}s'.format(first_beat['first_beat_seconds']),
             **bpm_info,
         ),
     )

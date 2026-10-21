@@ -54,14 +54,18 @@ MPS -> CUDA -> CPU
 
 ### `bpmfix.command`
 
-只做 BPM 偵測和 MIDI BPM 修正。
+BPM 修正加第一拍位置調整。
 
 使用方式：
 
-1. 如果已知 BPM，在終端輸入 BPM。
-2. 如果不知道 BPM，直接按 Return，然後選擇原音訊檔讓 Essentia 偵測固定 BPM。
-3. 選擇要修正的 MIDI。
-4. 輸出 `*_bpmfix.mid`。
+1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，讓 Essentia 從原音訊偵測固定 BPM。
+2. 選擇原音訊檔（偵測 BPM 和第一拍試聽都用它）。
+3. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
+4. 瀏覽器自動打開第一拍頁面：播放原曲加節拍器，在第一個強拍時按「設為播放位置」，再用 ±1 拍、±10ms 微調，按「寫入 MIDI」直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
+
+第一拍頁面由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。寫入時整份 MIDI 往前平移，讓所選時間落在小節線上；有弱起音落到 0 之前時，在前面補整數小節。BPM、channel 和 tick 0 的 meta event 不變。第一拍結果會追加到 `*_stats.txt`。
+
+`pianotrans.command` pipeline 只做 BPM 修正，不開第一拍頁面。
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
 
@@ -176,18 +180,6 @@ channel 2 = MIDI channel 3
 
 這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯。
 
-### `first_beat_shift.command`
-
-調整第一拍位置，讓原曲的第一個強拍落在小節線上。
-
-使用方式：
-
-1. 選擇已做過 BPM 修正的 MIDI（通常是 `*_bpmfix_cleaned.mid`）。
-2. 終端會顯示 BPM 和第一個音的時間；輸入原曲中第 1 小節第 1 拍的秒數。
-3. 輸出 `*_firstbeat.mid`。
-
-整份 MIDI 往前平移該秒數，BPM 和 channel 不變；平移後若有音落到 0 之前（弱起），會在前面補整數小節。tick 0 的 tempo 等 meta event 保持在 0。
-
 ### `generate_midi_review.py`
 
 開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
@@ -263,7 +255,6 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
-first_beat_shift.py
 generate_midi_review.py
 generate_chord_review.py
 ```
@@ -272,6 +263,8 @@ generate_chord_review.py
 
 ```text
 bpmfix_utils.py
+first_beat_ui.py
+first_beat_ui.html
 midi_stats.py
 detect_chords_tonal.js
 ```
