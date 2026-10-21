@@ -38,10 +38,9 @@ def note_onsets(midi_file):
     return onsets
 
 
-def phrase_counts(midi_file):
+def phrase_counts(midi_file, onsets):
     """Onset counts per pitch class for each phrase, starting at the first full bar after any pickup."""
     bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
-    onsets = note_onsets(midi_file)
     if not onsets:
         return 0, []
 
@@ -64,14 +63,6 @@ def accidentals(pitch_counts, key_index):
 
 def accidental_costs(counts):
     return [[accidentals(phrase, key) for key in range(len(KEY_SIGNATURES))] for phrase in counts]
-
-
-def bar_pitch_counts(midi_file, start_tick, end_tick):
-    counts = [0] * 12
-    for tick, note in note_onsets(midi_file):
-        if start_tick <= tick < end_tick:
-            counts[note % 12] += 1
-    return counts
 
 
 def choose_signatures(costs):
@@ -100,7 +91,8 @@ def choose_signatures(costs):
 
 def detect_key_segments(midi_path):
     midi_file = mido.MidiFile(midi_path)
-    start_tick, counts = phrase_counts(midi_file)
+    onsets = note_onsets(midi_file)
+    start_tick, counts = phrase_counts(midi_file, onsets)
     if not counts:
         return []
     costs = accidental_costs(counts)
@@ -114,7 +106,7 @@ def detect_key_segments(midi_path):
         if index == 0 or costs[index][key] <= notes * CROWDED_RATIO:
             pieces.append((tick, key, notes, costs[index][key], False))
         else:
-            pieces.extend(split_crowded_phrase(midi_file, tick, bar_ticks, path, index))
+            pieces.extend(split_crowded_phrase(onsets, tick, bar_ticks, path, index))
 
     segments = []
     for tick, key, notes, cost, inside in pieces:
@@ -134,10 +126,13 @@ def detect_key_segments(midi_path):
     return segments
 
 
-def split_crowded_phrase(midi_file, tick, bar_ticks, path, index):
+def split_crowded_phrase(onsets, tick, bar_ticks, path, index):
     """Split a crowded phrase at the bar line that gives the fewest accidentals, using the neighbouring keys."""
-    bars = [bar_pitch_counts(midi_file, tick + bar * bar_ticks, tick + (bar + 1) * bar_ticks)
-            for bar in range(PHRASE_BARS)]
+    bars = [[0] * 12 for _ in range(PHRASE_BARS)]
+    for onset_tick, note in onsets:
+        bar = (onset_tick - tick) // bar_ticks
+        if 0 <= bar < PHRASE_BARS:
+            bars[bar][note % 12] += 1
     first_keys = {path[index - 1], path[index]}
     second_keys = {path[index]} | ({path[index + 1]} if index + 1 < len(path) else set())
     best = None
