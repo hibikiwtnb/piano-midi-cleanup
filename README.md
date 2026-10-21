@@ -63,7 +63,13 @@ MPS -> CUDA -> CPU
 3. 選擇要修正的 MIDI。
 4. 輸出 `*_bpmfix.mid`。
 
-自動偵測結果會記錄取整前 BPM，並把套用 BPM 四捨五入成整數；手動輸入的 BPM 會直接使用。
+自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
+
+```text
+end_drift_ms = duration * |beat_phase_bpm / applied_bpm - 1| * 1000
+```
+
+漂移 <= 50 ms 時套用整數 BPM；超過時保留兩位小數。報告會輸出 Essentia 原始 BPM、beat-phase BPM 與 coherence、是否取整，以及 `Estimated end drift`。手動輸入的 BPM 會直接使用。
 
 修正邏輯保留實際播放速度，只重算 MIDI ticks 和 tempo metadata：
 

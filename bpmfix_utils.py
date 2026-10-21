@@ -12,6 +12,7 @@ BPM_PYTHON = os.environ.get(
     str(Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser() / 'bin' / 'python3'),
 )
 ORIGINAL_BPM = 120.0
+ROUND_MAX_END_DRIFT_MS = 50.0
 
 
 def bpmfix_path_for(midi_path):
@@ -31,17 +32,28 @@ def detect_bpm(audio_path):
     code = r'''
 import json
 import sys
+import numpy as np
 import essentia.standard as es
 
 audio_path = sys.argv[1]
-audio = es.MonoLoader(filename=audio_path, sampleRate=44100)()
+sample_rate = 44100
+audio = es.MonoLoader(filename=audio_path, sampleRate=sample_rate)()
 extractor = es.RhythmExtractor2013(method='multifeature')
 bpm, beats, confidence, estimates, bpm_intervals = extractor(audio)
+
+# Phase coherence at half-beat resolution tolerates off-beat jumps in the beat track.
+candidates = np.arange(bpm - 1.0, bpm + 1.0, 0.0005)
+phases = np.exp(4j * np.pi * np.outer(candidates / 60.0, np.asarray(beats)))
+coherence = np.abs(phases.mean(axis=1))
+best = int(coherence.argmax())
+
 print(json.dumps({
-    'bpm': round(float(bpm)),
     'raw_bpm': float(bpm),
+    'phase_bpm': float(candidates[best]),
+    'phase_coherence': float(coherence[best]),
     'confidence': float(confidence),
     'beats': len(beats),
+    'duration': len(audio) / sample_rate,
 }))
 '''
     result = subprocess.run(
@@ -50,7 +62,27 @@ print(json.dumps({
         capture_output=True,
         text=True,
     )
-    return json.loads(result.stdout)
+    bpm_info = json.loads(result.stdout)
+    bpm_info.update(choose_applied_bpm(bpm_info['phase_bpm'], bpm_info['duration']))
+    return bpm_info
+
+
+def end_drift_ms(duration, true_bpm, applied_bpm):
+    return abs(true_bpm / applied_bpm - 1) * duration * 1000
+
+
+def choose_applied_bpm(phase_bpm, duration):
+    rounded_bpm = float(round(phase_bpm))
+    drift = end_drift_ms(duration, phase_bpm, rounded_bpm)
+    if drift <= ROUND_MAX_END_DRIFT_MS:
+        return {'bpm': rounded_bpm, 'end_drift_ms': drift, 'rounded': True}
+
+    applied_bpm = round(phase_bpm, 2)
+    return {
+        'bpm': applied_bpm,
+        'end_drift_ms': end_drift_ms(duration, phase_bpm, applied_bpm),
+        'rounded': False,
+    }
 
 
 def bpm_info_from_manual_bpm(bpm):
@@ -58,8 +90,13 @@ def bpm_info_from_manual_bpm(bpm):
     return {
         'bpm': round(bpm, 2),
         'raw_bpm': None,
+        'phase_bpm': None,
+        'phase_coherence': None,
         'confidence': None,
         'beats': None,
+        'duration': None,
+        'end_drift_ms': None,
+        'rounded': None,
         'source': 'manual',
     }
 
@@ -90,6 +127,16 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
     beats = bpm_info.get('beats')
     source = bpm_info.get('source', 'detected')
     raw_bpm = bpm_info.get('raw_bpm')
+    phase_bpm = bpm_info.get('phase_bpm')
+    phase_coherence = bpm_info.get('phase_coherence')
+    drift = bpm_info.get('end_drift_ms')
+    rounded = bpm_info.get('rounded')
+    if rounded is None:
+        rounding = 'N/A (manual BPM)'
+    elif rounded:
+        rounding = 'applied (end drift <= {:.0f} ms)'.format(ROUND_MAX_END_DRIFT_MS)
+    else:
+        rounding = 'skipped (rounded BPM end drift > {:.0f} ms)'.format(ROUND_MAX_END_DRIFT_MS)
 
     return '\n'.join([
         'MIDI BPMFix stats',
@@ -99,7 +146,11 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
         'Original BPM: {:.2f}'.format(ORIGINAL_BPM),
         'BPM source: {}'.format(source),
         'Raw detected BPM: {}'.format('N/A' if raw_bpm is None else '{:.6f}'.format(raw_bpm)),
+        'Beat-phase BPM: {}'.format('N/A' if phase_bpm is None else '{:.4f}'.format(phase_bpm)),
+        'Beat-phase coherence: {}'.format('N/A' if phase_coherence is None else '{:.3f}'.format(phase_coherence)),
+        'Rounding: {}'.format(rounding),
         'Applied BPM: {bpm:.2f}'.format(**bpm_info),
+        'Estimated end drift: {}'.format('N/A (manual BPM)' if drift is None else '{:.0f} ms'.format(drift)),
         'Detection confidence: {}'.format('N/A (manual BPM)' if confidence is None else '{:.3f}'.format(confidence)),
         'Detected beats: {}'.format('N/A (manual BPM)' if beats is None else beats),
     ])

@@ -64,7 +64,13 @@ Usage:
 3. Choose the MIDI file to fix.
 4. The tool writes `*_bpmfix.mid`.
 
-Automatic BPM detection records the raw detected BPM and applies a rounded integer BPM. Manual BPM input is used as entered.
+Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
+
+```text
+end_drift_ms = duration * |beat_phase_bpm / applied_bpm - 1| * 1000
+```
+
+If the drift is <= 50 ms, the integer BPM is applied; otherwise two decimals are kept. The report shows the raw Essentia BPM, the beat-phase BPM and coherence, whether rounding was applied, and `Estimated end drift`. Manual BPM input is used as entered.
 
 The fix keeps the real playback speed and rewrites MIDI ticks plus tempo metadata:
 
