@@ -1,0 +1,76 @@
+MIDI quality stats
+MIDI: testdata/なってしまった! (Off Vocal)_piano.mid
+Total notes: 5643
+Very short notes (< 0.050s): 241 (4.27%)
+Low velocity notes (<= 30): 11 (0.19%)
+Lowest note: 26 (D1)
+Highest note: 103 (G7)
+Pitch span: 77 semitone(s)
+Average velocity: 77.16
+Max polyphony: 17
+
+
+MIDI BPMFix stats
+Audio: /Users/kn/Music/音源用/なってしまった! (Off Vocal).mp3
+Input MIDI: testdata/なってしまった! (Off Vocal)_piano.mid
+Output MIDI: testdata/なってしまった! (Off Vocal)_piano_bpmfix.mid
+Original BPM: 120.00
+BPM source: manual
+Raw detected BPM: N/A
+Beat-phase BPM: N/A
+Beat-phase coherence: N/A
+Rounding: N/A (manual BPM)
+Applied BPM: 170.00
+Estimated end drift: N/A (manual BPM)
+Detection confidence: N/A (manual BPM)
+Detected beats: N/A (manual BPM)
+
+
+MIDI auto first beat stats
+MIDI: testdata/なってしまった! (Off Vocal)_piano_bpmfix.mid
+Estimated first beat: 0.124s
+8th-grid onset coherence: 0.856
+Bass onset share on beats 1-4: 0.32 0.29 0.27 0.13
+Shift ticks: -134
+Padding bars: 0
+
+
+MIDI key signature stats
+MIDI: testdata/なってしまった! (Off Vocal)_piano_bpmfix.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: Bb (accidental notes 173 of 3439)
+- Bar 123: Ab (accidental notes 32 of 333), inside a crowded phrase
+- Bar 134: Bb (accidental notes 74 of 1695)
+- Bar 186: Eb (accidental notes 14 of 176)
+Accidental notes: 293 of 5643 (5.19%)
+
+
+MIDI rule cleaning stats
+Input: testdata/なってしまった! (Off Vocal)_piano_bpmfix.mid
+Output: testdata/なってしまった! (Off Vocal)_piano_bpmfix_cleaned.mid
+Original notes: 5643
+Removed notes: 200 (3.54%)
+Kept notes: 5443 (96.46%)
+Rule removals:
+- Duration < 0.030s: 198 (3.51%)
+- Velocity < 20: 2 (0.04%)
+- Velocity < 35 and duration < 0.080s: 0 (0.00%)
+- Pitch outside 21-108: 0 (0.00%)
+
+
+MIDI provisional hand split stats
+MIDI: testdata/なってしまった! (Off Vocal)_piano_bpmfix_cleaned.mid
+Original notes: 5443
+Hands: 2
+Channel 1 / right hand notes: 3705 (68.07%)
+Channel 3 / left hand notes: 1738 (31.93%)
+Onset groups: 1286
+Groups with a hand span > 12 semitones: 125
+Multi-note hand inside a fast run (< 0.25s): 23
+
+
+MIDI overlap trim stats
+MIDI: testdata/なってしまった! (Off Vocal)_piano_bpmfix_cleaned.mid
+Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 3705 notes, fast figure 451, harmony change 294, chord change 626, outer line 159, out of reach 86, most notes sounding 14 -> 8
+- Channel 3 / left: 1738 notes, fast figure 0, harmony change 124, chord change 175, outer line 56, out of reach 82, most notes sounding 8 -> 5
