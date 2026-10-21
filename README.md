@@ -176,6 +176,18 @@ channel 2 = MIDI channel 3
 
 這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯。
 
+### `first_beat_shift.command`
+
+調整第一拍位置，讓原曲的第一個強拍落在小節線上。
+
+使用方式：
+
+1. 選擇已做過 BPM 修正的 MIDI（通常是 `*_bpmfix_cleaned.mid`）。
+2. 終端會顯示 BPM 和第一個音的時間；輸入原曲中第 1 小節第 1 拍的秒數。
+3. 輸出 `*_firstbeat.mid`。
+
+整份 MIDI 往前平移該秒數，BPM 和 channel 不變；平移後若有音落到 0 之前（弱起），會在前面補整數小節。tick 0 的 tempo 等 meta event 保持在 0。
+
 ### `generate_midi_review.py`
 
 開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
@@ -251,6 +263,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+first_beat_shift.py
 generate_midi_review.py
 generate_chord_review.py
 ```

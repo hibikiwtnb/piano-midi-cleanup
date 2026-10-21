@@ -177,6 +177,18 @@ channel 2 = MIDI channel 3
 
 This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view.
 
+### `first_beat_shift.command`
+
+Adjusts the first beat position so the first downbeat of the source audio lands on a bar line.
+
+Usage:
+
+1. Choose a BPM-fixed MIDI (usually `*_bpmfix_cleaned.mid`).
+2. The terminal shows the BPM and the first note time; enter the time in seconds of bar 1 beat 1 in the source audio.
+3. Output `*_firstbeat.mid`.
+
+The whole MIDI is moved earlier by that time; BPM and channels are unchanged. If notes would start before 0 (a pickup), whole bars are added in front. Meta events at tick 0, such as tempo, stay at 0.
+
 ### `generate_midi_review.py`
 
 Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
@@ -252,6 +264,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+first_beat_shift.py
 generate_midi_review.py
 generate_chord_review.py
 ```
