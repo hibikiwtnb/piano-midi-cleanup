@@ -1,0 +1,105 @@
+MIDI quality stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans.mid
+Total notes: 2872
+Very short notes (< 0.050s): 54 (1.88%)
+Low velocity notes (<= 30): 18 (0.63%)
+Lowest note: 28 (E1)
+Highest note: 99 (D#7)
+Pitch span: 71 semitone(s)
+Average velocity: 68.93
+Max polyphony: 20
+
+
+MIDI BPMFix stats
+Audio: /Volumes/HDD2_EXFAT/HiRes/La la 勇気のうた_HiRes.flac
+Input MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans.mid
+Output MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix.mid
+Original BPM: 120.00
+BPM source: detected
+Raw detected BPM: 135.006409
+Beat-phase BPM: 134.9964
+Beat-phase coherence: 0.924
+Rounding: applied (end drift <= 50 ms)
+Applied BPM: 135.00
+Estimated end drift: 7 ms
+Detection confidence: 2.027
+Detected beats: 573
+
+
+MIDI rule cleaning stats
+Input: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix.mid
+Output: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Original notes: 2872
+Removed notes: 46 (1.60%)
+Kept notes: 2826 (98.40%)
+Rule removals:
+- Duration < 0.030s: 41 (1.43%)
+- Velocity < 20: 3 (0.10%)
+- Velocity < 35 and duration < 0.080s: 2 (0.07%)
+- Pitch outside 21-108: 0 (0.00%)
+
+
+MIDI provisional hand split stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Original notes: 2826
+Channel 1 / right hand notes: 1857 (65.71%)
+Channel 3 / left hand notes: 969 (34.29%)
+Onset groups: 1546
+Groups with a hand span > 12 semitones: 10
+Multi-note hand inside a fast run (< 0.25s): 76
+
+
+MIDI first beat stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+BPM: 135.00
+First beat in source timeline: 0.095s
+Shift ticks: -82
+Padding bars: 0
+
+
+MIDI key signature stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: B (accidental notes 0 of 564)
+- Bar 33: Db (accidental notes 1 of 459)
+- Bar 53: B (accidental notes 2 of 544)
+- Bar 85: Db (accidental notes 31 of 311)
+- Bar 101: D (accidental notes 0 of 241)
+- Bar 109: Db (accidental notes 2 of 707)
+Accidental notes: 36 of 2826 (1.27%)
+
+
+MIDI key signature stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: B (accidental notes 0 of 564)
+- Bar 33: Db (accidental notes 1 of 459)
+- Bar 53: B (accidental notes 2 of 544)
+- Bar 85: Db (accidental notes 3 of 280)
+- Bar 100: D (accidental notes 0 of 272), one bar before the phrase boundary
+- Bar 109: Db (accidental notes 2 of 707)
+Accidental notes: 8 of 2826 (0.28%)
+
+
+MIDI key signature stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: B (accidental notes 0 of 564)
+- Bar 33: Db (accidental notes 1 of 459)
+- Bar 53: B (accidental notes 2 of 544)
+- Bar 85: Db (accidental notes 3 of 280)
+- Bar 100: D (accidental notes 0 of 272), inside a crowded phrase
+- Bar 109: Db (accidental notes 2 of 707)
+Accidental notes: 8 of 2826 (0.28%)
+
+
+MIDI provisional hand split stats
+MIDI: /Users/kn/Music/音源用/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Original notes: 2826
+Hands: 3
+Channel 1 / right hand notes: 1704 (60.30%)
+Channel 2 / second right hand notes: 295 (10.44%)
+Channel 3 / left hand notes: 827 (29.26%)
+Onset groups: 1546
+Groups with a hand span > 12 semitones: 0
+Multi-note hand inside a fast run (< 0.25s): 64
