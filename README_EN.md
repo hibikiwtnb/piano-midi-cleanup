@@ -81,8 +81,10 @@ If the drift is <= 50 ms, the integer BPM is applied; otherwise two decimals are
 The fix keeps the real playback speed and rewrites MIDI ticks plus tempo metadata:
 
 ```text
-new_ticks = old_ticks * detected_bpm / 120
+new_ticks = old_ticks * applied_bpm / source_bpm
 ```
+
+`source_bpm` is the MIDI's own tempo (120 for transcription output; 120 when there is no tempo event), so running the fix again on an already fixed MIDI keeps the playback time.
 
 ### `midi_stats.command`
 

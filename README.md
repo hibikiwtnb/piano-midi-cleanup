@@ -80,8 +80,10 @@ end_drift_ms = duration * |beat_phase_bpm / applied_bpm - 1| * 1000
 修正邏輯保留實際播放速度，只重算 MIDI ticks 和 tempo metadata：
 
 ```text
-new_ticks = old_ticks * detected_bpm / 120
+new_ticks = old_ticks * applied_bpm / source_bpm
 ```
+
+`source_bpm` 取自 MIDI 本身的 tempo（轉錄輸出為 120；沒有 tempo event 時視為 120），所以對已修正過的 MIDI 再跑一次也不會改變播放時間。
 
 ### `midi_stats.command`
 

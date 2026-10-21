@@ -11,7 +11,7 @@ BPM_PYTHON = os.environ.get(
     'PIANOTRANS_BPM_PYTHON',
     str(Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser() / 'bin' / 'python3'),
 )
-ORIGINAL_BPM = 120.0
+DEFAULT_MIDI_TEMPO = 500000
 ROUND_MAX_END_DRIFT_MS = 50.0
 
 
@@ -101,10 +101,20 @@ def bpm_info_from_manual_bpm(bpm):
     }
 
 
+def midi_source_tempo(midi_file):
+    for track in midi_file.tracks:
+        for message in track:
+            if message.type == 'set_tempo':
+                return message.tempo
+    return DEFAULT_MIDI_TEMPO
+
+
 def fix_midi_bpm(midi_path, output_path, target_bpm):
+    """Rescale ticks from the MIDI's own tempo to target_bpm, keeping playback time."""
     midi_file = mido.MidiFile(midi_path)
-    source_tempo = int(mido.bpm2tempo(ORIGINAL_BPM))
+    source_tempo = midi_source_tempo(midi_file)
     target_tempo = int(mido.bpm2tempo(target_bpm))
+    has_tempo = False
 
     for track in midi_file.tracks:
         source_absolute_tick = 0
@@ -118,8 +128,13 @@ def fix_midi_bpm(midi_path, output_path, target_bpm):
             scaled_previous_tick = scaled_absolute_tick
             if message.type == 'set_tempo':
                 message.tempo = target_tempo
+                has_tempo = True
+
+    if not has_tempo:
+        midi_file.tracks[0].insert(0, mido.MetaMessage('set_tempo', tempo=target_tempo, time=0))
 
     midi_file.save(output_path)
+    return mido.tempo2bpm(source_tempo)
 
 
 def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
@@ -143,7 +158,7 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
         'Audio: {}'.format(audio_path or 'N/A'),
         'Input MIDI: {}'.format(midi_path),
         'Output MIDI: {}'.format(output_path),
-        'Original BPM: {:.2f}'.format(ORIGINAL_BPM),
+        'Original BPM: {:.2f}'.format(bpm_info['original_bpm']),
         'BPM source: {}'.format(source),
         'Raw detected BPM: {}'.format('N/A' if raw_bpm is None else '{:.6f}'.format(raw_bpm)),
         'Beat-phase BPM: {}'.format('N/A' if phase_bpm is None else '{:.4f}'.format(phase_bpm)),
@@ -190,7 +205,7 @@ def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, 
         'Using BPM: {bpm:.2f} (source: {source})'.format(**bpm_info)
     )
     print('Writing BPM-fixed MIDI: {}'.format(output_path))
-    fix_midi_bpm(midi_path, output_path, target_bpm)
+    bpm_info['original_bpm'] = fix_midi_bpm(midi_path, output_path, target_bpm)
     write_bpmfix_report(
         audio_path,
         midi_path,
