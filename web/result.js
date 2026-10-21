@@ -9,7 +9,7 @@
     PITCH_MAX = 127,
     HEIGHT = HEADER + (PITCH_MAX - PITCH_MIN + 1) * ROW,
     MIN_PPS = 46,
-    MAX_PPS = 368,
+    MAX_PPS = 1472,
     ZOOM_STEP = 1.15,
     PIANO_MIN = 21,
     PIANO_MAX = 108,
@@ -232,6 +232,16 @@
       follow.classList.toggle("active", self.follow);
     };
     bar.appendChild(follow);
+    var zoomOut = button("橫向 −", "橫向縮小"),
+      zoomIn = button("橫向 +", "橫向放大");
+    zoomOut.onclick = function () {
+      self.zoomHorizontal(1 / ZOOM_STEP / ZOOM_STEP);
+    };
+    zoomIn.onclick = function () {
+      self.zoomHorizontal(ZOOM_STEP * ZOOM_STEP);
+    };
+    bar.appendChild(zoomOut);
+    bar.appendChild(zoomIn);
     this.clock = el("span", "msr-clock", "0.0s");
     bar.appendChild(this.clock);
     this.status = el("span", "msr-status", "");
@@ -624,27 +634,39 @@
     p.stroke();
     this.backgroundCanvas = background;
   };
+  ResultSession.prototype.zoomHorizontal = function (factor, anchorX) {
+    if (anchorX === undefined) {
+      // Buttons keep the playhead in place when it is on screen, else the view center.
+      var playheadX = LEFT + this.position * this.pps - this.scroll.scrollLeft;
+      anchorX =
+        playheadX >= LEFT && playheadX <= this.viewportWidth
+          ? playheadX
+          : (LEFT + this.viewportWidth) / 2;
+    }
+    var anchorTime = (this.scroll.scrollLeft + anchorX - LEFT) / this.pps;
+    this.pps = clamp(this.pps * factor, MIN_PPS, MAX_PPS);
+    var worldWidth = Math.max(
+      this.viewportWidth,
+      LEFT + this.m.duration * this.pps + 80,
+    );
+    this.world.style.width = worldWidth + "px";
+    this.maxScroll = Math.max(0, worldWidth - this.viewportWidth);
+    this.scroll.scrollLeft = Math.max(
+      0,
+      LEFT + anchorTime * this.pps - anchorX,
+    );
+    this.drawStatic();
+    this.layoutPlayhead();
+  };
   ResultSession.prototype.onWheel = function (e) {
     var modifier = e.ctrlKey || e.altKey;
     if (modifier) {
       e.preventDefault();
-      var rect = this.scroll.getBoundingClientRect(),
-        anchorX = clamp(e.clientX - rect.left, 0, this.viewportWidth),
-        anchorTime = (this.scroll.scrollLeft + anchorX - LEFT) / this.pps,
-        factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-      this.pps = clamp(this.pps * factor, MIN_PPS, MAX_PPS);
-      var worldWidth = Math.max(
-        this.viewportWidth,
-        LEFT + this.m.duration * this.pps + 80,
+      var rect = this.scroll.getBoundingClientRect();
+      this.zoomHorizontal(
+        e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP,
+        clamp(e.clientX - rect.left, 0, this.viewportWidth),
       );
-      this.world.style.width = worldWidth + "px";
-      this.maxScroll = Math.max(0, worldWidth - this.viewportWidth);
-      this.scroll.scrollLeft = Math.max(
-        0,
-        LEFT + anchorTime * this.pps - anchorX,
-      );
-      this.drawStatic();
-      this.layoutPlayhead();
       return;
     }
     if (e.shiftKey) {
