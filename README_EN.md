@@ -149,6 +149,18 @@ Marks provisional left/right hand assignment directly on a cleaned MIDI file by 
 
 It does not create separate instrument tracks and does not remove notes.
 
+Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and only "lowest k notes to the left hand, the rest to the right hand" splits are considered. The lowest-cost path over the whole song is chosen. Cost terms:
+
+```text
+Hand span: free up to 12 semitones, heavily penalized beyond 14
+Register: left hand above D4, right hand below G3, by distance
+Movement speed: change of hand position divided by time since that hand's previous onset (an idle hand moves cheaply)
+Fast runs: once a hand has played 3 or more consecutive single notes each < 0.25 s apart, each extra simultaneous note costs more (a dyad inside a fast right-hand single-note run tends to go to an idle left hand)
+Crossing: left-hand top note above right-hand bottom note
+```
+
+The report shows the number of groups with a hand span over 12 semitones and the number of multi-note hands left inside fast runs. All weights are constants at the top of the file.
+
 Channel mapping:
 
 ```text

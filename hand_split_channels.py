@@ -9,36 +9,35 @@ import mido
 
 
 GROUP_START_WINDOW_SECONDS = 0.05
-LEFT_STRONG_PITCH = 52
-RIGHT_STRONG_PITCH = 67
-MIDDLE_SPLIT_PITCH = 60
-HAND_CONTINUITY_MARGIN = 5
-MAX_HAND_SPAN = 16
+BEAM_WIDTH = 32
+
+# Span in semitones within one onset group for one hand.
+COMFORT_SPAN = 12
+HARD_SPAN = 14
+SPAN_COST_PER_SEMITONE = 3.0
+HARD_SPAN_COST_PER_SEMITONE = 20.0
+
+# Soft register preference: left hand above LEFT_COMFORT_MAX, right hand below RIGHT_COMFORT_MIN.
+LEFT_COMFORT_MAX = 62
+RIGHT_COMFORT_MIN = 55
+REGISTER_COST_PER_SEMITONE = 1.0
+
+# Hand movement cost is semitones per second since that hand's previous onset.
+MOVE_COST_WEIGHT = 0.01
+MIN_MOVE_SECONDS = 0.05
+
+# Extra simultaneous notes for a hand inside a fast single-note run: at least
+# FAST_RUN_MIN_NOTES consecutive single notes, each within FAST_RUN_SECONDS of the previous one.
+FAST_RUN_SECONDS = 0.25
+FAST_RUN_MIN_NOTES = 3
+FAST_RUN_EXTRA_NOTE_COST = 3.0
+
+CROSSING_COST_PER_SEMITONE = 3.0
+MAX_FINGERS = 5
+EXTRA_FINGER_COST = 20.0
 
 RIGHT_HAND_CHANNEL = 0
 LEFT_HAND_CHANNEL = 2
-
-RULE_ORDER = [
-    'strong_left',
-    'strong_right',
-    'group_relative_left',
-    'group_relative_right',
-    'continuity_left',
-    'continuity_right',
-    'middle_split_left',
-    'middle_split_right',
-]
-
-RULE_LABELS = {
-    'strong_left': 'pitch <= {}'.format(LEFT_STRONG_PITCH),
-    'strong_right': 'pitch >= {}'.format(RIGHT_STRONG_PITCH),
-    'group_relative_left': 'group relative lower note',
-    'group_relative_right': 'group relative higher note',
-    'continuity_left': 'closer to previous left hand pitch',
-    'continuity_right': 'closer to previous right hand pitch',
-    'middle_split_left': 'fallback pitch < {}'.format(MIDDLE_SPLIT_PITCH),
-    'middle_split_right': 'fallback pitch >= {}'.format(MIDDLE_SPLIT_PITCH),
-}
 
 
 def collect_tempo_changes(midi_file):
@@ -123,7 +122,6 @@ def collect_notes(midi_file):
                         'start_message': start['start_message'],
                         'end_message': message,
                         'hand': None,
-                        'rule': None,
                     })
 
     notes.sort(key=lambda item: (item['start_seconds'], item['note']))
@@ -154,108 +152,149 @@ def group_notes(notes):
     return groups
 
 
-def assign_note(note, hand, rule_name, rule_counts):
-    note['hand'] = hand
-    note['rule'] = rule_name
-    rule_counts[rule_name] += 1
+def span_cost(pitches):
+    if len(pitches) < 2:
+        return 0.0
+    span = pitches[-1] - pitches[0]
+    if span <= COMFORT_SPAN:
+        return 0.0
+    if span <= HARD_SPAN:
+        return (span - COMFORT_SPAN) * SPAN_COST_PER_SEMITONE
+    return ((HARD_SPAN - COMFORT_SPAN) * SPAN_COST_PER_SEMITONE
+            + (span - HARD_SPAN) * HARD_SPAN_COST_PER_SEMITONE)
 
 
-def continuity_hand(note, last_left_pitch, last_right_pitch):
-    if last_left_pitch is None or last_right_pitch is None:
-        return None
-
-    left_distance = abs(note['note'] - last_left_pitch)
-    right_distance = abs(note['note'] - last_right_pitch)
-
-    if right_distance - left_distance >= HAND_CONTINUITY_MARGIN:
-        return 'left'
-    if left_distance - right_distance >= HAND_CONTINUITY_MARGIN:
-        return 'right'
-    return None
+def register_cost(left_pitches, right_pitches):
+    cost = sum(max(0, pitch - LEFT_COMFORT_MAX) for pitch in left_pitches)
+    cost += sum(max(0, RIGHT_COMFORT_MIN - pitch) for pitch in right_pitches)
+    return cost * REGISTER_COST_PER_SEMITONE
 
 
-def fallback_hand(note):
-    if note['note'] < MIDDLE_SPLIT_PITCH:
-        return 'left', 'middle_split_left'
-    return 'right', 'middle_split_right'
-
-
-def assign_group(group, last_left_pitch, last_right_pitch, rule_counts):
-    for note in group:
-        if note['note'] <= LEFT_STRONG_PITCH:
-            assign_note(note, 'left', 'strong_left', rule_counts)
-        elif note['note'] >= RIGHT_STRONG_PITCH:
-            assign_note(note, 'right', 'strong_right', rule_counts)
-
-    middle_notes = [note for note in group if note['hand'] is None]
-    middle_notes.sort(key=lambda item: item['note'])
-
-    if len(middle_notes) >= 2:
-        split_index = len(middle_notes) // 2
-        for index, note in enumerate(middle_notes):
-            if len(middle_notes) % 2 == 1 and index == split_index:
-                continue
-            if index < split_index:
-                assign_note(note, 'left', 'group_relative_left', rule_counts)
-            else:
-                assign_note(note, 'right', 'group_relative_right', rule_counts)
-
-    for note in middle_notes:
-        if note['hand'] is not None:
-            continue
-
-        hand = continuity_hand(note, last_left_pitch, last_right_pitch)
-        if hand == 'left':
-            assign_note(note, 'left', 'continuity_left', rule_counts)
-        elif hand == 'right':
-            assign_note(note, 'right', 'continuity_right', rule_counts)
-        else:
-            fallback, rule_name = fallback_hand(note)
-            assign_note(note, fallback, rule_name, rule_counts)
-
-
-def hand_span(notes):
-    if len(notes) < 2:
+def next_run_length(pitches, onset, last_onset, run_length):
+    """Number of consecutive fast single notes ending at this onset for one hand."""
+    if len(pitches) != 1:
         return 0
-    pitches = [note['note'] for note in notes]
-    return max(pitches) - min(pitches)
+    if last_onset is not None and onset - last_onset < FAST_RUN_SECONDS and run_length > 0:
+        return run_length + 1
+    return 1
 
 
-def average_pitch(notes):
-    if not notes:
-        return None
-    return sum(note['note'] for note in notes) / len(notes)
+def in_fast_run(onset, last_onset, run_length):
+    return (last_onset is not None and onset - last_onset < FAST_RUN_SECONDS
+            and run_length >= FAST_RUN_MIN_NOTES)
 
 
-def move_one_note_for_span(group, hand):
-    hand_notes = [note for note in group if note['hand'] == hand]
-    other_hand = 'right' if hand == 'left' else 'left'
-    other_notes = [note for note in group if note['hand'] == other_hand]
+def hand_cost(pitches, onset, last_pitch, last_onset, run_length):
+    """Cost for one hand playing sorted pitches at onset, given its previous position."""
+    if not pitches:
+        return 0.0
 
-    if hand_span(hand_notes) <= MAX_HAND_SPAN:
-        return False
+    cost = span_cost(pitches)
+    cost += max(0, len(pitches) - MAX_FINGERS) * EXTRA_FINGER_COST
 
-    other_average = average_pitch(other_notes)
-    if other_average is None:
-        candidate = max(hand_notes, key=lambda note: note['note']) if hand == 'left' else min(hand_notes, key=lambda note: note['note'])
-    else:
-        candidate = min(hand_notes, key=lambda note: abs(note['note'] - other_average))
+    if last_onset is not None:
+        elapsed = max(onset - last_onset, MIN_MOVE_SECONDS)
+        center = sum(pitches) / len(pitches)
+        cost += MOVE_COST_WEIGHT * abs(center - last_pitch) / elapsed
+        if in_fast_run(onset, last_onset, run_length):
+            cost += ((len(pitches) - 1) * FAST_RUN_EXTRA_NOTE_COST
+                     * (1 - elapsed / FAST_RUN_SECONDS))
+    return cost
 
-    candidate['hand'] = other_hand
-    return True
+
+def split_cost(left_pitches, right_pitches, onset, state):
+    cost = hand_cost(left_pitches, onset, state['left_pitch'], state['left_onset'], state['left_run'])
+    cost += hand_cost(right_pitches, onset, state['right_pitch'], state['right_onset'], state['right_run'])
+    cost += register_cost(left_pitches, right_pitches)
+    if left_pitches and right_pitches and left_pitches[-1] > right_pitches[0]:
+        cost += (left_pitches[-1] - right_pitches[0]) * CROSSING_COST_PER_SEMITONE
+    return cost
 
 
-def apply_span_check(group):
-    exceeded = False
-    moved = 0
+def next_state(state, left_pitches, right_pitches, onset, cost, split_index, parent):
+    new_state = dict(state)
+    if left_pitches:
+        new_state['left_pitch'] = sum(left_pitches) / len(left_pitches)
+        new_state['left_run'] = next_run_length(left_pitches, onset, state['left_onset'], state['left_run'])
+        new_state['left_onset'] = onset
+    if right_pitches:
+        new_state['right_pitch'] = sum(right_pitches) / len(right_pitches)
+        new_state['right_run'] = next_run_length(right_pitches, onset, state['right_onset'], state['right_run'])
+        new_state['right_onset'] = onset
+    new_state['cost'] = state['cost'] + cost
+    new_state['split_index'] = split_index
+    new_state['parent'] = parent
+    return new_state
 
-    for hand in ('left', 'right'):
-        if hand_span([note for note in group if note['hand'] == hand]) > MAX_HAND_SPAN:
-            exceeded = True
-            if move_one_note_for_span(group, hand):
-                moved += 1
 
-    return exceeded, moved
+def search_splits(groups):
+    """Beam search over onset groups; each group sends its lowest k notes to the left hand."""
+    beam = [{
+        'left_pitch': None,
+        'left_onset': None,
+        'left_run': 0,
+        'right_pitch': None,
+        'right_onset': None,
+        'right_run': 0,
+        'cost': 0.0,
+        'split_index': None,
+        'parent': None,
+    }]
+
+    for group in groups:
+        pitches = sorted(note['note'] for note in group)
+        onset = group[0]['start_seconds']
+        candidates = []
+        for state in beam:
+            for split_index in range(len(pitches) + 1):
+                left_pitches = pitches[:split_index]
+                right_pitches = pitches[split_index:]
+                cost = split_cost(left_pitches, right_pitches, onset, state)
+                candidates.append(next_state(
+                    state, left_pitches, right_pitches, onset, cost, split_index, state,
+                ))
+        candidates.sort(key=lambda item: item['cost'])
+        beam = candidates[:BEAM_WIDTH]
+
+    split_indexes = []
+    state = beam[0]
+    while state['parent'] is not None:
+        split_indexes.append(state['split_index'])
+        state = state['parent']
+    split_indexes.reverse()
+    return split_indexes
+
+
+def assign_groups(groups):
+    for group, split_index in zip(groups, search_splits(groups)):
+        ordered = sorted(group, key=lambda note: note['note'])
+        for index, note in enumerate(ordered):
+            note['hand'] = 'left' if index < split_index else 'right'
+
+
+def summarize_groups(groups):
+    wide_span_groups = 0
+    fast_run_chords = 0
+    last_onset = {'left': None, 'right': None}
+    run_length = {'left': 0, 'right': 0}
+
+    for group in groups:
+        onset = group[0]['start_seconds']
+        wide = False
+        for hand in ('left', 'right'):
+            pitches = [note['note'] for note in group if note['hand'] == hand]
+            if not pitches:
+                continue
+            if max(pitches) - min(pitches) > COMFORT_SPAN:
+                wide = True
+            if len(pitches) > 1 and in_fast_run(onset, last_onset[hand], run_length[hand]):
+                fast_run_chords += 1
+            run_length[hand] = next_run_length(pitches, onset, last_onset[hand], run_length[hand])
+            last_onset[hand] = onset
+        if wide:
+            wide_span_groups += 1
+
+    return wide_span_groups, fast_run_chords
 
 
 def apply_channels(notes):
@@ -269,40 +308,22 @@ def split_hands_in_place(midi_path):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
-    rule_counts = {rule_name: 0 for rule_name in RULE_ORDER}
-    last_left_pitch = None
-    last_right_pitch = None
-    span_exceeded_groups = 0
-    span_reassignments = 0
-
-    for group in groups:
-        assign_group(group, last_left_pitch, last_right_pitch, rule_counts)
-        exceeded, moved = apply_span_check(group)
-        if exceeded:
-            span_exceeded_groups += 1
-            span_reassignments += moved
-
-        left_notes = [note for note in group if note['hand'] == 'left']
-        right_notes = [note for note in group if note['hand'] == 'right']
-        if left_notes:
-            last_left_pitch = average_pitch(left_notes)
-        if right_notes:
-            last_right_pitch = average_pitch(right_notes)
-
+    assign_groups(groups)
     apply_channels(notes)
     midi_file.save(midi_path)
 
     right_notes = sum(1 for note in notes if note['hand'] == 'right')
     left_notes = sum(1 for note in notes if note['hand'] == 'left')
+    wide_span_groups, fast_run_chords = summarize_groups(groups)
 
     stats = {
         'midi_path': midi_path,
         'total_notes': len(notes),
         'right_notes': right_notes,
         'left_notes': left_notes,
-        'rule_counts': rule_counts,
-        'span_exceeded_groups': span_exceeded_groups,
-        'span_reassignments': span_reassignments,
+        'onset_groups': len(groups),
+        'wide_span_groups': wide_span_groups,
+        'fast_run_chords': fast_run_chords,
     }
     return stats
 
@@ -321,23 +342,13 @@ def format_split_stats(stats):
             stats['left_notes'],
             stats['left_notes'] / total_notes if total_notes else 0.0,
         ),
-        'Rule assignments:',
+        'Onset groups: {}'.format(stats['onset_groups']),
+        'Groups with a hand span > {} semitones: {}'.format(COMFORT_SPAN, stats['wide_span_groups']),
+        'Multi-note hand inside a fast run (< {:.2f}s): {}'.format(
+            FAST_RUN_SECONDS,
+            stats['fast_run_chords'],
+        ),
     ]
-
-    for rule_name in RULE_ORDER:
-        count = stats['rule_counts'][rule_name]
-        lines.append(
-            '- {}: {} ({:.2%})'.format(
-                RULE_LABELS[rule_name],
-                count,
-                count / total_notes if total_notes else 0.0,
-            )
-        )
-
-    lines.extend([
-        'Span exceeded groups: {}'.format(stats['span_exceeded_groups']),
-        'Span reassignments: {}'.format(stats['span_reassignments']),
-    ])
     return '\n'.join(lines)
 
 
