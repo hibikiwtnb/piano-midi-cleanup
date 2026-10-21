@@ -60,14 +60,36 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
 2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
-3. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
-4. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
+3. 對話框詢問是否自動對齊第一拍；選「是」會先用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`。
+4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
+5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 
 工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `mu2000_playback.py` 建立名為 `pianotrans-tools` 的虛擬 MIDI 埠，並在背景啟動 S-MU2000 的 `live`（無視窗）接收它，聲音從系統預設輸出播出，不需要先開 MU2000.app 或設定 IAC。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
 
 `pianotrans.command` pipeline 只做 BPM 修正，不開工作台。
+
+自動對齊第一拍只看 BPM 修正後的 MIDI（不需要原音訊），假設固定 4/4：
+
+```text
+1. 起音依 velocity 加權，在八分音符週期上取平均相位，得到格線位移
+2. 在八分音符的兩個位置中，選落在四分音符格線上權重較大的作為正拍
+3. 四拍中左手（channel 3）或低音（<= F#3）起音權重最大的一拍作為第 1 拍
+4. 取離 0 秒最近的小節線，已對齊的 MIDI 再跑一次幾乎不動
+```
+
+結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）追加到 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在工作台用 ±1 拍修正。
+
+agent 或腳本可非交互執行（有 `input_midi` 時不開任何對話框，預設也不開工作台）：
+
+```bash
+python bpmfix.py song.mid --audio song.flac --auto-first-beat
+```
+
+```bash
+python bpmfix.py song.mid --bpm 135 --auto-first-beat --workbench
+```
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
 
@@ -194,6 +216,12 @@ channel 2 = MIDI channel 3
 2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
 
 結果會追加到來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。
+
+非交互執行（agent 用）：只自動對齊、不開工作台並直接覆寫：
+
+```bash
+python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+```
 
 ### `generate_midi_review.py`
 

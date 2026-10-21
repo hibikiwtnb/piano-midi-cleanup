@@ -1,4 +1,6 @@
+import cmath
 import json
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -13,6 +15,14 @@ BPM_PYTHON = os.environ.get(
 )
 DEFAULT_MIDI_TEMPO = 500000
 ROUND_MAX_END_DRIFT_MS = 50.0
+
+# Automatic first beat: 8th-note phase from velocity-weighted onsets, on-beat half by
+# quarter-grid weight, downbeat by left-hand / bass onset weight per beat.
+BEATS_PER_BAR = 4
+ON_BEAT_WINDOW_SECONDS = 0.03
+DOWNBEAT_WINDOW_SECONDS = 0.04
+BASS_MAX_PITCH = 54
+LEFT_HAND_CHANNEL = 2
 
 
 def bpmfix_path_for(midi_path):
@@ -135,6 +145,73 @@ def fix_midi_bpm(midi_path, output_path, target_bpm):
 
     midi_file.save(output_path)
     return mido.tempo2bpm(source_tempo)
+
+
+def wrapped_distance(value, period):
+    return abs(((value + period / 2) % period) - period / 2)
+
+
+def estimate_first_beat(midi_path):
+    """Estimate the bar line nearest to 0 s (within half a bar) of a fixed-tempo, hand-split MIDI."""
+    midi_file = mido.MidiFile(midi_path)
+    beat = midi_source_tempo(midi_file) / 1e6
+    bar = beat * BEATS_PER_BAR
+    seconds = 0.0
+    onsets = []
+    for message in midi_file:
+        seconds += message.time
+        if message.type == 'note_on' and message.velocity > 0:
+            onsets.append((seconds, message.velocity, message.note, message.channel))
+    if not onsets:
+        return None
+
+    max_velocity = max(velocity for _, velocity, _, _ in onsets)
+    weighted = [(start, velocity / max_velocity, pitch, channel) for start, velocity, pitch, channel in onsets]
+
+    eighth = beat / 2
+    phasor = sum(weight * cmath.exp(2j * math.pi * start / eighth) for start, weight, _, _ in weighted)
+    eighth_phase = (cmath.phase(phasor) / (2 * math.pi) * eighth) % eighth
+    coherence = abs(phasor) / sum(weight for _, weight, _, _ in weighted)
+
+    def on_grid_weight(origin, period, window, notes):
+        return sum(weight for start, weight, _, _ in notes
+                   if wrapped_distance(start - origin, period) < window)
+
+    beat_phase = max(
+        (eighth_phase, eighth_phase + eighth),
+        key=lambda origin: on_grid_weight(origin, beat, ON_BEAT_WINDOW_SECONDS, weighted),
+    )
+
+    bass = [note for note in weighted if note[3] == LEFT_HAND_CHANNEL or note[2] <= BASS_MAX_PITCH]
+    weights = [
+        on_grid_weight(beat_phase + index * beat, bar, DOWNBEAT_WINDOW_SECONDS, bass)
+        for index in range(BEATS_PER_BAR)
+    ]
+    total = sum(weights) or 1.0
+    downbeat = max(range(BEATS_PER_BAR), key=lambda index: weights[index])
+    # Bass share of beats 1-4 counted from the chosen downbeat.
+    shares = [weights[(downbeat + index) % BEATS_PER_BAR] / total for index in range(BEATS_PER_BAR)]
+    # The bar line nearest to 0, so an already aligned MIDI is moved by almost nothing.
+    first_beat = ((beat_phase + downbeat * beat + bar / 2) % bar) - bar / 2
+
+    return {
+        'first_beat_seconds': first_beat,
+        'eighth_coherence': coherence,
+        'bass_shares': shares,
+    }
+
+
+def format_auto_first_beat_stats(midi_path, estimate, result):
+    return '\n'.join([
+        'MIDI auto first beat stats',
+        'MIDI: {}'.format(midi_path),
+        'Estimated first beat: {:.3f}s'.format(estimate['first_beat_seconds']),
+        '8th-grid onset coherence: {:.3f}'.format(estimate['eighth_coherence']),
+        'Bass onset share on beats 1-4: {}'.format(
+            ' '.join('{:.2f}'.format(share) for share in estimate['bass_shares'])),
+        'Shift ticks: {}'.format(result['shift_ticks']),
+        'Padding bars: {}'.format(result['padding_bars']),
+    ])
 
 
 def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):

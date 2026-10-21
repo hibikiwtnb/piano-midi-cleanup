@@ -61,14 +61,36 @@ Usage:
 
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
-3. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
-4. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
+3. A dialog asks whether to auto-align the first beat; "Yes" moves the first beat to a bar line with the algorithm below and writes `*_bpmfix.mid`.
+4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
+5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 
 `first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `mu2000_playback.py` opens a virtual MIDI port named `pianotrans-tools` and starts the headless S-MU2000 `live` engine on it in the background. Sound goes to the system default output; MU2000.app and an IAC bus are not needed.
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
 
 The `pianotrans.command` pipeline only runs the BPM fix and does not open the workbench.
+
+Automatic first beat alignment uses only the BPM-fixed MIDI (no audio) and assumes a fixed 4/4:
+
+```text
+1. Velocity-weighted onsets give the mean phase on the 8th-note period, i.e. the grid offset
+2. Of the two 8th-note positions, the one with more weight on the quarter grid is the beat
+3. Of the four beats, the one with the most left-hand (channel 3) or bass (<= F#3) onset weight is beat 1
+4. The bar line nearest to 0 s is used, so running it again on an aligned MIDI barely moves it
+```
+
+The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) is appended to `*_stats.txt`. Beat 1 may be wrong with heavily syncopated bass, intros without bass, or 3/4; fix it with +-1 beat in the workbench.
+
+Agents and scripts can run it non-interactively (with `input_midi` no dialog opens, and the workbench is off by default):
+
+```bash
+python bpmfix.py song.mid --audio song.flac --auto-first-beat
+```
+
+```bash
+python bpmfix.py song.mid --bpm 135 --auto-first-beat --workbench
+```
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
 
@@ -195,6 +217,12 @@ Usage:
 2. Adjust it in the workbench and press "寫入 MIDI" to overwrite the chosen file in place. "取消" leaves it unchanged.
 
 The result is appended to the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog.
+
+Non-interactive use (for agents): auto-align only, without the workbench, overwriting in place:
+
+```bash
+python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+```
 
 ### `generate_midi_review.py`
 

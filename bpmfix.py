@@ -1,10 +1,11 @@
+import argparse
 import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from bpmfix_utils import apply_bpm_fix, bpmfix_report_path_for
-from first_beat_ui import append_first_beat_stats, run_first_beat_ui
+from first_beat_ui import append_first_beat_stats, auto_align_first_beat, run_first_beat_ui
 
 
 def choose_audio():
@@ -47,7 +48,46 @@ def ask_known_bpm():
     return bpm
 
 
-def main():
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description='Fix MIDI BPM, optionally align the first beat, then optionally open the workbench. '
+                    'Without input_midi the tool asks with dialogs.',
+    )
+    parser.add_argument('input_midi', nargs='?', help='MIDI to fix; writes *_bpmfix.mid next to it.')
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument('--bpm', type=float, help='Known BPM.')
+    source.add_argument('--audio', help='Source audio for Essentia BPM detection.')
+    parser.add_argument('--auto-first-beat', action='store_true', help='Align the first beat from the MIDI.')
+    parser.add_argument('--workbench', action='store_true', help='Open the browser workbench after fixing.')
+    return parser.parse_args(argv)
+
+
+def run_non_interactive(args):
+    if not os.path.isfile(args.input_midi):
+        print('MIDI file does not exist: {}'.format(args.input_midi))
+        return 1
+    if args.bpm is None and args.audio is None:
+        print('Give --bpm or --audio.')
+        return 1
+    if args.audio is not None and not os.path.isfile(args.audio):
+        print('Audio file does not exist: {}'.format(args.audio))
+        return 1
+
+    report_path = bpmfix_report_path_for(args.input_midi)
+    output_path, _ = apply_bpm_fix(args.audio, args.input_midi, target_bpm=args.bpm)
+    if args.auto_first_beat:
+        auto_align_first_beat(output_path, report_path=report_path)
+    if args.workbench:
+        append_first_beat_stats(output_path, run_first_beat_ui(output_path), report_path=report_path)
+    print('Output: {}'.format(output_path))
+    return 0
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if args.input_midi:
+        return run_non_interactive(args)
+
     print('--------------------------------------------------------------------------------')
     print('MIDI BPMFix using Essentia BPM detection, then BPM and first beat in the browser')
     print('Enter a known BPM first. If unknown, press Return and choose audio for detection.')
@@ -73,9 +113,12 @@ def main():
             messagebox.showerror('BPMFix', 'MIDI file does not exist.')
             return 1
 
+        report_path = bpmfix_report_path_for(midi_path)
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
+        if messagebox.askyesno('BPMFix', 'Auto-align the first beat from the MIDI before opening the workbench?'):
+            auto_align_first_beat(output_path, report_path=report_path)
         first_beat = run_first_beat_ui(output_path)
-        append_first_beat_stats(output_path, first_beat, report_path=bpmfix_report_path_for(midi_path))
+        append_first_beat_stats(output_path, first_beat, report_path=report_path)
     except Exception as error:
         messagebox.showerror('BPMFix failed', str(error))
         raise

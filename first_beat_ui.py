@@ -15,6 +15,7 @@ from pathlib import Path
 
 import mido
 
+from bpmfix_utils import estimate_first_beat, format_auto_first_beat_stats
 from mu2000_playback import MidiPlayback, Mu2000Live, read_midi_events
 
 
@@ -258,6 +259,23 @@ def append_first_beat_stats(midi_path, result, report_path=None):
     print(report)
     print('Appending first beat report: {}'.format(report_path))
     return report
+
+
+def auto_align_first_beat(midi_path, report_path=None):
+    """Move the estimated first beat to a bar line in place and append the report."""
+    estimate = estimate_first_beat(midi_path)
+    if estimate is None:
+        print('No notes; first beat not aligned.')
+        return None
+    bpm = mido.tempo2bpm(midi_tempo(mido.MidiFile(midi_path)))
+    result = build_bpm_fixed_midi(midi_path, bpm, estimate['first_beat_seconds'])
+    report_path = report_path or stats_path_for_midi(midi_path)
+    report = format_auto_first_beat_stats(midi_path, estimate, result)
+    with open(report_path, 'a', encoding='utf-8') as file:
+        file.write('\n\n' + report + '\n')
+    print(report)
+    print('Appending auto first beat report: {}'.format(report_path))
+    return result
 
 
 def format_first_beat_stats(midi_path, result):
