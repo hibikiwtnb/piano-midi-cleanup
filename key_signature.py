@@ -25,9 +25,7 @@ def scale_pitch_classes(tonic):
     return {(tonic + step) % 12 for step in MAJOR_STEPS}
 
 
-def phrase_counts(midi_file):
-    """Onset counts per pitch class for each phrase, starting at the first full bar after any pickup."""
-    bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
+def note_onsets(midi_file):
     onsets = []
     for track in midi_file.tracks:
         absolute_tick = 0
@@ -35,6 +33,13 @@ def phrase_counts(midi_file):
             absolute_tick += message.time
             if message.type == 'note_on' and message.velocity > 0:
                 onsets.append((absolute_tick, message.note))
+    return onsets
+
+
+def phrase_counts(midi_file):
+    """Onset counts per pitch class for each phrase, starting at the first full bar after any pickup."""
+    bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
+    onsets = note_onsets(midi_file)
     if not onsets:
         return 0, []
 
@@ -50,12 +55,21 @@ def phrase_counts(midi_file):
     return start_tick, counts
 
 
+def accidentals(pitch_counts, key_index):
+    scale = scale_pitch_classes(KEY_SIGNATURES[key_index][1])
+    return sum(count for pitch_class, count in enumerate(pitch_counts) if pitch_class not in scale)
+
+
 def accidental_costs(counts):
-    return [
-        [sum(count for pitch_class, count in enumerate(phrase) if pitch_class not in scale_pitch_classes(tonic))
-         for _, tonic in KEY_SIGNATURES]
-        for phrase in counts
-    ]
+    return [[accidentals(phrase, key) for key in range(len(KEY_SIGNATURES))] for phrase in counts]
+
+
+def bar_pitch_counts(midi_file, start_tick, end_tick):
+    counts = [0] * 12
+    for tick, note in note_onsets(midi_file):
+        if start_tick <= tick < end_tick:
+            counts[note % 12] += 1
+    return counts
 
 
 def choose_signatures(costs):
@@ -105,7 +119,25 @@ def detect_key_segments(midi_path):
             'bar': tick // bar_ticks + 1,
             'notes': notes,
             'accidentals': costs[index][key],
+            'moved_early': False,
         })
+
+    # A bar leading into a new key may already be in it: change one bar early if that saves accidentals.
+    for previous, segment in zip(segments, segments[1:]):
+        lead_tick = segment['tick'] - bar_ticks
+        if lead_tick <= previous['tick']:
+            continue
+        lead = bar_pitch_counts(midi_file, lead_tick, segment['tick'])
+        old_cost = accidentals(lead, previous['key_index'])
+        new_cost = accidentals(lead, segment['key_index'])
+        if new_cost < old_cost:
+            previous['notes'] -= sum(lead)
+            previous['accidentals'] -= old_cost
+            segment['notes'] += sum(lead)
+            segment['accidentals'] += new_cost
+            segment['tick'] = lead_tick
+            segment['bar'] -= 1
+            segment['moved_early'] = True
     return segments
 
 
@@ -139,8 +171,9 @@ def format_key_stats(midi_path, segments):
         'Phrase: {} bars from the first full bar, change cost {} accidental notes'.format(PHRASE_BARS, CHANGE_COST),
     ]
     for segment in segments:
-        lines.append('- Bar {}: {} (accidental notes {} of {})'.format(
-            segment['bar'], segment['key'], segment['accidentals'], segment['notes']))
+        lines.append('- Bar {}: {} (accidental notes {} of {}){}'.format(
+            segment['bar'], segment['key'], segment['accidentals'], segment['notes'],
+            ', one bar before the phrase boundary' if segment['moved_early'] else ''))
     total_notes = sum(segment['notes'] for segment in segments)
     total_accidentals = sum(segment['accidentals'] for segment in segments)
     lines.append('Accidental notes: {} of {} ({:.2%})'.format(

@@ -235,7 +235,8 @@ Method:
 1. Phrases of 4 bars start at the first full bar after any pickup (pickup notes count into the first phrase)
 2. For each phrase, count the notes that need accidentals under each of the 12 major key signatures (relative minors share them)
 3. Viterbi picks the path with the fewest accidentals; each key change costs 4 extra notes, and keys only change at phrase boundaries
-4. F# and Db are used for the 6- and 7-accidental enharmonic pairs
+4. At each key change, the bar before the boundary is checked: if it needs fewer accidentals in the new key (a lead-in bar already in the new key), the key changes one bar early
+5. F# and Db are used for the 6- and 7-accidental enharmonic pairs
 ```
 
 Existing key signature events are replaced. Each segment's key and accidental count is appended to the source transcription `*_stats.txt`. 4/4 is assumed.
