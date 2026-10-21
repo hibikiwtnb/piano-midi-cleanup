@@ -103,3 +103,11 @@ Channel 3 / left hand notes: 827 (29.26%)
 Onset groups: 1546
 Groups with a hand span > 12 semitones: 0
 Multi-note hand inside a fast run (< 0.25s): 64
+
+
+MIDI overlap trim stats
+MIDI: testdata/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Fast figure: right hand, 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 1704 notes, fast figure 1118, chord change 56, out of reach 23, most notes sounding 11 -> 5
+- Channel 2 / second right: 295 notes, fast figure 0, chord change 17, out of reach 16, most notes sounding 6 -> 5
+- Channel 3 / left: 827 notes, fast figure 0, chord change 96, out of reach 90, most notes sounding 7 -> 5

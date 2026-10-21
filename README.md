@@ -214,6 +214,24 @@ python hand_split_channels.py song_bpmfix_cleaned.mid
 python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
+### `trim_overlaps.command`
+
+分手之後執行：把踏板延音造成、同一隻手內重疊的音裁短，直接修改 MIDI。只移動音尾，不刪音、不動起音。每隻手（channel）分開處理，起音相差 50 ms 內的音視為同一組。
+
+```text
+快速音型（只限右手）：連續 3 組以上、每組間隔 0.5 拍以內的起音；音型內每個音最晚在右手下一組起音結束
+換和弦：一隻手彈新的和弦或八度（2 個音以上）時，上一個和弦還在響的音在此結束
+按不住：還在響的音加上新的音超過 5 個，或跨度超過 14 半音時，還在響的音在此結束
+```
+
+各規則的裁短數，以及每隻手同時發聲數的前後最大值，追加到來源轉錄的 `*_stats.txt`。
+
+非交互執行：
+
+```bash
+python trim_overlaps.py song_bpmfix_cleaned.mid
+```
+
 ### `midi_workbench.command`
 
 不經過 BPM 修正，直接用瀏覽器 MIDI 工作台打開任一 MIDI，調整 BPM 和第一拍（介面、S-MU2000 即時播放與寫入方式同 `bpmfix.command` 的工作台）。
@@ -343,6 +361,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+trim_overlaps.py
 midi_workbench.py
 key_signature.py
 generate_midi_review.py

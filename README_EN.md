@@ -215,6 +215,24 @@ python hand_split_channels.py song_bpmfix_cleaned.mid
 python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
+### `trim_overlaps.command`
+
+Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
+
+```text
+Fast figure (right hand only): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next right-hand onset group
+Chord change: when a hand plays a new chord or octave (2 or more notes), notes of its previous chord still sounding end there
+Out of reach: when the sounding notes plus the new ones exceed 5 notes or span more than 14 semitones, the sounding notes end there
+```
+
+The trim counts per rule and each hand's most notes sounding at once, before and after, are appended to the source transcription `*_stats.txt`.
+
+Non-interactive:
+
+```bash
+python trim_overlaps.py song_bpmfix_cleaned.mid
+```
+
 ### `midi_workbench.command`
 
 Opens any MIDI in the browser workbench to set BPM and the first beat, without running the BPM fix. The interface, realtime S-MU2000 playback and saving are the same as the `bpmfix.command` workbench.
@@ -344,6 +362,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+trim_overlaps.py
 midi_workbench.py
 key_signature.py
 generate_midi_review.py
