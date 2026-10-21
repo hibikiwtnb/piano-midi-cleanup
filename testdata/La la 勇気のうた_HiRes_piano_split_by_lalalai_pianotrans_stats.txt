@@ -127,3 +127,11 @@ Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
 - Channel 1 / right: 1704 notes, fast figure 0, harmony change 0, chord change 0, out of reach 0, most notes sounding 5 -> 5
 - Channel 2 / second right: 295 notes, fast figure 46, harmony change 0, chord change 0, out of reach 0, most notes sounding 5 -> 4
 - Channel 3 / left: 827 notes, fast figure 0, harmony change 0, chord change 0, out of reach 0, most notes sounding 5 -> 5
+
+
+MIDI overlap trim stats
+MIDI: testdata/La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_bpmfix_cleaned.mid
+Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 1704 notes, fast figure 0, harmony change 0, chord change 0, outer line 14, out of reach 0, most notes sounding 5 -> 4
+- Channel 2 / second right: 295 notes, fast figure 0, harmony change 0, chord change 0, outer line 10, out of reach 0, most notes sounding 4 -> 4
+- Channel 3 / left: 827 notes, fast figure 0, harmony change 0, chord change 0, outer line 39, out of reach 0, most notes sounding 5 -> 5
