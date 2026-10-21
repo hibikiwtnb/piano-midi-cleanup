@@ -9,3 +9,4 @@ piano_transcription_inference_data/
 *.aiff
 *.mp3
 *.flac
+*_pianoroll/

@@ -351,6 +351,22 @@ Example output:
 m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
 ```
 
+### `pianoroll_snapshot.command`
+
+Saves piano roll PNGs of a bar-aligned MIDI, four bars per image, without modifying the MIDI. Colors mark the hand: blue = right, amber = second right, green = left. Each image's pitch range follows the notes in its four bars.
+
+```text
+landscape: four bars in one row, 1920 wide
+portrait: one bar per row, four rows, 1080 wide, for phones
+```
+
+By default both are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git).
+
+```bash
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
+```
+
 ## Python Entrypoints
 
 Python scripts used by the `.command` launchers:
@@ -368,6 +384,7 @@ key_signature.py
 generate_midi_review.py
 generate_chord_review.py
 note_text_review.py
+pianoroll_snapshot.py
 ```
 
 Shared helpers:

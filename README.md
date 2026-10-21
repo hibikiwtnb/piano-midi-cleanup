@@ -350,6 +350,22 @@ python note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
 m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
 ```
 
+### `pianoroll_snapshot.command`
+
+把已對齊小節的 MIDI 輸出成鋼琴捲簾 PNG，每張 4 小節，不修改 MIDI。顏色區分手：藍 = 右手、橙 = 第二右手、綠 = 左手。每張的音域依那 4 小節的音自動決定。
+
+```text
+landscape：4 小節排成一行，1920 寬
+portrait：一行一小節、排 4 行，1080 寬，適合手機查看
+```
+
+預設兩種都輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。
+
+```bash
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid
+python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
+```
+
 ## Python Entrypoints
 
 這些 `.command` 背後呼叫的 Python 腳本：
@@ -367,6 +383,7 @@ key_signature.py
 generate_midi_review.py
 generate_chord_review.py
 note_text_review.py
+pianoroll_snapshot.py
 ```
 
 共用 helper：
