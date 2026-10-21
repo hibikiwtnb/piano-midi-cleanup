@@ -1,0 +1,81 @@
+MIDI quality stats
+MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai.mid
+Total notes: 5075
+Very short notes (< 0.050s): 382 (7.53%)
+Low velocity notes (<= 30): 32 (0.63%)
+Lowest note: 26 (D1)
+Highest note: 103 (G7)
+Pitch span: 77 semitone(s)
+Average velocity: 72.12
+Max polyphony: 19
+
+
+MIDI BPMFix stats
+Audio: /Users/kn/Music/音源用/嵐のなかの恋だから off vocal.mp3
+Input MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai.mid
+Output MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix.mid
+Original BPM: 120.00
+BPM source: detected
+Raw detected BPM: 144.810364
+Beat-phase BPM: 145.0004
+Beat-phase coherence: 0.899
+Rounding: applied (end drift <= 50 ms)
+Applied BPM: 145.00
+Estimated end drift: 1 ms
+Detection confidence: 2.471
+Detected beats: 741
+
+
+MIDI auto first beat stats
+MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix.mid
+Estimated first beat: -0.568s
+8th-grid onset coherence: 0.738
+Bass onset share on beats 1-4: 0.41 0.19 0.20 0.20
+Shift ticks: 527
+Padding bars: 0
+
+
+MIDI key signature stats
+MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix.mid
+Phrase: 4 bars from the first full bar, change cost 4 accidental notes
+- Bar 1: Bb (accidental notes 94 of 1141)
+- Bar 46: G (accidental notes 30 of 492)
+- Bar 66: Bb (accidental notes 8 of 338)
+- Bar 75: G (accidental notes 15 of 598), inside a crowded phrase
+- Bar 98: Bb (accidental notes 20 of 425)
+- Bar 113: G (accidental notes 26 of 498), inside a crowded phrase
+- Bar 133: Bb (accidental notes 55 of 361), inside a crowded phrase
+- Bar 145: G (accidental notes 50 of 626), inside a crowded phrase
+- Bar 170: Bb (accidental notes 22 of 596)
+Accidental notes: 320 of 5075 (6.31%)
+
+
+MIDI rule cleaning stats
+Input: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix.mid
+Output: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix_cleaned.mid
+Original notes: 5075
+Removed notes: 239 (4.71%)
+Kept notes: 4836 (95.29%)
+Rule removals:
+- Duration < 0.030s: 227 (4.47%)
+- Velocity < 20: 1 (0.02%)
+- Velocity < 35 and duration < 0.080s: 11 (0.22%)
+- Pitch outside 21-108: 0 (0.00%)
+
+
+MIDI provisional hand split stats
+MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix_cleaned.mid
+Original notes: 4836
+Hands: 2
+Channel 1 / right hand notes: 3339 (69.04%)
+Channel 3 / left hand notes: 1497 (30.96%)
+Onset groups: 1160
+Groups with a hand span > 12 semitones: 106
+Multi-note hand inside a fast run (< 0.25s): 11
+
+
+MIDI overlap trim stats
+MIDI: testdata/嵐のなかの恋だから off vocal_piano_split_by_lalalai_bpmfix_cleaned.mid
+Fast figure: right, second right; 3 or more onset groups each within 0.5 beat
+- Channel 1 / right: 3339 notes, fast figure 493, harmony change 153, chord change 322, outer line 52, out of reach 86, most notes sounding 13 -> 8
+- Channel 3 / left: 1497 notes, fast figure 0, harmony change 76, chord change 130, outer line 33, out of reach 63, most notes sounding 9 -> 6
