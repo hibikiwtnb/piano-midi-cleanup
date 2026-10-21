@@ -60,7 +60,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
 2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
-3. 對話框詢問是否自動對齊第一拍；選「是」會先用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`。
+3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
 4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
 5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 
@@ -84,11 +84,11 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 agent 或腳本可非交互執行（有 `input_midi` 時不開任何對話框，預設也不開工作台）：
 
 ```bash
-python bpmfix.py song.mid --audio song.flac --auto-first-beat
+python bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --auto-first-beat --workbench
+python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --workbench
 ```
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：

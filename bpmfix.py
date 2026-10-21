@@ -50,14 +50,14 @@ def ask_known_bpm():
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description='Fix MIDI BPM, optionally align the first beat, then optionally open the workbench. '
+        description='Fix MIDI BPM, align the first beat, then optionally open the workbench. '
                     'Without input_midi the tool asks with dialogs.',
     )
     parser.add_argument('input_midi', nargs='?', help='MIDI to fix; writes *_bpmfix.mid next to it.')
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--bpm', type=float, help='Known BPM.')
     source.add_argument('--audio', help='Source audio for Essentia BPM detection.')
-    parser.add_argument('--auto-first-beat', action='store_true', help='Align the first beat from the MIDI.')
+    parser.add_argument('--no-auto-first-beat', action='store_true', help='Skip the automatic first beat alignment.')
     parser.add_argument('--workbench', action='store_true', help='Open the browser workbench after fixing.')
     return parser.parse_args(argv)
 
@@ -75,7 +75,7 @@ def run_non_interactive(args):
 
     report_path = bpmfix_report_path_for(args.input_midi)
     output_path, _ = apply_bpm_fix(args.audio, args.input_midi, target_bpm=args.bpm)
-    if args.auto_first_beat:
+    if not args.no_auto_first_beat:
         auto_align_first_beat(output_path, report_path=report_path)
     if args.workbench:
         append_first_beat_stats(output_path, run_first_beat_ui(output_path), report_path=report_path)
@@ -115,8 +115,7 @@ def main(argv=None):
 
         report_path = bpmfix_report_path_for(midi_path)
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
-        if messagebox.askyesno('BPMFix', 'Auto-align the first beat from the MIDI before opening the workbench?'):
-            auto_align_first_beat(output_path, report_path=report_path)
+        auto_align_first_beat(output_path, report_path=report_path)
         first_beat = run_first_beat_ui(output_path)
         append_first_beat_stats(output_path, first_beat, report_path=report_path)
     except Exception as error:

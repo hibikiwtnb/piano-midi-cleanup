@@ -61,7 +61,7 @@ Usage:
 
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
-3. A dialog asks whether to auto-align the first beat; "Yes" moves the first beat to a bar line with the algorithm below and writes `*_bpmfix.mid`.
+3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
 4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute, and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 
@@ -85,11 +85,11 @@ The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) 
 Agents and scripts can run it non-interactively (with `input_midi` no dialog opens, and the workbench is off by default):
 
 ```bash
-python bpmfix.py song.mid --audio song.flac --auto-first-beat
+python bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --auto-first-beat --workbench
+python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --workbench
 ```
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
