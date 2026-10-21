@@ -183,6 +183,17 @@ channel 2 = MIDI channel 3
 
 This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view.
 
+### `midi_workbench.command`
+
+Opens any MIDI in the browser workbench to set BPM and the first beat, without running the BPM fix. The interface, realtime S-MU2000 playback and saving are the same as the `bpmfix.command` workbench.
+
+Usage:
+
+1. Choose a MIDI file (usually `*_bpmfix.mid` or `*_bpmfix_cleaned.mid`).
+2. Adjust it in the workbench and press "寫入 MIDI" to overwrite the chosen file in place. "取消" leaves it unchanged.
+
+The result is shown only in the terminal and the completion dialog; no stats file is written.
+
 ### `generate_midi_review.py`
 
 Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
@@ -258,6 +269,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+midi_workbench.py
 generate_midi_review.py
 generate_chord_review.py
 ```

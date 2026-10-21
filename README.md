@@ -182,6 +182,17 @@ channel 2 = MIDI channel 3
 
 這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯。
 
+### `midi_workbench.command`
+
+不經過 BPM 修正，直接用瀏覽器 MIDI 工作台打開任一 MIDI，調整 BPM 和第一拍（介面、S-MU2000 即時播放與寫入方式同 `bpmfix.command` 的工作台）。
+
+使用方式：
+
+1. 選擇 MIDI（通常是 `*_bpmfix.mid` 或 `*_bpmfix_cleaned.mid`）。
+2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
+
+結果只在終端和完成視窗顯示，不寫入 stats 檔。
+
 ### `generate_midi_review.py`
 
 開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
@@ -257,6 +268,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+midi_workbench.py
 generate_midi_review.py
 generate_chord_review.py
 ```
