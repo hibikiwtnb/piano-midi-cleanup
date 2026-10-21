@@ -194,7 +194,7 @@ Usage:
 1. Choose a MIDI file (usually `*_bpmfix.mid` or `*_bpmfix_cleaned.mid`).
 2. Adjust it in the workbench and press "寫入 MIDI" to overwrite the chosen file in place. "取消" leaves it unchanged.
 
-The result is shown only in the terminal and the completion dialog; no stats file is written.
+The result is appended to the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog.
 
 ### `generate_midi_review.py`
 

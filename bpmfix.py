@@ -4,14 +4,14 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from bpmfix_utils import apply_bpm_fix, bpmfix_report_path_for
-from first_beat_ui import format_first_beat_stats, run_first_beat_ui
+from first_beat_ui import append_first_beat_stats, run_first_beat_ui
 
 
 def choose_audio():
     root = tk.Tk()
     root.withdraw()
     return filedialog.askopenfilename(
-        title='Choose source audio for BPM detection and first beat',
+        title='Choose source audio for BPM detection',
         filetypes=[
             ('Audio files', '*.flac *.mp3 *.wav *.ape *.m4a *.aif *.aiff'),
             ('All files', '*.*'),
@@ -75,10 +75,7 @@ def main():
 
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
         first_beat = run_first_beat_ui(output_path)
-        report = format_first_beat_stats(output_path, first_beat)
-        with open(bpmfix_report_path_for(midi_path), 'a', encoding='utf-8') as file:
-            file.write('\n\n' + report + '\n')
-        print(report)
+        append_first_beat_stats(output_path, first_beat, report_path=bpmfix_report_path_for(midi_path))
     except Exception as error:
         messagebox.showerror('BPMFix failed', str(error))
         raise

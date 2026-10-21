@@ -193,7 +193,7 @@ channel 2 = MIDI channel 3
 1. 選擇 MIDI（通常是 `*_bpmfix.mid` 或 `*_bpmfix_cleaned.mid`）。
 2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
 
-結果只在終端和完成視窗顯示，不寫入 stats 檔。
+結果會追加到來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。
 
 ### `generate_midi_review.py`
 

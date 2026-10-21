@@ -241,6 +241,25 @@ def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay):
     }
 
 
+def stats_path_for_midi(midi_path):
+    """Stats file of the source transcription: song_bpmfix_cleaned.mid -> song_stats.txt."""
+    stem = str(Path(midi_path).with_suffix(''))
+    for suffix in ('_cleaned', '_bpmfix'):
+        if stem.endswith(suffix):
+            stem = stem[:-len(suffix)]
+    return stem + '_stats.txt'
+
+
+def append_first_beat_stats(midi_path, result, report_path=None):
+    report_path = report_path or stats_path_for_midi(midi_path)
+    report = format_first_beat_stats(midi_path, result)
+    with open(report_path, 'a', encoding='utf-8') as file:
+        file.write('\n\n' + report + '\n')
+    print(report)
+    print('Appending first beat report: {}'.format(report_path))
+    return report
+
+
 def format_first_beat_stats(midi_path, result):
     if result is None:
         return '\n'.join([

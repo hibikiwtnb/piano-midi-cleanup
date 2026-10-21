@@ -3,7 +3,7 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from first_beat_ui import format_first_beat_stats, run_first_beat_ui
+from first_beat_ui import append_first_beat_stats, run_first_beat_ui
 
 
 def choose_midi():
@@ -34,12 +34,11 @@ def main():
 
     try:
         result = run_first_beat_ui(midi_path)
+        report = append_first_beat_stats(midi_path, result)
     except Exception as error:
         messagebox.showerror('MIDI Workbench failed', str(error))
         raise
 
-    report = format_first_beat_stats(midi_path, result)
-    print(report)
     messagebox.showinfo('MIDI Workbench complete', report)
     return 0
 
