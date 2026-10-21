@@ -3,21 +3,21 @@ import sys
 
 import mido
 
-from hand_split_channels import LEFT_HAND_CHANNEL, RIGHT_HAND_CHANNEL, SECOND_RIGHT_HAND_CHANNEL, collect_notes, group_notes
+from hand_split_channels import CHANNELS, collect_notes, group_notes
 from midi_stats import note_name
 
 
 BEATS_PER_BAR = 4
+HAND_LABELS = {
+    CHANNELS['right']: 'R',
+    CHANNELS['second_right']: 'R2',
+    CHANNELS['second_left']: 'L2',
+    CHANNELS['left']: 'L',
+}
 
 
 def hand_label(channel):
-    if channel == RIGHT_HAND_CHANNEL:
-        return 'R'
-    if channel == SECOND_RIGHT_HAND_CHANNEL:
-        return 'S'
-    if channel == LEFT_HAND_CHANNEL:
-        return 'L'
-    return '?'
+    return HAND_LABELS.get(channel, '?')
 
 
 def parse_bars(text):

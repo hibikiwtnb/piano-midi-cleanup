@@ -90,7 +90,7 @@ Usage:
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
 3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
-4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right), and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
+4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right, the second left as left), and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
@@ -204,13 +204,13 @@ All percentages use `Original notes` as the denominator.
 
 ### `hand_split_channels.command`
 
-Marks a provisional hand split directly on a cleaned MIDI file by changing note channels only. Two hands by default; for songs that need three hands add `--hands 3` for a second right hand.
+Marks a provisional hand split directly on a cleaned MIDI file by changing note channels only. Two hands by default; for songs that need three hands add `--hands 3` (a second right hand), for four `--hands 4` (also a second left hand). One hand is one channel; voices inside one hand are not split.
 
 It does not create separate instrument tracks and does not remove notes.
 
 First a blob line is found for every beat: on a piano roll the bass and middle notes often form one blob and the fast broken chords another above it, with an empty pitch band in between. For each beat (with the onsets of one beat on each side) each candidate line is scored by its distance to the nearest notes above and below, and Viterbi keeps the line in the widest empty band while charging 0.5 per semitone it moves.
 
-Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and cut into one contiguous slice per hand (two hands: left, right; three hands: left, second right, right). The lowest-cost path over the whole song is chosen. Cost terms:
+Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and cut into one contiguous slice per hand (two hands: left, right; three hands: left, second right, right; four hands: left, second left, second right, right). The lowest-cost path over the whole song is chosen. Cost terms:
 
 ```text
 Hand span: free up to 12 semitones, heavily penalized beyond 14
@@ -218,7 +218,7 @@ Register: left hand above D4, right hand below G3, by distance
 Movement speed: change of hand position divided by time since that hand's previous onset (an idle hand moves cheaply)
 Fast runs: once a hand has played 3 or more consecutive single notes each < 0.25 s apart, each extra simultaneous note costs more (a dyad inside a fast right-hand single-note run tends to go to an idle left hand)
 Blob: 4 per note when the top hand (right) gets a note below the blob line or another hand gets one above it; scaled down where the empty band is narrower than 4 semitones on each side
-Second right hand: with three hands, 1 per note given to it, so it is used only when needed
+Second hands: with three or four hands, 1 per note given to the second right or second left hand, so they are used only when needed
 ```
 
 The report shows the number of groups with a hand span over 12 semitones and the number of multi-note hands left inside fast runs. All weights are constants at the top of the file.
@@ -229,7 +229,7 @@ Channel mapping:
 MIDI channel 1 = right hand
 MIDI channel 2 = second right hand (only with --hands 3)
 MIDI channel 3 = left hand
-MIDI channel 4 = reserved for a left-hand bass voice (not used yet)
+MIDI channel 4 = second left hand (only with --hands 4)
 ```
 
 For 0-based libraries such as `mido`, channels 0, 1, 2 and 3 are MIDI channels 1, 2, 3 and 4.
@@ -370,7 +370,7 @@ Each bar has 4 fixed rows. If multiple onset events appear inside the same beat,
 
 ### `note_text_review.py`
 
-Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` right, `S` second right, `L` left, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
+Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` right, `R2` second right, `L2` second left, `L` left, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
 
 ```bash
 python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
@@ -385,7 +385,7 @@ m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
 
 ### `pianoroll_snapshot.command`
 
-Saves piano roll PNGs of a bar-aligned MIDI, four bars per image, without modifying the MIDI. Colors mark the hand: blue = right, amber = second right, green = left. Each image's pitch range follows the notes in its four bars.
+Saves piano roll PNGs of a bar-aligned MIDI, four bars per image, without modifying the MIDI. Colors mark the hand: blue = right, amber = second right, purple = second left, green = left. Each image's pitch range follows the notes in its four bars.
 
 ```text
 landscape: four bars in one row, 1920 wide

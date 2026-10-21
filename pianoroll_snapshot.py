@@ -26,7 +26,8 @@ LAYOUTS = {
 }
 HAND_COLORS = {
     CHANNELS['right']: ('#1976d2', 'R right'),
-    CHANNELS['second_right']: ('#b77900', 'S second right'),
+    CHANNELS['second_right']: ('#b77900', 'R2 second right'),
+    CHANNELS['second_left']: ('#7559a6', 'L2 second left'),
     CHANNELS['left']: ('#3f8f3f', 'L left'),
 }
 OTHER_COLOR = '#6f9fd8'

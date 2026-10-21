@@ -1,5 +1,6 @@
 import argparse
 import bisect
+import itertools
 import os
 import sys
 import tkinter as tk
@@ -48,15 +49,25 @@ BLOB_LINE_MOVE_COST = 0.5
 BLOB_SIDE_COST = 4.0
 BLOB_CLEAR_GAP = 4
 
-# With three hands, each note given to the second right hand costs this, so it is used only when needed.
+# With three or four hands, each note given to a second hand costs this, so they are used only when needed.
 SECOND_HAND_NOTE_COST = 1.0
 
 RIGHT_HAND_CHANNEL = 0
 SECOND_RIGHT_HAND_CHANNEL = 1
 LEFT_HAND_CHANNEL = 2
+SECOND_LEFT_HAND_CHANNEL = 3
 # Hands from low to high; each onset group gives each hand a contiguous slice of its sorted pitches.
-HANDS = {2: ('left', 'right'), 3: ('left', 'second_right', 'right')}
-CHANNELS = {'left': LEFT_HAND_CHANNEL, 'second_right': SECOND_RIGHT_HAND_CHANNEL, 'right': RIGHT_HAND_CHANNEL}
+HANDS = {
+    2: ('left', 'right'),
+    3: ('left', 'second_right', 'right'),
+    4: ('left', 'second_left', 'second_right', 'right'),
+}
+CHANNELS = {
+    'left': LEFT_HAND_CHANNEL,
+    'second_left': SECOND_LEFT_HAND_CHANNEL,
+    'second_right': SECOND_RIGHT_HAND_CHANNEL,
+    'right': RIGHT_HAND_CHANNEL,
+}
 
 
 def collect_tempo_changes(midi_file):
@@ -290,8 +301,7 @@ def split_cost(slices, onset, state, blob):
     cost = sum(hand_cost(pitches, onset, state['pitch'][hand], state['onset'][hand], state['run'][hand])
                for hand, pitches in enumerate(slices))
     cost += register_cost(slices[0], slices[-1])
-    if len(slices) == 3:
-        cost += len(slices[1]) * SECOND_HAND_NOTE_COST
+    cost += sum(len(pitches) for pitches in slices[1:-1]) * SECOND_HAND_NOTE_COST
     return cost + blob_cost(slices, blob)
 
 
@@ -313,9 +323,7 @@ def next_state(state, slices, onset, cost, cuts, parent):
 
 
 def cut_options(size, hands):
-    if hands == 2:
-        return [(cut,) for cut in range(size + 1)]
-    return [(low, high) for low in range(size + 1) for high in range(low, size + 1)]
+    return list(itertools.combinations_with_replacement(range(size + 1), hands - 1))
 
 
 def search_splits(groups, hands, blobs, ticks_per_beat):
@@ -483,7 +491,8 @@ def main(argv=None):
     parser.add_argument('--report', help='Optional report path.')
     parser.add_argument('--append-report', action='store_true', help='Append to report instead of overwriting.')
     parser.add_argument('--hands', type=int, choices=sorted(HANDS), default=2,
-                        help='Number of hands: 3 adds a second right hand on channel 2 (default: 2).')
+                        help='Number of hands: 3 adds a second right hand on channel 2, 4 also a second left hand on channel 4 '
+                             '(default: 2).')
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()

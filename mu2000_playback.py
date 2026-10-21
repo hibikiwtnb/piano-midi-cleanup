@@ -17,7 +17,7 @@ import mido
 MU2000_DIR = Path(os.environ.get('PIANOTRANS_MU2000_DIR', Path.home() / 'Music' / 'S-MU2000-mac')).expanduser()
 VIRTUAL_PORT_NAME = 'pianotrans-tools'
 LIVE_BOOT_SECONDS = 4.0
-LEFT_HAND_CHANNEL = 2
+LEFT_HAND_CHANNELS = (2, 3)
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class MidiEvent:
 
 
 def hand_for_channel(channel):
-    return 'left' if channel == LEFT_HAND_CHANNEL else 'right'
+    return 'left' if channel in LEFT_HAND_CHANNELS else 'right'
 
 
 def read_midi_events(path):
