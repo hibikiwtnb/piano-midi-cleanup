@@ -1,6 +1,6 @@
 """Realtime MIDI playback.
 
-On macOS and Linux a virtual output port named pianotrans-tools is created; any
+On macOS and Linux a virtual output port named piano-midi-cleanup is created; any
 synth can listen to it. On Windows the events go to Microsoft GS Wavetable Synth,
 because python-rtmidi cannot create virtual ports there.
 
@@ -15,7 +15,7 @@ from threading import Event, Lock, Thread, current_thread
 import mido
 
 
-VIRTUAL_PORT_NAME = 'pianotrans-tools'
+VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
 WINDOWS_OUTPUT_NAME = 'Microsoft GS Wavetable Synth'
 LEFT_HAND_CHANNELS = (2, 3)
 

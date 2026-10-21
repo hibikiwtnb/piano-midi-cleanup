@@ -5,7 +5,7 @@ cd "$(dirname "$0")" || exit 1
 PYTHON_BIN=""
 
 for candidate in \
-  "$HOME/.local/share/pianotrans-tools-env/bin/python3" \
+  "$HOME/.local/share/piano-midi-cleanup-env/bin/python3" \
   "./.venv/bin/python3" \
   "/opt/homebrew/bin/python3" \
   "/usr/local/bin/python3" \

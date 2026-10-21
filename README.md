@@ -1,7 +1,11 @@
-# Pianotrans Run Tools
+# Piano MIDI Cleanup
 [English README](README_EN.md)
 
-這個目錄包含 Pianotrans 轉錄入口（含 Apple GPU / MPS 版），以及轉錄結果的後處理工具：BPM 修正、第一拍對齊（瀏覽器工作台即時播放）、調號、保守規則清理、分手（兩隻手或三隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。所有 `.command` 檔都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
+把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（瀏覽器工作台即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
+
+也附轉錄入口（`pianotrans.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
+
+macOS 的 `.command` 和 Windows 的 `.cmd` 都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
 
 固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
 
@@ -93,7 +97,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
 
-工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `pianotrans-tools` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`。也可以用 `--midi-port <名稱>` 改用名稱包含該文字的既有輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
+工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`。也可以用 `--midi-port <名稱>` 改用名稱包含該文字的既有輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
 
@@ -447,7 +451,7 @@ La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*：
 所有 `.command` 和 BPM 偵測共用同一個使用者層級 Python 環境（需要 tkinter，Homebrew 用 `python@3.11` 加 `python-tk@3.11`）：
 
 ```text
-$HOME/.local/share/pianotrans-tools-env
+$HOME/.local/share/piano-midi-cleanup-env
 ```
 
 `.command` 找不到這個環境時，才依序嘗試 `./.venv` 和系統 Python。
@@ -455,20 +459,20 @@ $HOME/.local/share/pianotrans-tools-env
 建立環境（Intel Mac 版本鎖定：PyTorch 最後的 macOS x86_64 版本是 2.2.2，需搭配 `numpy<2`；numba / llvmlite 新版沒有 x86_64 wheel）：
 
 ```bash
-python3.11 -m venv ~/.local/share/pianotrans-tools-env
+python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
 ```
 
 `pianoroll_snapshot.py` 用 Pillow 畫圖。
 
 ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
-Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
+Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `pianotrans-tools` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 使用 `Microsoft GS Wavetable Synth`。找不到輸出埠時工作台仍會開啟，但沒有聲音。
+工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `piano-midi-cleanup` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 使用 `Microsoft GS Wavetable Synth`。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
 Vendored JS:
 
@@ -489,8 +493,8 @@ $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 可覆蓋的環境變數：
 
 ```text
-PIANOTRANS_BPM_ENV
-PIANOTRANS_BPM_PYTHON
+PIANO_MIDI_CLEANUP_BPM_ENV
+PIANO_MIDI_CLEANUP_BPM_PYTHON
 ```
 
 ## Windows
@@ -498,7 +502,7 @@ PIANOTRANS_BPM_PYTHON
 每個工具在倉庫根目錄都有同名的 `.cmd` 啟動檔（例如 `pianotrans.cmd`、`bpmfix.cmd`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
 
 ```text
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
 .venv\Scripts\python.exe
 py -3.11
 PATH 上的 python
@@ -509,16 +513,16 @@ PATH 上的 python
 建立共用的 Python 3.11 環境：
 
 ```bat
-py -3.11 -m venv %USERPROFILE%\.local\share\pianotrans-tools-env
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
+py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
 ```
 
 需要 NVIDIA GPU 時，把第一行 pip 換成 PyTorch 官網目前的 CUDA wheel index（例如 `--index-url https://download.pytorch.org/whl/cu126`）。Essentia 沒有 Windows wheel，因此不安裝；自動 BPM 偵測改用倉庫內建的 essentia.js（WebAssembly），需要 Node.js。因為音訊解碼與重取樣方式不同，結果可能與 Python Essentia 版本略有差異。
 
 `ffmpeg` 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
-工作台的即時播放會送到 `Microsoft GS Wavetable Synth` 這個 MIDI 輸出（透過 mido / python-rtmidi），不建立虛擬 MIDI 埠；可用 `--midi-port <名稱>` 改用其他既有輸出。找不到輸出時工作台仍會開啟，但沒有聲音。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANOTRANS_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
+工作台的即時播放會送到 `Microsoft GS Wavetable Synth` 這個 MIDI 輸出（透過 mido / python-rtmidi），不建立虛擬 MIDI 埠；可用 `--midi-port <名稱>` 改用其他既有輸出。找不到輸出時工作台仍會開啟，但沒有聲音。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
 
 Windows 上不支援：
 

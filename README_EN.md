@@ -1,8 +1,12 @@
-# Pianotrans Run Tools
+# Piano MIDI Cleanup
 
 [Chinese README](README.md)
 
-This folder contains Pianotrans transcription entrypoints (including an Apple GPU / MPS version) plus post-processing tools: BPM fixing, first beat alignment (browser workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two or three hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. All `.command` files are double-clickable, and every tool also has a dialog-free command line for agents.
+Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (browser workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
+
+A transcription entrypoint is included (`pianotrans.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
+
+The macOS `.command` and Windows `.cmd` launchers are double-clickable, and every tool also has a dialog-free command line for agents.
 
 4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
 
@@ -94,7 +98,7 @@ Usage:
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
-`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `midi_playback.py` sends the MIDI to a MIDI output: on macOS / Linux it opens a virtual port named `pianotrans-tools` that any synth can connect to, and on Windows it uses `Microsoft GS Wavetable Synth`. Use `--midi-port <name>` to open an existing output whose name contains that text instead. If no output can be opened, the workbench still opens without sound.
+`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `midi_playback.py` sends the MIDI to a MIDI output: on macOS / Linux it opens a virtual port named `piano-midi-cleanup` that any synth can connect to, and on Windows it uses `Microsoft GS Wavetable Synth`. Use `--midi-port <name>` to open an existing output whose name contains that text instead. If no output can be opened, the workbench still opens without sound.
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
 
@@ -448,7 +452,7 @@ La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*:
 All `.command` launchers and BPM detection share one user-level Python environment (tkinter is required; with Homebrew use `python@3.11` plus `python-tk@3.11`):
 
 ```text
-$HOME/.local/share/pianotrans-tools-env
+$HOME/.local/share/piano-midi-cleanup-env
 ```
 
 If that environment is missing, the launchers fall back to `./.venv` and then system Python.
@@ -456,20 +460,20 @@ If that environment is missing, the launchers fall back to `./.venv` and then sy
 Create the environment (Intel Mac pins: the last PyTorch for macOS x86_64 is 2.2.2, which needs `numpy<2`; newer numba / llvmlite have no x86_64 wheels):
 
 ```bash
-python3.11 -m venv ~/.local/share/pianotrans-tools-env
+python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ```
 
 ```bash
-~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
 ```
 
 `pianoroll_snapshot.py` draws with Pillow.
 
 ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
+Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime workbench playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `pianotrans-tools` virtual MIDI output port, which any synth can connect to; on Windows it uses `Microsoft GS Wavetable Synth`. If no output can be opened, the workbench still opens without sound.
+Realtime workbench playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `piano-midi-cleanup` virtual MIDI output port, which any synth can connect to; on Windows it uses `Microsoft GS Wavetable Synth`. If no output can be opened, the workbench still opens without sound.
 
 Vendored JS:
 
@@ -490,8 +494,8 @@ $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 Overridable environment variables:
 
 ```text
-PIANOTRANS_BPM_ENV
-PIANOTRANS_BPM_PYTHON
+PIANO_MIDI_CLEANUP_BPM_ENV
+PIANO_MIDI_CLEANUP_BPM_PYTHON
 ```
 
 ## Windows
@@ -499,7 +503,7 @@ PIANOTRANS_BPM_PYTHON
 Every tool has a matching `.cmd` launcher in the repository root (for example `pianotrans.cmd` and `bpmfix.cmd`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
 
 ```text
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
 .venv\Scripts\python.exe
 py -3.11
 python on PATH
@@ -510,16 +514,16 @@ If none is found it prints a message and pauses. Every Python CLI also works dir
 Create the shared Python 3.11 environment:
 
 ```bat
-py -3.11 -m venv %USERPROFILE%\.local\share\pianotrans-tools-env
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
+py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
 ```
 
 For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index from PyTorch (for example `--index-url https://download.pytorch.org/whl/cu126`). Essentia has no Windows wheels, so it is not installed; automatic BPM detection uses the vendored essentia.js (WebAssembly) instead and requires Node.js. Because audio decoding and resampling differ, results may differ slightly from the Python Essentia build.
 
 `ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Realtime workbench playback goes to the `Microsoft GS Wavetable Synth` MIDI output through mido / python-rtmidi; no virtual MIDI port is opened. Use `--midi-port <name>` to open another existing output instead. If no output can be opened, the workbench still opens without sound. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANOTRANS_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+Realtime workbench playback goes to the `Microsoft GS Wavetable Synth` MIDI output through mido / python-rtmidi; no virtual MIDI port is opened. Use `--midi-port <name>` to open another existing output instead. If no output can be opened, the workbench still opens without sound. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
 
 Not available on Windows:
 

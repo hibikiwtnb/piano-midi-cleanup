@@ -16,7 +16,7 @@ if os.name == 'nt':
 
 
 def node_executable(requirement='Tonal.js chord detection'):
-    configured = os.environ.get('PIANOTRANS_NODE')
+    configured = os.environ.get('PIANO_MIDI_CLEANUP_NODE')
     if configured:
         return configured
 
@@ -26,5 +26,5 @@ def node_executable(requirement='Tonal.js chord detection'):
             return resolved
 
     raise RuntimeError(
-        'Node.js is required for {}. Install Node.js or set PIANOTRANS_NODE.'.format(requirement)
+        'Node.js is required for {}. Install Node.js or set PIANO_MIDI_CLEANUP_NODE.'.format(requirement)
     )

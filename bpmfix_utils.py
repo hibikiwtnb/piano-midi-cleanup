@@ -10,10 +10,10 @@ import mido
 from node_utils import node_executable
 
 
-DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'pianotrans-tools-env'
-BPM_ENV = Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser()
+DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'piano-midi-cleanup-env'
+BPM_ENV = Path(os.environ.get('PIANO_MIDI_CLEANUP_BPM_ENV', DEFAULT_BPM_ENV)).expanduser()
 DEFAULT_BPM_PYTHON = BPM_ENV / 'Scripts' / 'python.exe' if os.name == 'nt' else BPM_ENV / 'bin' / 'python'
-BPM_PYTHON = os.environ.get('PIANOTRANS_BPM_PYTHON', str(DEFAULT_BPM_PYTHON))
+BPM_PYTHON = os.environ.get('PIANO_MIDI_CLEANUP_BPM_PYTHON', str(DEFAULT_BPM_PYTHON))
 DEFAULT_MIDI_TEMPO = 500000
 ROUND_MAX_END_DRIFT_MS = 50.0
 
