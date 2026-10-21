@@ -2,7 +2,7 @@
 
 [Chinese README](README.md)
 
-This folder contains Pianotrans transcription entrypoints (including an Apple GPU / MPS version) plus post-processing tools: BPM fixing, first beat alignment (browser workbench with realtime S-MU2000 playback), key signatures, conservative rule-based cleanup, hand split (two or three hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. All `.command` files are double-clickable, and every tool also has a dialog-free command line for agents.
+This folder contains Pianotrans transcription entrypoints (including an Apple GPU / MPS version) plus post-processing tools: BPM fixing, first beat alignment (browser workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two or three hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. All `.command` files are double-clickable, and every tool also has a dialog-free command line for agents.
 
 4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
 
@@ -90,11 +90,11 @@ Usage:
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
 3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
-4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right, the second left as left), and the 88-key Pianometer. Playback sends the MIDI to S-MU2000 in realtime.
+4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right, the second left as left), and the 88-key Pianometer. Playback sends the MIDI to a MIDI output port in realtime.
 5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
 6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
-`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `mu2000_playback.py` opens a virtual MIDI port named `pianotrans-tools` and starts the headless S-MU2000 `live` engine on it in the background. Sound goes to the system default output; MU2000.app and an IAC bus are not needed.
+`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `midi_playback.py` sends the MIDI to a MIDI output: on macOS / Linux it opens a virtual port named `pianotrans-tools` that any synth can connect to, and on Windows it uses `Microsoft GS Wavetable Synth`. Use `--midi-port <name>` to open an existing output whose name contains that text instead. If no output can be opened, the workbench still opens without sound.
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
 
@@ -267,7 +267,7 @@ python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second
 
 ### `midi_workbench.command`
 
-Opens any MIDI in the browser workbench to set BPM and the first beat, without running the BPM fix. The interface, realtime S-MU2000 playback and saving are the same as the `bpmfix.command` workbench.
+Opens any MIDI in the browser workbench to set BPM and the first beat, without running the BPM fix. The interface, realtime MIDI output playback and saving are the same as the `bpmfix.command` workbench.
 
 Usage:
 
@@ -424,7 +424,7 @@ Shared helpers:
 ```text
 bpmfix_utils.py
 first_beat_ui.py
-mu2000_playback.py
+midi_playback.py
 web/result.js
 web/result.css
 midi_stats.py
@@ -467,15 +467,19 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 
 ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Tonal.js chord detection requires Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
+Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime workbench playback needs the S-MU2000 emulator (`app/bin/live` and `roms`), by default at `$HOME/Music/S-MU2000-mac`; `PIANOTRANS_MU2000_DIR` overrides it. The virtual MIDI port needs `python-rtmidi` (included in the install command).
+Realtime workbench playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `pianotrans-tools` virtual MIDI output port, which any synth can connect to; on Windows it uses `Microsoft GS Wavetable Synth`. If no output can be opened, the workbench still opens without sound.
 
-Vendored Tonal.js:
+Vendored JS:
 
 ```text
 vendor/tonal.min.js
+vendor/essentia-wasm.umd.js
+vendor/essentia.js-core.umd.js
 ```
+
+Tonal.js is used for chord detection; essentia.js (WebAssembly) is used for automatic BPM detection. The licenses are `vendor/TONAL_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`.
 
 Default model checkpoint path:
 
@@ -488,7 +492,39 @@ Overridable environment variables:
 ```text
 PIANOTRANS_BPM_ENV
 PIANOTRANS_BPM_PYTHON
-PIANOTRANS_MU2000_DIR
+```
+
+## Windows
+
+Every tool has a matching `.cmd` launcher in the repository root (for example `pianotrans.cmd` and `bpmfix.cmd`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
+
+```text
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe
+.venv\Scripts\python.exe
+py -3.11
+python on PATH
+```
+
+If none is found it prints a message and pauses. Every Python CLI also works directly from PowerShell, for example `python bpmfix.py song.mid --bpm 135`.
+
+Create the shared Python 3.11 environment:
+
+```bat
+py -3.11 -m venv %USERPROFILE%\.local\share\pianotrans-tools-env
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
+```
+
+For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index from PyTorch (for example `--index-url https://download.pytorch.org/whl/cu126`). Essentia has no Windows wheels, so it is not installed; automatic BPM detection uses the vendored essentia.js (WebAssembly) instead and requires Node.js. Because audio decoding and resampling differ, results may differ slightly from the Python Essentia build.
+
+`ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
+
+Realtime workbench playback goes to the `Microsoft GS Wavetable Synth` MIDI output through mido / python-rtmidi; no virtual MIDI port is opened. Use `--midi-port <name>` to open another existing output instead. If no output can be opened, the workbench still opens without sound. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANOTRANS_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+
+Not available on Windows:
+
+```text
+pianotrans_mps.command / pianotrans_mps.py (Apple MPS)
 ```
 
 ## Notes

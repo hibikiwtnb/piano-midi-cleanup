@@ -7,12 +7,13 @@ from pathlib import Path
 
 import mido
 
+from node_utils import node_executable
+
 
 DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'pianotrans-tools-env'
-BPM_PYTHON = os.environ.get(
-    'PIANOTRANS_BPM_PYTHON',
-    str(Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser() / 'bin' / 'python3'),
-)
+BPM_ENV = Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser()
+DEFAULT_BPM_PYTHON = BPM_ENV / 'Scripts' / 'python.exe' if os.name == 'nt' else BPM_ENV / 'bin' / 'python'
+BPM_PYTHON = os.environ.get('PIANOTRANS_BPM_PYTHON', str(DEFAULT_BPM_PYTHON))
 DEFAULT_MIDI_TEMPO = 500000
 ROUND_MAX_END_DRIFT_MS = 50.0
 
@@ -36,6 +37,8 @@ def bpmfix_report_path_for(midi_path):
 
 
 def detect_bpm(audio_path):
+    if os.name == 'nt':
+        return detect_bpm_essentia_js(audio_path)
     if not os.path.exists(BPM_PYTHON):
         raise RuntimeError('BPM environment not found: {}'.format(BPM_PYTHON))
 
@@ -71,8 +74,44 @@ print(json.dumps({
         check=True,
         capture_output=True,
         text=True,
+        encoding='utf-8',
     )
     bpm_info = json.loads(result.stdout)
+    bpm_info.update(choose_applied_bpm(bpm_info['phase_bpm'], bpm_info['duration']))
+    return bpm_info
+
+
+def detect_bpm_essentia_js(audio_path):
+    import librosa
+    import numpy as np
+
+    sample_rate = 44100
+    audio, _ = librosa.load(audio_path, sr=sample_rate, mono=True)
+    script_path = Path(__file__).with_name('detect_beats_essentia.js')
+    result = subprocess.run(
+        [node_executable('Essentia BPM detection'), str(script_path)],
+        input=np.asarray(audio, dtype='<f4').tobytes(),
+        capture_output=True,
+        check=True,
+    )
+    detected = json.loads(result.stdout.decode('utf-8'))
+    beats = np.asarray(detected['beats'])
+    bpm = float(detected['bpm'])
+
+    # Phase coherence at half-beat resolution tolerates off-beat jumps in the beat track.
+    candidates = np.arange(bpm - 1.0, bpm + 1.0, 0.0005)
+    phases = np.exp(4j * np.pi * np.outer(candidates / 60.0, beats))
+    coherence = np.abs(phases.mean(axis=1))
+    best = int(coherence.argmax())
+
+    bpm_info = {
+        'raw_bpm': bpm,
+        'phase_bpm': float(candidates[best]),
+        'phase_coherence': float(coherence[best]),
+        'confidence': float(detected['confidence']),
+        'beats': len(beats),
+        'duration': len(audio) / sample_rate,
+    }
     bpm_info.update(choose_applied_bpm(bpm_info['phase_bpm'], bpm_info['duration']))
     return bpm_info
 

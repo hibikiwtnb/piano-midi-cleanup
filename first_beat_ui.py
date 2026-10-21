@@ -1,7 +1,7 @@
 """Local workbench for setting BPM and the first beat of a BPM-fixed MIDI.
 
 The page is the vsti-webui-wes7-pcm MIDI workbench (web/result.js, web/result.css);
-playback goes to the S-MU2000 emulator in realtime through mu2000_playback.
+playback goes to a MIDI output port in realtime through midi_playback.
 Saving rewrites the MIDI in place.
 """
 
@@ -17,7 +17,7 @@ import mido
 
 from bpmfix_utils import estimate_first_beat, format_auto_first_beat_stats
 from midi_stats import source_stats_path_for
-from mu2000_playback import MidiPlayback, Mu2000Live, read_midi_events
+from midi_playback import MidiPlayback, open_output, read_midi_events
 
 
 ROOT = Path(__file__).resolve().parent
@@ -84,7 +84,7 @@ def read_roll_notes(midi_path):
     return notes, tracks, duration
 
 
-def build_manifest(midi_path, midi_url):
+def build_manifest(midi_path, midi_url, backend_label):
     notes, tracks, duration = read_roll_notes(midi_path)
     instruments = [
         {
@@ -100,7 +100,7 @@ def build_manifest(midi_path, midi_url):
         'notes': notes,
         'duration': duration,
         'bpm': mido.tempo2bpm(midi_tempo(mido.MidiFile(midi_path))),
-        'backendLabel': 'S-MU2000',
+        'backendLabel': backend_label,
         'sourceTrackName': '',
         'instruments': instruments,
         'downloads': {'midi': midi_url},
@@ -109,8 +109,9 @@ def build_manifest(midi_path, midi_url):
     }
 
 
-def build_page(midi_path, midi_url):
-    manifest = html.escape(json.dumps(build_manifest(midi_path, midi_url), ensure_ascii=False), quote=False)
+def build_page(midi_path, midi_url, backend_label):
+    manifest = html.escape(
+        json.dumps(build_manifest(midi_path, midi_url, backend_label), ensure_ascii=False), quote=False)
     return '\n'.join([
         '<!doctype html>',
         '<html lang="zh-Hant">',
@@ -340,13 +341,11 @@ def make_handler(midi_path, page, playback, finish):
     return Handler
 
 
-def run_first_beat_ui(midi_path, open_browser=True, port=0):
+def run_first_beat_ui(midi_path, open_browser=True, port=0, midi_port=None):
     """Serve the workbench until the user saves or cancels; return the save result or None."""
     midi_path = str(midi_path)
-    print('Starting S-MU2000 for realtime playback...')
-    live = Mu2000Live()
-    live.start()
-    playback = MidiPlayback(live.output)
+    output, backend_label = open_output(midi_port)
+    playback = MidiPlayback(output)
     outcome = {}
     server = ThreadingHTTPServer(('127.0.0.1', port), None)
 
@@ -355,7 +354,8 @@ def run_first_beat_ui(midi_path, open_browser=True, port=0):
         threading.Thread(target=server.shutdown).start()
 
     midi_url = '/midi?{}'.format(Path(midi_path).stat().st_mtime_ns)
-    server.RequestHandlerClass = make_handler(midi_path, build_page(midi_path, midi_url), playback, finish)
+    server.RequestHandlerClass = make_handler(
+        midi_path, build_page(midi_path, midi_url, backend_label), playback, finish)
     url = 'http://127.0.0.1:{}/'.format(server.server_address[1])
     print('First beat page: {}'.format(url))
     print('Set BPM and the first beat in the browser, then press 寫入 MIDI or 取消 there.')
@@ -366,5 +366,6 @@ def run_first_beat_ui(midi_path, open_browser=True, port=0):
     finally:
         server.server_close()
         playback.stop()
-        live.close()
+        if output:
+            output.close()
     return outcome.get('result')

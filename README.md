@@ -1,7 +1,7 @@
 # Pianotrans Run Tools
 [English README](README_EN.md)
 
-這個目錄包含 Pianotrans 轉錄入口（含 Apple GPU / MPS 版），以及轉錄結果的後處理工具：BPM 修正、第一拍對齊（瀏覽器工作台加 S-MU2000 即時播放）、調號、保守規則清理、分手（兩隻手或三隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。所有 `.command` 檔都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
+這個目錄包含 Pianotrans 轉錄入口（含 Apple GPU / MPS 版），以及轉錄結果的後處理工具：BPM 修正、第一拍對齊（瀏覽器工作台即時播放）、調號、保守規則清理、分手（兩隻手或三隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。所有 `.command` 檔都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
 
 固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
 
@@ -89,11 +89,11 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
 2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
 3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
-4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音（第二右手併入右手、第二左手併入左手）、88 鍵 Pianometer。播放時 MIDI 即時送到 S-MU2000 發聲。
+4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音（第二右手併入右手、第二左手併入左手）、88 鍵 Pianometer。播放時 MIDI 即時送到 MIDI 輸出埠發聲。
 5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
 6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
 
-工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `mu2000_playback.py` 建立名為 `pianotrans-tools` 的虛擬 MIDI 埠，並在背景啟動 S-MU2000 的 `live`（無視窗）接收它，聲音從系統預設輸出播出，不需要先開 MU2000.app 或設定 IAC。
+工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `pianotrans-tools` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`。也可以用 `--midi-port <名稱>` 改用名稱包含該文字的既有輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
 
@@ -266,7 +266,7 @@ python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second
 
 ### `midi_workbench.command`
 
-不經過 BPM 修正，直接用瀏覽器 MIDI 工作台打開任一 MIDI，調整 BPM 和第一拍（介面、S-MU2000 即時播放與寫入方式同 `bpmfix.command` 的工作台）。
+不經過 BPM 修正，直接用瀏覽器 MIDI 工作台打開任一 MIDI，調整 BPM 和第一拍（介面、MIDI 輸出埠即時播放與寫入方式同 `bpmfix.command` 的工作台）。
 
 使用方式：
 
@@ -423,7 +423,7 @@ pianoroll_snapshot.py
 ```text
 bpmfix_utils.py
 first_beat_ui.py
-mu2000_playback.py
+midi_playback.py
 web/result.js
 web/result.css
 midi_stats.py
@@ -466,15 +466,19 @@ python3.11 -m venv ~/.local/share/pianotrans-tools-env
 
 ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
-Tonal.js chord detection requires Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
+Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-工作台的即時播放需要 S-MU2000 模擬器（含 `app/bin/live` 和 `roms`），預設位置 `$HOME/Music/S-MU2000-mac`，可用 `PIANOTRANS_MU2000_DIR` 覆蓋。虛擬 MIDI 埠需要 `python-rtmidi`（已列在安裝指令中）。
+工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `pianotrans-tools` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 使用 `Microsoft GS Wavetable Synth`。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
-Vendored Tonal.js:
+Vendored JS:
 
 ```text
 vendor/tonal.min.js
+vendor/essentia-wasm.umd.js
+vendor/essentia.js-core.umd.js
 ```
+
+Tonal.js 用於和弦偵測；essentia.js（WebAssembly）用於自動 BPM 偵測。授權檔分別是 `vendor/TONAL_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。
 
 模型權重預設位置：
 
@@ -487,7 +491,39 @@ $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 ```text
 PIANOTRANS_BPM_ENV
 PIANOTRANS_BPM_PYTHON
-PIANOTRANS_MU2000_DIR
+```
+
+## Windows
+
+每個工具在倉庫根目錄都有同名的 `.cmd` 啟動檔（例如 `pianotrans.cmd`、`bpmfix.cmd`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
+
+```text
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe
+.venv\Scripts\python.exe
+py -3.11
+PATH 上的 python
+```
+
+找不到 Python 時會顯示訊息並暫停。所有 Python CLI 都可以直接用 PowerShell 執行，例如 `python bpmfix.py song.mid --bpm 135`。
+
+建立共用的 Python 3.11 環境：
+
+```bat
+py -3.11 -m venv %USERPROFILE%\.local\share\pianotrans-tools-env
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+%USERPROFILE%\.local\share\pianotrans-tools-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
+```
+
+需要 NVIDIA GPU 時，把第一行 pip 換成 PyTorch 官網目前的 CUDA wheel index（例如 `--index-url https://download.pytorch.org/whl/cu126`）。Essentia 沒有 Windows wheel，因此不安裝；自動 BPM 偵測改用倉庫內建的 essentia.js（WebAssembly），需要 Node.js。因為音訊解碼與重取樣方式不同，結果可能與 Python Essentia 版本略有差異。
+
+`ffmpeg` 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
+
+工作台的即時播放會送到 `Microsoft GS Wavetable Synth` 這個 MIDI 輸出（透過 mido / python-rtmidi），不建立虛擬 MIDI 埠；可用 `--midi-port <名稱>` 改用其他既有輸出。找不到輸出時工作台仍會開啟，但沒有聲音。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANOTRANS_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
+
+Windows 上不支援：
+
+```text
+pianotrans_mps.command / pianotrans_mps.py（Apple MPS）
 ```
 
 ## Notes

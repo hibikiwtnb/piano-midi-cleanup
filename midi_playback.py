@@ -1,23 +1,55 @@
-"""Realtime MIDI playback on the S-MU2000 emulator through a virtual CoreMIDI port.
+"""Realtime MIDI playback.
+
+On macOS and Linux a virtual output port named pianotrans-tools is created; any
+synth can listen to it. On Windows the events go to Microsoft GS Wavetable Synth,
+because python-rtmidi cannot create virtual ports there.
 
 MidiPlayback is ported from vsti-webui-wes7-pcm app/playback/service.py; the UDP
-output is replaced by a virtual port that the S-MU2000 `live` engine listens to.
+output is replaced by the MIDI output below.
 """
 
 import os
-import subprocess
-import time
 from dataclasses import dataclass
-from pathlib import Path
 from threading import Event, Lock, Thread, current_thread
 
 import mido
 
 
-MU2000_DIR = Path(os.environ.get('PIANOTRANS_MU2000_DIR', Path.home() / 'Music' / 'S-MU2000-mac')).expanduser()
 VIRTUAL_PORT_NAME = 'pianotrans-tools'
-LIVE_BOOT_SECONDS = 4.0
+WINDOWS_OUTPUT_NAME = 'Microsoft GS Wavetable Synth'
 LEFT_HAND_CHANNELS = (2, 3)
+
+
+def open_output(port_name=None):
+    """Open the MIDI output to play on; return (output or None, label)."""
+    if port_name is None and os.name != 'nt':
+        try:
+            output = mido.open_output(VIRTUAL_PORT_NAME, virtual=True)
+        except Exception as error:
+            print('Cannot open virtual MIDI port {} ({}); the workbench opens without sound.'.format(
+                VIRTUAL_PORT_NAME, error))
+            return None, VIRTUAL_PORT_NAME
+        print('Playback output: {}'.format(VIRTUAL_PORT_NAME))
+        return output, VIRTUAL_PORT_NAME
+
+    wanted = port_name or WINDOWS_OUTPUT_NAME
+    try:
+        names = mido.get_output_names()
+    except Exception as error:
+        print('Cannot list MIDI outputs ({}); the workbench opens without sound.'.format(error))
+        return None, wanted
+    for name in names:
+        if wanted in name:
+            try:
+                output = mido.open_output(name)
+            except Exception as error:
+                print('Cannot open {} ({}); the workbench opens without sound.'.format(name, error))
+                return None, wanted
+            print('Playback output: {}'.format(name))
+            return output, name
+    print('{} not found; the workbench opens without sound.'.format(wanted))
+    print('Available MIDI outputs: {}'.format(', '.join(names) if names else '(none)'))
+    return None, wanted
 
 
 @dataclass(frozen=True)
@@ -66,62 +98,6 @@ def read_midi_events(path):
         if event.message.type == 'note_on' and event.message.velocity > 0
     ))
     return events, tracks, current_seconds
-
-
-class Mu2000Live:
-    """Owns the virtual MIDI output and a headless S-MU2000 `live` process listening to it."""
-
-    def __init__(self, mu2000_dir=MU2000_DIR):
-        self.mu2000_dir = Path(mu2000_dir)
-        self.output = None
-        self.process = None
-
-    def start(self):
-        live = self.mu2000_dir / 'app' / 'bin' / 'live'
-        roms = self.mu2000_dir / 'roms'
-        if not live.exists():
-            raise RuntimeError('S-MU2000 live engine not found: {}'.format(live))
-
-        self.output = mido.open_output(VIRTUAL_PORT_NAME, virtual=True)
-        listing = subprocess.run(
-            [str(live), str(roms), '--list'],
-            capture_output=True, text=True, timeout=30,
-        ).stdout
-        index = self._input_index(listing)
-        if index is None:
-            raise RuntimeError('S-MU2000 does not see the {} MIDI port.'.format(VIRTUAL_PORT_NAME))
-
-        self.process = subprocess.Popen(
-            [str(live), str(roms), '--midi', str(index), '--fast-midi'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        time.sleep(LIVE_BOOT_SECONDS)
-        if self.process.poll() is not None:
-            raise RuntimeError('S-MU2000 live engine exited during boot.')
-
-    @staticmethod
-    def _input_index(listing):
-        in_inputs = False
-        for line in listing.splitlines():
-            if line.startswith('MIDI inputs'):
-                in_inputs = True
-                continue
-            if in_inputs and not line.startswith(' '):
-                break
-            number, _, name = line.strip().partition(': ')
-            if in_inputs and name.strip() == VIRTUAL_PORT_NAME:
-                return int(number)
-        return None
-
-    def close(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-        if self.output:
-            self.output.close()
 
 
 class MidiPlayback:
@@ -207,6 +183,8 @@ class MidiPlayback:
         self._send_message(message)
 
     def _send_message(self, message):
+        if self._output is None:
+            return
         with self._output_lock:
             self._output.send(message)
 

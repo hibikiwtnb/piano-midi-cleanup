@@ -71,10 +71,12 @@
     this.clockOrigin = 0;
     this.playbackGeneration = 0;
     this.mixPromise = Promise.resolve();
-    // S-MU2000 plays the MIDI directly; the delay only covers its audio buffer.
+    // The synth plays the MIDI directly; the delay only covers its audio buffer.
     this.visualDelay = 0.05;
     try {
-      var savedVisualDelay = localStorage.getItem("mu2000VisualDelaySeconds");
+      var savedVisualDelay = localStorage.getItem(
+        "midiWorkbenchVisualDelaySeconds",
+      );
       if (savedVisualDelay !== null)
         this.visualDelay = clamp(parseFloat(savedVisualDelay) || 0, 0, 30);
     } catch (e) {}
@@ -217,7 +219,7 @@
       self.visualDelay = clamp(value, 0, 30);
       try {
         localStorage.setItem(
-          "mu2000VisualDelaySeconds",
+          "midiWorkbenchVisualDelaySeconds",
           String(self.visualDelay),
         );
       } catch (e) {}
@@ -359,7 +361,7 @@
     } catch (e) {}
   };
   ResultSession.prototype.synthLabel = function () {
-    return "S-MU2000";
+    return this.m.backendLabel || "MIDI output";
   };
   ResultSession.prototype.start = function () {
     var self = this,

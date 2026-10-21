@@ -60,6 +60,7 @@ def parse_args(argv):
     source.add_argument('--audio', help='Source audio for Essentia BPM detection.')
     parser.add_argument('--no-auto-first-beat', action='store_true', help='Skip the automatic first beat alignment.')
     parser.add_argument('--workbench', action='store_true', help='Open the browser workbench after fixing.')
+    parser.add_argument('--midi-port', help='Name of the MIDI output port to play on instead of the default.')
     parser.add_argument('--no-key-signature', action='store_true', help='Skip key signature detection.')
     return parser.parse_args(argv)
 
@@ -80,7 +81,8 @@ def run_non_interactive(args):
     if not args.no_auto_first_beat:
         auto_align_first_beat(output_path, report_path=report_path)
     if args.workbench:
-        append_first_beat_stats(output_path, run_first_beat_ui(output_path), report_path=report_path)
+        append_first_beat_stats(
+            output_path, run_first_beat_ui(output_path, midi_port=args.midi_port), report_path=report_path)
     if not args.no_key_signature:
         apply_key_signatures(output_path, report_path=report_path)
     print('Output: {}'.format(output_path))
@@ -120,7 +122,7 @@ def main(argv=None):
         report_path = bpmfix_report_path_for(midi_path)
         output_path, bpm_info = apply_bpm_fix(audio_path, midi_path, target_bpm=target_bpm)
         auto_align_first_beat(output_path, report_path=report_path)
-        first_beat = run_first_beat_ui(output_path)
+        first_beat = run_first_beat_ui(output_path, midi_port=args.midi_port)
         append_first_beat_stats(output_path, first_beat, report_path=report_path)
         apply_key_signatures(output_path, report_path=report_path)
     except Exception as error:

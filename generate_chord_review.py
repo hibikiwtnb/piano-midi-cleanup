@@ -2,7 +2,6 @@ import argparse
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
 import tkinter as tk
@@ -12,6 +11,8 @@ from tkinter import filedialog, messagebox
 
 import mido
 
+from node_utils import node_executable
+
 
 DEFAULT_TEMPO = 500000
 DEFAULT_TIME_SIGNATURE = (4, 4)
@@ -19,12 +20,6 @@ RIGHT_HAND_CHANNEL = 0
 LEFT_HAND_CHANNEL = 2
 CHORD_CANDIDATE_COUNT = 3
 CHORD_GROUP_WINDOW_SECONDS = 0.05
-NODE_CANDIDATES = (
-    'node',
-    '/opt/homebrew/bin/node',
-    '/usr/local/bin/node',
-    '/Applications/Codex.app/Contents/Resources/node',
-)
 
 NOTE_NAMES_SHARP = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 
@@ -301,26 +296,11 @@ def detect_chords(note_groups):
         [node_executable(), str(script_path)],
         input=json.dumps(payload),
         text=True,
+        encoding='utf-8',
         capture_output=True,
         check=True,
     )
     return json.loads(completed.stdout)
-
-
-def node_executable():
-    configured = os.environ.get('PIANOTRANS_NODE')
-    if configured:
-        return configured
-
-    for candidate in NODE_CANDIDATES:
-        resolved = shutil.which(candidate) if os.path.basename(candidate) == candidate else candidate
-        if resolved and os.path.exists(resolved) and os.access(resolved, os.X_OK):
-            return resolved
-
-    raise RuntimeError(
-        'Node.js is required for Tonal.js chord detection. '
-        'Install Node.js or set PIANOTRANS_NODE.'
-    )
 
 
 def format_chord(candidates):

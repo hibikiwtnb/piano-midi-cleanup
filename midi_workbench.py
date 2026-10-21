@@ -27,6 +27,7 @@ def parse_args(argv):
     parser.add_argument('input_midi', nargs='?', help='MIDI to modify in place.')
     parser.add_argument('--auto-first-beat', action='store_true', help='Align the first beat from the MIDI first.')
     parser.add_argument('--no-workbench', action='store_true', help='Do not open the browser workbench.')
+    parser.add_argument('--midi-port', help='Name of the MIDI output port to play on instead of the default.')
     parser.add_argument('--no-key-signature', action='store_true',
                         help='Do not rewrite key signatures after the first beat moves.')
     return parser.parse_args(argv)
@@ -42,7 +43,7 @@ def main(argv=None):
         if args.auto_first_beat:
             moved = auto_align_first_beat(args.input_midi) is not None
         if not args.no_workbench:
-            result = run_first_beat_ui(args.input_midi)
+            result = run_first_beat_ui(args.input_midi, midi_port=args.midi_port)
             append_first_beat_stats(args.input_midi, result)
             moved = moved or result is not None
         if moved and not args.no_key_signature:
@@ -64,7 +65,7 @@ def main(argv=None):
         return 1
 
     try:
-        result = run_first_beat_ui(midi_path)
+        result = run_first_beat_ui(midi_path, midi_port=args.midi_port)
         report = append_first_beat_stats(midi_path, result)
         if result is not None:
             apply_key_signatures(midi_path)
