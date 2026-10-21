@@ -311,6 +311,21 @@ NoteCount
 
 Each bar has 4 fixed rows. If multiple onset events appear inside the same beat, `Beat` and `Chord` are separated with `;`. Chord detection uses vendored Tonal.js and follows pianometer's `Tonal.Chord.detect(notes, { assumePerfectFifth: true })`; each event keeps up to the first 3 candidates. Undetected chords are written as `-`.
 
+### `note_text_review.py`
+
+Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` / `L`, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
+
+```bash
+python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
+python note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
+```
+
+Example output:
+
+```text
+m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
+```
+
 ## Python Entrypoints
 
 Python scripts used by the `.command` launchers:
@@ -326,6 +341,7 @@ midi_workbench.py
 key_signature.py
 generate_midi_review.py
 generate_chord_review.py
+note_text_review.py
 ```
 
 Shared helpers:

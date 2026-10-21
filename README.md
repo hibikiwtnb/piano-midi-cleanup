@@ -310,6 +310,21 @@ NoteCount
 
 每小節固定 4 行；如果同一拍內有多個起音事件，`Beat` 和 `Chord` 會用 `;` 分隔。和弦推定使用 vendored Tonal.js，邏輯對齊 pianometer 的 `Tonal.Chord.detect(notes, { assumePerfectFifth: true })`，每個事件最多保留前 3 個候補；無法推定時寫 `-`。
 
+### `note_text_review.py`
+
+只讀取已對齊小節的 MIDI，把音符印成文字，每個起音群組一行：小節、拍位，再由低到高列出每個音的手（`R` / `L`，未分手為 `?`）、音名和長度（拍）。它不修改 MIDI，也不屬於預設流程，用於檢查分手、調號等問題時手動執行。固定假設 4/4。
+
+```bash
+python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
+python note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
+```
+
+輸出範例：
+
+```text
+m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
+```
+
 ## Python Entrypoints
 
 這些 `.command` 背後呼叫的 Python 腳本：
@@ -325,6 +340,7 @@ midi_workbench.py
 key_signature.py
 generate_midi_review.py
 generate_chord_review.py
+note_text_review.py
 ```
 
 共用 helper：

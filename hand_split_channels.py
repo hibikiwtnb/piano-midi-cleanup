@@ -116,6 +116,7 @@ def collect_notes(midi_file):
                         'start_index': start['start_index'],
                         'end_index': message_index,
                         'start_ticks': start['start_ticks'],
+                        'end_ticks': absolute_ticks,
                         'start_seconds': start['start_seconds'],
                         'note': start['note'],
                         'velocity': start['velocity'],
