@@ -243,25 +243,27 @@ detect_chords_tonal.js
 
 ## Dependencies
 
-Pianotrans 自己的 Python 環境：
+所有 `.command` 和 BPM 偵測共用同一個使用者層級 Python 環境（需要 tkinter，Homebrew 用 `python@3.11` 加 `python-tk@3.11`）：
 
 ```text
-./.venv
+$HOME/.local/share/pianotrans-tools-env
 ```
 
-Essentia BPM 偵測專用環境：
+`.command` 找不到這個環境時，才依序嘗試 `./.venv` 和系統 Python。
 
-```text
-$HOME/.local/share/pianotrans-bpm-env
+建立環境（Intel Mac 版本鎖定：PyTorch 最後的 macOS x86_64 版本是 2.2.2，需搭配 `numpy<2`；numba / llvmlite 新版沒有 x86_64 wheel）：
+
+```bash
+python3.11 -m venv ~/.local/share/pianotrans-tools-env
 ```
 
-全域 ffmpeg：
-
-```text
-$HOME/.local/bin/ffmpeg
+```bash
+~/.local/share/pianotrans-tools-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference
 ```
 
-Tonal.js chord detection requires Node.js. The launcher searches common Node locations and the bundled Codex Node runtime; `PIANOTRANS_NODE` can override it.
+ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
+
+Tonal.js chord detection requires Node.js. The launcher searches `PATH` and common Node locations; `PIANOTRANS_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
 Vendored Tonal.js:
 

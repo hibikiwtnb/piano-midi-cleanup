@@ -3,13 +3,14 @@ import sys
 import tkinter as tk
 from tkinter import filedialog
 
+import librosa
 import torch
 
 from bpmfix_utils import apply_bpm_fix, bpmfix_path_for
 from clean_midi_rules import apply_rule_cleaning, cleaned_path_for
 from hand_split_channels import apply_hand_split
 from midi_stats import stats_path_for, write_midi_stats
-from piano_transcription_inference import PianoTranscription, load_audio, sample_rate
+from piano_transcription_inference import PianoTranscription, sample_rate
 
 
 AUDIO_EXTENSIONS = {'.flac', '.mp3', '.wav', '.ape', '.m4a', '.aif', '.aiff'}
@@ -71,7 +72,7 @@ def transcribe_file(audio_path, transcriptor):
         return False
 
     print('Loading {}'.format(audio_path))
-    audio, _ = load_audio(audio_path, sr=sample_rate, mono=True)
+    audio, _ = librosa.load(audio_path, sr=sample_rate, mono=True)
     print('Writing {}'.format(midi_path))
     transcriptor.transcribe(audio, midi_path)
     write_midi_stats(midi_path)

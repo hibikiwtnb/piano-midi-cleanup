@@ -6,7 +6,7 @@ from pathlib import Path
 import mido
 
 
-DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'pianotrans-bpm-env'
+DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'pianotrans-tools-env'
 BPM_PYTHON = os.environ.get(
     'PIANOTRANS_BPM_PYTHON',
     str(Path(os.environ.get('PIANOTRANS_BPM_ENV', DEFAULT_BPM_ENV)).expanduser() / 'bin' / 'python3'),
