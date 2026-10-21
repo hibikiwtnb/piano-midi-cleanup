@@ -221,6 +221,7 @@ Run after the hand split: shortens notes that the sustain pedal left overlapping
 
 ```text
 Fast figure (right hand only): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next right-hand onset group
+Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, sounding notes of the hand whose pitch class is not among them end there (like a pedal change)
 Chord change: when a hand plays a new chord or octave (2 or more notes), notes of its previous chord still sounding end there
 Out of reach: when the sounding notes plus the new ones exceed 5 notes or span more than 14 semitones, the sounding notes end there
 ```

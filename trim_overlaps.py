@@ -15,6 +15,8 @@ from midi_stats import source_stats_path_for
 # Right-hand fast figure: at least FAST_FIGURE_MIN_ONSETS onset groups, each within FAST_FIGURE_BEATS of the previous.
 FAST_FIGURE_BEATS = 0.5
 FAST_FIGURE_MIN_ONSETS = 3
+# An onset whose notes over all hands have at least this many pitch classes is a harmony change.
+HARMONY_MIN_PITCH_CLASSES = 3
 HAND_NAMES = {channel: hand.replace('_', ' ') for hand, channel in CHANNELS.items()}
 
 
@@ -49,12 +51,27 @@ def trim_fast_figures(groups, ticks_per_beat, counts):
                 release(note, onsets[index + 1], 'fast_figure', counts)
 
 
+def mark_harmonies(notes):
+    """Give each note the pitch classes of its onset over all hands when they form a harmony, else None."""
+    for group in group_notes(notes):
+        pitch_classes = {note['note'] % 12 for note in group}
+        for note in group:
+            note['harmony'] = pitch_classes if len(pitch_classes) >= HARMONY_MIN_PITCH_CLASSES else None
+
+
 def trim_chord_changes(groups, counts):
-    """A hand releases held notes when it moves to a new chord, or when it could not hold them with the new notes."""
+    """A hand releases held notes when it moves to a new chord, when the harmony changes under them,
+    or when it could not hold them with the new notes."""
     sounding = []
     for group in groups:
         onset = group[0]['start_ticks']
         sounding = [note for note in sounding if note['new_end'] > onset]
+        harmony = group[0]['harmony']
+        if harmony:
+            for note in sounding:
+                if note['note'] % 12 not in harmony:
+                    release(note, onset, 'harmony_change', counts)
+            sounding = [note for note in sounding if note['new_end'] > onset]
         if len(group) > 1:
             for note in sounding:
                 if note['chord']:
@@ -109,6 +126,7 @@ def trim_overlaps_in_place(midi_path):
     notes = collect_notes(midi_file)
     for note in notes:
         note['new_end'] = note['end_ticks']
+    mark_harmonies(notes)
     groups_by_channel = hand_groups(notes)
 
     peaks_before = {channel: max_sounding(groups) for channel, groups in groups_by_channel.items()}
@@ -140,10 +158,11 @@ def format_trim_stats(stats):
     ]
     for channel in sorted(stats['notes']):
         counts = stats['counts'][channel]
-        lines.append('- Channel {} / {}: {} notes, fast figure {}, chord change {}, out of reach {}, '
-                     'most notes sounding {} -> {}'.format(
+        lines.append('- Channel {} / {}: {} notes, fast figure {}, harmony change {}, chord change {}, '
+                     'out of reach {}, most notes sounding {} -> {}'.format(
                          channel + 1, HAND_NAMES.get(channel, 'unsplit'), stats['notes'][channel],
-                         counts.get('fast_figure', 0), counts.get('chord_change', 0), counts.get('out_of_reach', 0),
+                         counts.get('fast_figure', 0), counts.get('harmony_change', 0),
+                         counts.get('chord_change', 0), counts.get('out_of_reach', 0),
                          stats['peaks_before'][channel], stats['peaks_after'][channel]))
     return '\n'.join(lines)
 
