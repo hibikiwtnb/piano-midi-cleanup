@@ -5,8 +5,9 @@ const os = require("os");
 const path = require("path");
 
 function loadEssentia() {
-  const wasmPath = path.join(__dirname, "vendor", "essentia-wasm.umd.js");
-  const corePath = path.join(__dirname, "vendor", "essentia.js-core.umd.js");
+  const root = path.resolve(__dirname, "..");
+  const wasmPath = path.join(root, "vendor", "essentia-wasm.umd.js");
+  const corePath = path.join(root, "vendor", "essentia.js-core.umd.js");
   const wasmModule = require(wasmPath);
   const Essentia = require(corePath);
   return new Essentia(wasmModule.EssentiaWASM || wasmModule);

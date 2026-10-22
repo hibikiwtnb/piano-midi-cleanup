@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" midi_workbench.py
+"$PYTHON_BIN" src/midi_workbench.py
 
 read -r -p "Press Return to close..."

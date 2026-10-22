@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" clean_midi_rules.py
+"$PYTHON_BIN" src/clean_midi_rules.py
 
 read -r -p "Press Return to close..."

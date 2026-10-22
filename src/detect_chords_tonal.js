@@ -5,7 +5,8 @@ const path = require("path");
 const vm = require("vm");
 
 function loadTonal() {
-  const tonalPath = path.join(__dirname, "vendor", "tonal.min.js");
+  const root = path.resolve(__dirname, "..");
+  const tonalPath = path.join(root, "vendor", "tonal.min.js");
   const code = fs.readFileSync(tonalPath, "utf8");
   const sandbox = {};
   vm.runInNewContext(code, sandbox, { filename: tonalPath });

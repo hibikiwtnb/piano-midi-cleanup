@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" trim_overlaps.py
+"$PYTHON_BIN" src/trim_overlaps.py
 
 read -r -p "Press Return to close..."

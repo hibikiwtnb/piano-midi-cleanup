@@ -31,6 +31,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" pianotrans_mps.py
+"$PYTHON_BIN" src/transcribe_mps.py
 
 read -r -p "Press Return to close..."

@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" key_signature.py
+"$PYTHON_BIN" src/key_signature.py
 
 read -r -p "Press Return to close..."

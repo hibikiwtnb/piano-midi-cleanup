@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" midi_stats_command.py
+"$PYTHON_BIN" src/midi_stats_command.py
 
 read -r -p "Press Return to close..."

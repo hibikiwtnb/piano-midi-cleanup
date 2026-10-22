@@ -20,7 +20,7 @@ from midi_stats import source_stats_path_for
 from midi_playback import MidiPlayback, open_output, read_midi_events
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 STATIC_FILES = {
     '/static/result.js': (ROOT / 'web' / 'result.js', 'text/javascript; charset=utf-8'),
     '/static/result.css': (ROOT / 'web' / 'result.css', 'text/css; charset=utf-8'),

@@ -11,9 +11,9 @@ if not defined PYTHON_EXE py -3.11 -c "pass" >nul 2>nul && set "PYTHON_CMD=py -3
 if not defined PYTHON_EXE if not defined PYTHON_CMD python -c "pass" >nul 2>nul && set "PYTHON_CMD=python"
 
 if defined PYTHON_EXE (
-  "%PYTHON_EXE%" bpmfix.py
+  "%PYTHON_EXE%" src\bpmfix.py
 ) else if defined PYTHON_CMD (
-  %PYTHON_CMD% bpmfix.py
+  %PYTHON_CMD% src\bpmfix.py
 ) else (
   echo Python 3 was not found.
   echo Install Python 3.11, or create the shared environment with:

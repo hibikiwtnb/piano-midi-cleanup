@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" generate_chord_review.py
+"$PYTHON_BIN" src/generate_chord_review.py
 
 read -r -p "Press Return to close..."

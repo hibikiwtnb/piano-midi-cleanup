@@ -3,7 +3,7 @@
 
 把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（瀏覽器工作台即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
 
-也附轉錄入口（`pianotrans.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
+也附轉錄入口（`src/transcribe.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
 
 macOS 的 `macos/*.command` 和 Windows 的 `windows/*.cmd` 都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
 
@@ -11,7 +11,7 @@ macOS 的 `macos/*.command` 和 Windows 的 `windows/*.cmd` 都可以直接雙�
 
 ## Main Pipeline
 
-### `pianotrans.command`
+### `transcribe.command`
 
 完整轉錄流程入口。雙擊後直接選擇一個或多個音訊檔；MIDI 會寫在各音訊檔旁邊。
 
@@ -65,22 +65,22 @@ song_bpmfix_cleaned.mid
 非交互執行（agent 用）：
 
 ```bash
-python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
-python key_signature.py song_bpmfix_cleaned.mid
-python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-python trim_overlaps.py song_bpmfix_cleaned.mid
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/key_signature.py song_bpmfix_cleaned.mid
+python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python src/trim_overlaps.py song_bpmfix_cleaned.mid
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 ```
 
-### `pianotrans_mps.command`
+### `transcribe_mps.command`
 
-保留的 Apple GPU / MPS 支持版入口，流程與 `pianotrans.command` 相同，但設備選擇順序為：
+保留的 Apple GPU / MPS 支持版入口，流程與 `transcribe.command` 相同，但設備選擇順序為：
 
 ```text
 MPS -> CUDA -> CPU
 ```
 
-目前在 M2 MacBook Air 實測中，這個模型使用 MPS 反而比 CPU 慢，因此日常使用主入口 `pianotrans.command`。
+目前在 M2 MacBook Air 實測中，這個模型使用 MPS 反而比 CPU 慢，因此日常使用主入口 `transcribe.command`。
 
 ## Standalone Tools
 
@@ -101,7 +101,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
 
-`pianotrans.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號、不開工作台。
+`transcribe.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號、不開工作台。
 
 自動對齊第一拍只看 BPM 修正後的 MIDI（不需要原音訊），假設固定 4/4：
 
@@ -117,11 +117,11 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 agent 或腳本可非交互執行（有 `input_midi` 時不開任何對話框，預設也不開工作台）：
 
 ```bash
-python bpmfix.py song.mid --audio song.flac
+python src/bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
+python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
 ```
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
@@ -174,7 +174,7 @@ Max polyphony
 2. 輸出 `*_cleaned.mid`。
 3. 輸出 `*_clean_report.txt`。
 
-注意：獨立執行 `clean_midi_rules.command` 時會輸出 `*_clean_report.txt`；`pianotrans.command` pipeline 中，清理報告會追加寫入原本的 `song_stats.txt`。
+注意：獨立執行 `clean_midi_rules.command` 時會輸出 `*_clean_report.txt`；`transcribe.command` pipeline 中，清理報告會追加寫入原本的 `song_stats.txt`。
 
 清理規則只刪除高度疑似 artifact 的 note，不做音樂語義判斷、不分手、不量化、不判斷和弦/調性/旋律。
 
@@ -242,8 +242,8 @@ MIDI channel 4 = second left hand（只在 --hands 4）
 非交互執行：
 
 ```bash
-python hand_split_channels.py song_bpmfix_cleaned.mid
-python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python src/hand_split_channels.py song_bpmfix_cleaned.mid
+python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
 ### `trim_overlaps.command`
@@ -262,8 +262,8 @@ python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 非交互執行：
 
 ```bash
-python trim_overlaps.py song_bpmfix_cleaned.mid
-python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
+python src/trim_overlaps.py song_bpmfix_cleaned.mid
+python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
 ```
 
 `--fast-figure-hands` 指定套用快速音型的手。左手預設不套，因為它也會截斷分解和弦下按著的低音。
@@ -282,7 +282,7 @@ python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second
 非交互執行（agent 用）：只自動對齊、不開工作台並直接覆寫：
 
 ```bash
-python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
 ```
 
 ### `key_signature.command`
@@ -304,7 +304,7 @@ python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbenc
 非交互執行：
 
 ```bash
-python key_signature.py song_bpmfix_cleaned.mid
+python src/key_signature.py song_bpmfix_cleaned.mid
 ```
 
 ### `generate_chord_review.command`
@@ -316,7 +316,7 @@ python key_signature.py song_bpmfix_cleaned.mid
 命令：
 
 ```bash
-python generate_chord_review.py input.mid
+python src/generate_chord_review.py input.mid
 ```
 
 預設輸出：
@@ -345,8 +345,8 @@ NoteCount
 只讀取已對齊小節的 MIDI，把音符印成文字，每個起音群組一行：小節、拍位，再由低到高列出每個音的手（`R` 右手、`R2` 第二右手、`L2` 第二左手、`L` 左手，未分手為 `?`）、音名和長度（拍）。它不修改 MIDI，也不屬於預設流程，用於檢查分手、調號等問題時手動執行。固定假設 4/4。
 
 ```bash
-python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
-python note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
+python src/note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
+python src/note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
 ```
 
 輸出範例：
@@ -367,8 +367,8 @@ portrait：一行一小節、排 4 行，1080 寬，適合手機查看
 預設兩種都輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。
 
 ```bash
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
 ```
 
 ## Python Entrypoints
@@ -376,8 +376,8 @@ python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portr
 這些 `.command` 背後呼叫的 Python 腳本：
 
 ```text
-pianotrans.py
-pianotrans_mps.py
+src/transcribe.py
+src/transcribe_mps.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
@@ -474,7 +474,7 @@ PIANO_MIDI_CLEANUP_BPM_PYTHON
 
 ## Windows
 
-每個工具在倉庫的 `windows/` 目錄都有同名的 `.cmd` 啟動檔（例如 `windows/pianotrans.cmd`、`windows/bpmfix.cmd`），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/pianotrans.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
+每個工具在倉庫的 `windows/` 目錄都有同名的 `.cmd` 啟動檔（例如 `windows/transcribe.cmd`、`windows/bpmfix.cmd`），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/transcribe.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
 
 ```text
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
@@ -483,7 +483,7 @@ py -3.11
 PATH 上的 python
 ```
 
-找不到 Python 時會顯示訊息並暫停。所有 Python CLI 都可以直接用 PowerShell 執行，例如 `python bpmfix.py song.mid --bpm 135`。
+找不到 Python 時會顯示訊息並暫停。所有 Python CLI 都可以直接用 PowerShell 執行，例如 `python src/bpmfix.py song.mid --bpm 135`。
 
 建立共用的 Python 3.11 環境：
 
@@ -502,13 +502,13 @@ py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
 Windows 上不支援：
 
 ```text
-pianotrans_mps.command / pianotrans_mps.py（Apple MPS）
+transcribe_mps.command / src/transcribe_mps.py（Apple MPS）
 ```
 
 ## Notes
 
-- `pianotrans.py` 會依序嘗試 CUDA、CPU。
-- `pianotrans_mps.py` 會依序嘗試 MPS、CUDA、CPU；在 Apple Silicon 且 PyTorch MPS 可用時會使用 Apple GPU。
+- `src/transcribe.py` 會依序嘗試 CUDA、CPU。
+- `src/transcribe_mps.py` 會依序嘗試 MPS、CUDA、CPU；在 Apple Silicon 且 PyTorch MPS 可用時會使用 Apple GPU。
 - BPM 修正以固定 BPM 為前提，不建立 tempo map。
 - 小節計算一律假設 4/4，3/4 等拍號尚未支援；調號只寫大調，小調以關係大調表示。
 - 規則清理是低風險 preprocessing；後續更複雜的判斷應放在 feature extraction 或 ML classifier 等更高階流程中。

@@ -4,7 +4,7 @@
 
 Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (browser workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
 
-A transcription entrypoint is included (`pianotrans.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
+A transcription entrypoint is included (`src/transcribe.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
 
 The macOS `macos/*.command` and Windows `windows/*.cmd` launchers are double-clickable, and every tool also has a dialog-free command line for agents.
 
@@ -12,7 +12,7 @@ The macOS `macos/*.command` and Windows `windows/*.cmd` launchers are double-cli
 
 ## Main Pipeline
 
-### `pianotrans.command`
+### `transcribe.command`
 
 Main transcription entrypoint. Double-click it, then choose one or more audio files. MIDI files are written next to the selected audio files.
 
@@ -66,22 +66,22 @@ Trimming only moves note ends, and splitting hands again does not restore the or
 Non-interactive (for agents):
 
 ```bash
-python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
-python key_signature.py song_bpmfix_cleaned.mid
-python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-python trim_overlaps.py song_bpmfix_cleaned.mid
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/key_signature.py song_bpmfix_cleaned.mid
+python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python src/trim_overlaps.py song_bpmfix_cleaned.mid
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 ```
 
-### `pianotrans_mps.command`
+### `transcribe_mps.command`
 
-Preserved Apple GPU / MPS-capable entrypoint. It runs the same pipeline as `pianotrans.command`, but uses this device selection order:
+Preserved Apple GPU / MPS-capable entrypoint. It runs the same pipeline as `transcribe.command`, but uses this device selection order:
 
 ```text
 MPS -> CUDA -> CPU
 ```
 
-On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CPU, so `pianotrans.command` is the recommended daily entrypoint.
+On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CPU, so `transcribe.command` is the recommended daily entrypoint.
 
 ## Standalone Tools
 
@@ -102,7 +102,7 @@ Usage:
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
 
-The `pianotrans.command` pipeline only runs the BPM fix: it does not align the first beat, write key signatures, or open the workbench.
+The `transcribe.command` pipeline only runs the BPM fix: it does not align the first beat, write key signatures, or open the workbench.
 
 Automatic first beat alignment uses only the BPM-fixed MIDI (no audio) and assumes a fixed 4/4:
 
@@ -118,11 +118,11 @@ The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) 
 Agents and scripts can run it non-interactively (with `input_midi` no dialog opens, and the workbench is off by default):
 
 ```bash
-python bpmfix.py song.mid --audio song.flac
+python src/bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
+python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
 ```
 
 Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
@@ -175,7 +175,7 @@ Usage:
 2. The tool writes `*_cleaned.mid`.
 3. The tool writes `*_clean_report.txt`.
 
-When run standalone, `clean_midi_rules.command` writes `*_clean_report.txt`. In the full `pianotrans.command` pipeline, the cleanup report is appended to the original `song_stats.txt`.
+When run standalone, `clean_midi_rules.command` writes `*_clean_report.txt`. In the full `transcribe.command` pipeline, the cleanup report is appended to the original `song_stats.txt`.
 
 The cleanup step removes only highly likely artifacts. It does not perform musical semantic judgment, hand splitting, quantization, chord analysis, key analysis, or melody analysis.
 
@@ -243,8 +243,8 @@ This step is intended to make the MIDI easier to inspect and edit in Logic Pro s
 Non-interactive:
 
 ```bash
-python hand_split_channels.py song_bpmfix_cleaned.mid
-python hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
+python src/hand_split_channels.py song_bpmfix_cleaned.mid
+python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
 ### `trim_overlaps.command`
@@ -263,8 +263,8 @@ The trim counts per rule and each hand's most notes sounding at once, before and
 Non-interactive:
 
 ```bash
-python trim_overlaps.py song_bpmfix_cleaned.mid
-python trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
+python src/trim_overlaps.py song_bpmfix_cleaned.mid
+python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
 ```
 
 `--fast-figure-hands` picks the hands that get the fast figure rule. The left hand is off by default because the rule also cuts bass notes held under a broken chord.
@@ -283,7 +283,7 @@ The result is appended to the source transcription stats file (for example `song
 Non-interactive use (for agents): auto-align only, without the workbench, overwriting in place:
 
 ```bash
-python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
 ```
 
 ### `key_signature.command`
@@ -305,7 +305,7 @@ Existing key signature events are replaced. Each segment's key and accidental co
 Non-interactive use:
 
 ```bash
-python key_signature.py song_bpmfix_cleaned.mid
+python src/key_signature.py song_bpmfix_cleaned.mid
 ```
 
 ### `generate_chord_review.command`
@@ -317,7 +317,7 @@ Reads a processed MIDI and writes an English Markdown vertical chord chart. It d
 Command:
 
 ```bash
-python generate_chord_review.py input.mid
+python src/generate_chord_review.py input.mid
 ```
 
 Default output:
@@ -346,8 +346,8 @@ Each bar has 4 fixed rows. If multiple onset events appear inside the same beat,
 Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` right, `R2` second right, `L2` second left, `L` left, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
 
 ```bash
-python note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
-python note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
+python src/note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
+python src/note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
 ```
 
 Example output:
@@ -368,8 +368,8 @@ portrait: one bar per row, four rows, 1080 wide, for phones
 By default both are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git).
 
 ```bash
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid
-python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid
+python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
 ```
 
 ## Python Entrypoints
@@ -377,8 +377,8 @@ python pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portr
 Python scripts used by the `.command` launchers:
 
 ```text
-pianotrans.py
-pianotrans_mps.py
+src/transcribe.py
+src/transcribe_mps.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
@@ -468,7 +468,7 @@ PIANO_MIDI_CLEANUP_BPM_PYTHON
 
 ## Windows
 
-Every tool has a matching `.cmd` launcher in the `windows/` folder (for example `windows/pianotrans.cmd` and `windows/bpmfix.cmd`), and macOS launchers are located in the `macos/` folder (for example `macos/pianotrans.command`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
+Every tool has a matching `.cmd` launcher in the `windows/` folder (for example `windows/transcribe.cmd` and `windows/bpmfix.cmd`), and macOS launchers are located in the `macos/` folder (for example `macos/transcribe.command`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
 
 ```text
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
@@ -477,7 +477,7 @@ py -3.11
 python on PATH
 ```
 
-If none is found it prints a message and pauses. Every Python CLI also works directly from PowerShell, for example `python bpmfix.py song.mid --bpm 135`.
+If none is found it prints a message and pauses. Every Python CLI also works directly from PowerShell, for example `python src/bpmfix.py song.mid --bpm 135`.
 
 Create the shared Python 3.11 environment:
 
@@ -496,13 +496,13 @@ Realtime workbench playback goes to the `Microsoft GS Wavetable Synth` MIDI outp
 Not available on Windows:
 
 ```text
-pianotrans_mps.command / pianotrans_mps.py (Apple MPS)
+transcribe_mps.command / src/transcribe_mps.py (Apple MPS)
 ```
 
 ## Notes
 
-- `pianotrans.py` tries CUDA, then CPU.
-- `pianotrans_mps.py` tries MPS, then CUDA, then CPU; on Apple Silicon with PyTorch MPS available, it uses Apple GPU.
+- `src/transcribe.py` tries CUDA, then CPU.
+- `src/transcribe_mps.py` tries MPS, then CUDA, then CPU; on Apple Silicon with PyTorch MPS available, it uses Apple GPU.
 - BPM fixing assumes a fixed BPM and does not build a tempo map.
 - Bars always assume 4/4; 3/4 and other meters are not supported yet. Key signatures are written as major keys; minor keys appear as their relative major.
 - Rule cleanup is conservative preprocessing. More complex decisions should be handled by later feature extraction or ML/classifier workflows.

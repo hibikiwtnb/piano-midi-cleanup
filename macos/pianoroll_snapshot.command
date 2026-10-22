@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" pianoroll_snapshot.py
+"$PYTHON_BIN" src/pianoroll_snapshot.py
 
 read -r -p "Press Return to close..."

@@ -11,9 +11,9 @@ if not defined PYTHON_EXE py -3.11 -c "pass" >nul 2>nul && set "PYTHON_CMD=py -3
 if not defined PYTHON_EXE if not defined PYTHON_CMD python -c "pass" >nul 2>nul && set "PYTHON_CMD=python"
 
 if defined PYTHON_EXE (
-  "%PYTHON_EXE%" hand_split_channels.py
+  "%PYTHON_EXE%" src\hand_split_channels.py
 ) else if defined PYTHON_CMD (
-  %PYTHON_CMD% hand_split_channels.py
+  %PYTHON_CMD% src\hand_split_channels.py
 ) else (
   echo Python 3 was not found.
   echo Install Python 3.11, or create the shared environment with:
