@@ -185,8 +185,8 @@ Current rules:
 
 ```text
 duration < 0.03s
-velocity < 20
-velocity < 35 and duration < 0.08s
+velocity < 30
+velocity < 45 and duration < 3/4 of a 16th note (0.1875 beat)
 pitch outside 21-108
 ```
 
@@ -201,8 +201,8 @@ Removed notes: 35 (3.50%)
 Kept notes: 965 (96.50%)
 Rule removals:
 - Duration < 0.030s: 12 (1.20%)
-- Velocity < 20: 3 (0.30%)
-- Velocity < 35 and duration < 0.080s: 18 (1.80%)
+- Velocity < 30: 3 (0.30%)
+- Velocity < 45 and duration < 0.1875 beat (3/4 of a 16th note): 18 (1.80%)
 - Pitch outside 21-108: 2 (0.20%)
 ```
 

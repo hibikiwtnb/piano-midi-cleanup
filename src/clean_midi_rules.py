@@ -9,9 +9,10 @@ import mido
 
 
 MIN_NOTE_DURATION_SECONDS = 0.03
-MIN_NOTE_VELOCITY = 20
-LOW_VELOCITY_AND_SHORT_VELOCITY = 35
-LOW_VELOCITY_AND_SHORT_SECONDS = 0.08
+MIN_NOTE_VELOCITY = 30
+LOW_VELOCITY_AND_SHORT_VELOCITY = 45
+# Three quarters of a 16th note, so played 16th notes that come out slightly short are kept.
+LOW_VELOCITY_AND_SHORT_BEATS = 0.75 / 4
 PIANO_MIN_PITCH = 21
 PIANO_MAX_PITCH = 108
 
@@ -25,9 +26,9 @@ RULE_ORDER = [
 RULE_LABELS = {
     'too_short': 'Duration < {:.3f}s'.format(MIN_NOTE_DURATION_SECONDS),
     'too_low_velocity': 'Velocity < {}'.format(MIN_NOTE_VELOCITY),
-    'low_velocity_and_short': 'Velocity < {} and duration < {:.3f}s'.format(
+    'low_velocity_and_short': 'Velocity < {} and duration < {:.4f} beat (3/4 of a 16th note)'.format(
         LOW_VELOCITY_AND_SHORT_VELOCITY,
-        LOW_VELOCITY_AND_SHORT_SECONDS,
+        LOW_VELOCITY_AND_SHORT_BEATS,
     ),
     'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
 }
@@ -54,7 +55,7 @@ def rule_too_low_velocity(note):
 def rule_low_velocity_and_short(note):
     return (
         note['velocity'] < LOW_VELOCITY_AND_SHORT_VELOCITY
-        and note['duration_seconds'] < LOW_VELOCITY_AND_SHORT_SECONDS
+        and note['duration_beats'] < LOW_VELOCITY_AND_SHORT_BEATS
     )
 
 
@@ -115,6 +116,7 @@ def collect_notes(midi_file):
                         'velocity': start['velocity'],
                         'duration_seconds': max(0.0, absolute_seconds - start['start_seconds']),
                         'duration_ticks': max(0, absolute_ticks - start['start_ticks']),
+                        'duration_beats': max(0, absolute_ticks - start['start_ticks']) / midi_file.ticks_per_beat,
                     })
 
     return notes
