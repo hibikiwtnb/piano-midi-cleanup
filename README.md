@@ -307,37 +307,6 @@ python midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbenc
 python key_signature.py song_bpmfix_cleaned.mid
 ```
 
-### `generate_midi_review.py`
-
-開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
-
-只讀取已完成後處理的 MIDI，輸出英文 Markdown 格式的 score facts table。它不修改 MIDI。
-
-命令：
-
-```bash
-python generate_midi_review.py input.mid
-```
-
-預設輸出：
-
-```text
-song_midi_review.md
-```
-
-目前輸出結構：
-
-```text
-Global Info
-Notes
-```
-
-詳細規格見：
-
-```text
-MIDI_REVIEW_SPEC.md
-```
-
 ### `generate_chord_review.command`
 
 開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
@@ -416,7 +385,6 @@ hand_split_channels.py
 trim_overlaps.py
 midi_workbench.py
 key_signature.py
-generate_midi_review.py
 generate_chord_review.py
 note_text_review.py
 pianoroll_snapshot.py

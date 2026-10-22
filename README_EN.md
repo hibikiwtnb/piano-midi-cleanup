@@ -308,37 +308,6 @@ Non-interactive use:
 python key_signature.py song_bpmfix_cleaned.mid
 ```
 
-### `generate_midi_review.py`
-
-Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
-
-Reads a processed MIDI and writes a compact English Markdown score facts table. It does not modify the MIDI.
-
-Command:
-
-```bash
-python generate_midi_review.py input.mid
-```
-
-Default output:
-
-```text
-song_midi_review.md
-```
-
-Current output structure:
-
-```text
-Global Info
-Notes
-```
-
-Detailed spec:
-
-```text
-MIDI_REVIEW_SPEC.md
-```
-
 ### `generate_chord_review.command`
 
 Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
@@ -417,7 +386,6 @@ hand_split_channels.py
 trim_overlaps.py
 midi_workbench.py
 key_signature.py
-generate_midi_review.py
 generate_chord_review.py
 note_text_review.py
 pianoroll_snapshot.py
