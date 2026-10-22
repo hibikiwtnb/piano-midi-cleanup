@@ -1,0 +1,10 @@
+torch
+numpy
+numba
+llvmlite
+essentia; sys_platform != 'win32'
+mido
+librosa
+piano_transcription_inference
+python-rtmidi
+pillow
