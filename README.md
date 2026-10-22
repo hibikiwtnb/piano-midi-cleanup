@@ -57,6 +57,7 @@ song_bpmfix_cleaned.mid
 | **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
 | **Step 1** | `midi_workbench.command` | 對齊第一拍（自動或手動） | 第一拍有移動時會一併重寫調號 |
 | **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
+| 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 做一個人彈的譜時，在分手前執行 |
 | **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
 | **Step 4** | `trim_overlaps.command` | 裁短踏板造成的重疊 | 消除長音重疊，使五線譜與樂譜更整齊 |
 | **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | 檢查結果 | 輸出捲簾截圖或文字拍位以供確認 |
@@ -69,6 +70,7 @@ song_bpmfix_cleaned.mid
 ```bash
 python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
 python src/key_signature.py song_bpmfix_cleaned.mid
+python src/playable_reduction.py song_bpmfix_cleaned.mid
 python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 python src/trim_overlaps.py song_bpmfix_cleaned.mid
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
@@ -250,6 +252,25 @@ python src/hand_split_channels.py song_bpmfix_cleaned.mid
 python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
+### `playable_reduction.command`
+
+可選，給一個人彈的譜用。分手之前執行：刪掉最少的音，讓每個起音組兩隻手都彈得到，直接修改 MIDI。起音相差 50 ms 內的音視為同一組。
+
+```text
+彈得到：把組裡的音由低到高切成兩段（低的給左手、高的給右手），有一種切法讓每隻手都不超過 4 個音、跨度不超過 12 半音
+刪哪幾個：先求刪的數量最少，再求代價最低；有八度重複的音最便宜，只出現一次的較貴，最高音（旋律）和最低音（低音）最貴，同樣代價時刪較弱的
+一組最多刪 3 個；還彈不到的組不動，列在報告裡
+```
+
+只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。分三手、四手的曲子不適用。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），追加到來源轉錄的 `*_stats.txt`。
+
+非交互執行：
+
+```bash
+python src/playable_reduction.py song_bpmfix_cleaned.mid
+python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 --max-span 14
+```
+
 ### `trim_overlaps.command`
 
 分手之後執行：把踏板延音造成、同一隻手內重疊的音裁短，直接修改 MIDI。只移動音尾，不刪音、不動起音。每隻手（channel）分開處理，起音相差 50 ms 內的音視為同一組。
@@ -386,6 +407,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+playable_reduction.py
 trim_overlaps.py
 midi_workbench.py
 key_signature.py

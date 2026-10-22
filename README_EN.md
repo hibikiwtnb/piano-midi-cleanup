@@ -58,6 +58,7 @@ After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overw
 | **Step 0** | `transcribe.command` | Audio transcription, BPM fix, basic cleaning, preliminary hand split | Outputs `song_bpmfix_cleaned.mid` |
 | **Step 1** | `midi_workbench.command` | First beat alignment (auto or manual) | Rewrites key signature if the first beat moves |
 | **Step 2** | `key_signature.command` | Write key signature | Fills in key signatures when the first beat did not move |
+| Optional | `playable_reduction.command` | Reduce to what two hands can play | For a one-player score, before the hand split |
 | **Step 3** | `hand_split_channels.command` | Re-split hands | Use when 3 or 4 hands are needed (e.g., `--hands 3`) |
 | **Step 4** | `trim_overlaps.command` | Trim sustain pedal overlaps | Removes overlapping notes for cleaner notation/score reading |
 | **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | Verify and review | Inspect piano roll snapshots or text review of notes |
@@ -70,6 +71,7 @@ Non-interactive (for agents):
 ```bash
 python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
 python src/key_signature.py song_bpmfix_cleaned.mid
+python src/playable_reduction.py song_bpmfix_cleaned.mid
 python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 python src/trim_overlaps.py song_bpmfix_cleaned.mid
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
@@ -251,6 +253,25 @@ python src/hand_split_channels.py song_bpmfix_cleaned.mid
 python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 ```
 
+### `playable_reduction.command`
+
+Optional, for a score one person can play. Run before the hand split: removes the fewest notes so two hands can play every onset group, in place. Notes whose onsets are within 50 ms form one group.
+
+```text
+Playable: the group, sorted by pitch, can be cut into a low part (left hand) and a high part (right hand) with at most 4 notes and 12 semitones per hand
+What goes: the fewest notes, then the cheapest; a note doubled in another octave is cheapest, a single pitch class dearer, the top (melody) and bottom (bass) notes dearest, and the softer note at equal cost
+At most 3 notes per group; groups still unplayable are left as they are and listed in the report
+```
+
+Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. Not meant for songs split into three or four hands. The removal count and every removal (bar, beat, removed notes and the group) are appended to the source transcription `*_stats.txt`.
+
+Non-interactive:
+
+```bash
+python src/playable_reduction.py song_bpmfix_cleaned.mid
+python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 --max-span 14
+```
+
 ### `trim_overlaps.command`
 
 Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
@@ -387,6 +408,7 @@ bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
 hand_split_channels.py
+playable_reduction.py
 trim_overlaps.py
 midi_workbench.py
 key_signature.py
