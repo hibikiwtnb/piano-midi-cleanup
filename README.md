@@ -466,6 +466,13 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
 ```
 
+Apple Silicon（arm64）不需要上面的 Intel 版本鎖定，用 uv 建立後安裝同一組套件即可（已驗證：torch 2.14.1、numpy 2.4.6、essentia 2.1b6-dev）：
+
+```bash
+uv venv --python 3.11 ~/.local/share/piano-midi-cleanup-env
+VIRTUAL_ENV=~/.local/share/piano-midi-cleanup-env uv pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow
+```
+
 `pianoroll_snapshot.py` 用 Pillow 畫圖。
 
 ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
