@@ -76,6 +76,29 @@ python src/trim_overlaps.py song_bpmfix_cleaned.mid
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 ```
 
+### `postprocess.py`（統一執行器）
+
+把上面的步驟依序一次跑完，每一步都可以開關。每次都從 `song_bpmfix.mid` 重新產生 `song_bpmfix_cleaned.mid`，所以改了開關重跑，不會疊加上一次的結果，也不會多出 MIDI。輸入可以是同一首的 `song.mid`、`song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid`。
+
+| 順序 | 步驟 | 預設 | 開關與參數 |
+|:---:|---|:---:|---|
+| 1 | BPMFix、自動對齊第一拍、調號 | 有 `--bpm` / `--audio` 時執行 | `--no-first-beat`、`--no-key-signature`；都不給時沿用現有的 `song_bpmfix.mid` |
+| 2 | 規則清理 | 開 | `--no-clean`、`--semitone-pairs` |
+| 3 | 可彈性清理 | 關 | `--playable`、`--max-notes-per-hand`、`--max-span` |
+| 4 | 分手 | 開 | `--no-split`、`--hands` |
+| 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
+| 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait / both` |
+
+- 可彈性清理只能配兩隻手，截斷重疊必須在分手之後；組合不成立時不會執行。
+- 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
+- 手動調第一拍請在工作台開 `song_bpmfix.mid`。如果第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
+
+```bash
+python src/postprocess.py song.mid --audio song.flac
+python src/postprocess.py song.mid --bpm 135 --hands 3
+python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+```
+
 ### `transcribe_mps.command`
 
 保留的 Apple GPU / MPS 支持版入口，流程與 `transcribe.command` 相同，但設備選擇順序為：
@@ -403,6 +426,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout p
 ```text
 src/transcribe.py
 src/transcribe_mps.py
+postprocess.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py

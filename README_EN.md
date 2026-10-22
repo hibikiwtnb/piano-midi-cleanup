@@ -77,6 +77,29 @@ python src/trim_overlaps.py song_bpmfix_cleaned.mid
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 ```
 
+### `postprocess.py` (one runner)
+
+Runs the steps above in order in one go, each one switchable. `song_bpmfix_cleaned.mid` is rebuilt from `song_bpmfix.mid` on every run, so changing a switch and running again does not stack on the previous result and adds no MIDI. The input can be `song.mid`, `song_bpmfix.mid` or `song_bpmfix_cleaned.mid` of one song.
+
+| Order | Step | Default | Switches and parameters |
+|:---:|---|:---:|---|
+| 1 | BPMFix, auto first beat, key signatures | Runs with `--bpm` / `--audio` | `--no-first-beat`, `--no-key-signature`; without either, the existing `song_bpmfix.mid` is reused |
+| 2 | Rule cleaning | On | `--no-clean`, `--semitone-pairs` |
+| 3 | Playable reduction | Off | `--playable`, `--max-notes-per-hand`, `--max-span` |
+| 4 | Hand split | On | `--no-split`, `--hands` |
+| 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
+| 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait / both` |
+
+- Playable reduction needs two hands and overlap trimming needs the hand split; other combinations do not run.
+- Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
+- Set the first beat by hand on `song_bpmfix.mid` in the workbench. If it was set by hand on `song_bpmfix_cleaned.mid`, rebuilding would lose it, so the runner stops; pass `--discard-cleaned-edits` to rebuild anyway.
+
+```bash
+python src/postprocess.py song.mid --audio song.flac
+python src/postprocess.py song.mid --bpm 135 --hands 3
+python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+```
+
 ### `transcribe_mps.command`
 
 Preserved Apple GPU / MPS-capable entrypoint. It runs the same pipeline as `transcribe.command`, but uses this device selection order:
@@ -404,6 +427,7 @@ Python scripts used by the `.command` launchers:
 ```text
 src/transcribe.py
 src/transcribe_mps.py
+postprocess.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
