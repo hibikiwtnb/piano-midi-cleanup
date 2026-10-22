@@ -10,3 +10,4 @@ piano_transcription_inference_data/
 *.mp3
 *.flac
 *_pianoroll/
+testdata/
