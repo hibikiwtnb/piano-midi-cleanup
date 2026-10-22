@@ -190,11 +190,7 @@ velocity < 45 and duration <= a 16th note (0.25 beat)
 pitch outside 21-108
 ```
 
-Semitone pairs: two notes a semitone apart starting within 50 ms; one of them is always removed after the per-note rules. A misread note is often about as loud as the right one, so how loud the pair is does not matter:
-
-1. Velocity gap >= 10: remove the softer one.
-2. Velocity gap < 10 and only one note out of key: remove that one (key signatures written by BPMFix).
-3. Otherwise remove the softer one, or the shorter one at equal velocity.
+Optional: `--semitone-pairs` also handles semitone pairs (off by default). Of two notes a semitone apart starting within 50 ms, the softer one is removed, or the shorter one at equal velocity. Telling which semitones belong to the chord is a musical judgment, so this stays simple; see `docs/cleaning-rules.md`.
 
 Cleanup report example:
 
@@ -203,14 +199,13 @@ MIDI rule cleaning stats
 Input: song_bpmfix.mid
 Output: song_bpmfix_cleaned.mid
 Original notes: 1000
-Removed notes: 39 (3.90%)
-Kept notes: 961 (96.10%)
+Removed notes: 35 (3.50%)
+Kept notes: 965 (96.50%)
 Rule removals:
 - Duration < 0.030s: 12 (1.20%)
 - Velocity < 30: 3 (0.30%)
 - Velocity < 45 and duration <= 0.25 beat (16th note): 18 (1.80%)
 - Pitch outside 21-108: 2 (0.20%)
-- Softer or out-of-key note of a semitone pair: 4 (0.40%)
 ```
 
 All percentages use `Original notes` as the denominator.

@@ -8,8 +8,6 @@ from tkinter import filedialog, messagebox
 
 import mido
 
-from key_signature import KEY_SIGNATURES, scale_pitch_classes
-
 
 MIN_NOTE_DURATION_SECONDS = 0.03
 MIN_NOTE_VELOCITY = 30
@@ -18,11 +16,8 @@ LOW_VELOCITY_AND_SHORT_VELOCITY = 45
 LOW_VELOCITY_AND_SHORT_BEATS = 0.25
 PIANO_MIN_PITCH = 21
 PIANO_MAX_PITCH = 108
-# Notes a semitone apart starting within this window are a semitone pair; the likely misread one is removed.
+# Optional: notes a semitone apart starting within this window are a semitone pair; the softer one is removed.
 SEMITONE_PAIR_WINDOW_SECONDS = 0.05
-# A misread note is often about as loud as the right one, so below this velocity gap the key signature decides first.
-SEMITONE_PAIR_VELOCITY_GAP = 10
-KEY_TONICS = dict(KEY_SIGNATURES)
 
 RULE_ORDER = [
     'too_short',
@@ -40,7 +35,7 @@ RULE_LABELS = {
         LOW_VELOCITY_AND_SHORT_BEATS,
     ),
     'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
-    'semitone_pair': 'Softer or out-of-key note of a semitone pair',
+    'semitone_pair': 'Softer note of a semitone pair (shorter at equal velocity)',
 }
 
 
@@ -163,35 +158,13 @@ def first_matching_rule(note):
     return None
 
 
-def key_scales(midi_file):
-    """In-key pitch classes from each key signature, as (tick, pitch classes) in time order."""
-    return sorted(
-        (tick, scale_pitch_classes(KEY_TONICS[message.key]))
-        for _, tick, message in absolute_meta(midi_file)
-        if message.type == 'key_signature' and message.key in KEY_TONICS
-    )
+def semitone_pair_loser(first, second):
+    """The softer note of a semitone pair, or the shorter one at equal velocity."""
+    return min((first, second), key=lambda note: (note['velocity'], note['duration_ticks']))
 
 
-def semitone_pair_loser(first, second, in_key):
-    """The note of a semitone pair to remove."""
-    softer, louder = sorted((first, second), key=lambda note: note['velocity'])
-    if louder['velocity'] - softer['velocity'] < SEMITONE_PAIR_VELOCITY_GAP:
-        first_in, second_in = in_key(first), in_key(second)
-        if first_in != second_in:
-            return second if first_in else first
-    if softer['velocity'] == louder['velocity']:
-        return min((first, second), key=lambda note: note['duration_ticks'])
-    return softer
-
-
-def plan_semitone_pairs(notes, scales):
+def plan_semitone_pairs(notes):
     """Notes to remove from semitone pairs, in one pass over the notes sorted by onset."""
-    scale_ticks = [tick for tick, _ in scales]
-
-    def in_key(note):
-        index = bisect.bisect_right(scale_ticks, note['start_ticks']) - 1
-        return index < 0 or note['note'] % 12 in scales[index][1]
-
     notes = sorted(notes, key=lambda note: note['start_seconds'])
     removed = set()
     for index, note in enumerate(notes):
@@ -202,11 +175,11 @@ def plan_semitone_pairs(notes, scales):
                 break
             if abs(other['note'] - note['note']) != 1 or id(other) in removed:
                 continue
-            removed.add(id(semitone_pair_loser(note, other, in_key)))
+            removed.add(id(semitone_pair_loser(note, other)))
     return [note for note in notes if id(note) in removed]
 
 
-def plan_removals(notes, scales=()):
+def plan_removals(notes, semitone_pairs=False):
     removals = set()
     rule_counts = {rule_name: 0 for rule_name in RULE_ORDER}
 
@@ -222,8 +195,9 @@ def plan_removals(notes, scales=()):
             remove(note, rule_name)
         else:
             kept.append(note)
-    for note in plan_semitone_pairs(kept, scales):
-        remove(note, 'semitone_pair')
+    if semitone_pairs:
+        for note in plan_semitone_pairs(kept):
+            remove(note, 'semitone_pair')
 
     return removals, rule_counts
 
@@ -250,13 +224,13 @@ def rebuild_track_without_messages(track, removed_indexes):
     return rebuilt
 
 
-def clean_midi(input_path, output_path=None):
+def clean_midi(input_path, output_path=None, semitone_pairs=False):
     if output_path is None:
         output_path = cleaned_path_for(input_path)
 
     midi_file = mido.MidiFile(input_path)
     notes = collect_notes(midi_file)
-    removals, rule_counts = plan_removals(notes, key_scales(midi_file))
+    removals, rule_counts = plan_removals(notes, semitone_pairs)
 
     cleaned = mido.MidiFile(
         type=midi_file.type,
@@ -287,6 +261,7 @@ def clean_midi(input_path, output_path=None):
         'removed_notes': removed_notes,
         'kept_notes': kept_notes,
         'rule_counts': rule_counts,
+        'semitone_pairs': semitone_pairs,
     }
     return output_path, stats
 
@@ -313,6 +288,8 @@ def format_clean_stats(stats):
     ]
 
     for rule_name in RULE_ORDER:
+        if rule_name == 'semitone_pair' and not stats.get('semitone_pairs'):
+            continue
         count = stats['rule_counts'][rule_name]
         lines.append(
             '- {}: {} ({:.2%})'.format(
@@ -345,8 +322,8 @@ def write_clean_report(input_path, stats, report_path=None, append=False):
     return report_path
 
 
-def apply_rule_cleaning(input_path, output_path=None, report_path=None, append_report=False):
-    output_path, stats = clean_midi(input_path, output_path)
+def apply_rule_cleaning(input_path, output_path=None, report_path=None, append_report=False, semitone_pairs=False):
+    output_path, stats = clean_midi(input_path, output_path, semitone_pairs)
     report_path = write_clean_report(
         input_path,
         stats,
@@ -372,6 +349,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Conservative rule-based MIDI cleanup.')
     parser.add_argument('input_midi', nargs='?', help='Input MIDI file.')
     parser.add_argument('-o', '--output', help='Output cleaned MIDI path.')
+    parser.add_argument('--semitone-pairs', action='store_true',
+                        help='Also remove the softer note of notes a semitone apart starting together (off by default).')
     args = parser.parse_args(argv)
 
     input_path = args.input_midi or choose_midi()
@@ -383,7 +362,7 @@ def main(argv=None):
         return 1
 
     try:
-        output_path, report_path, _ = apply_rule_cleaning(input_path, args.output)
+        output_path, report_path, _ = apply_rule_cleaning(input_path, args.output, semitone_pairs=args.semitone_pairs)
     except Exception as error:
         messagebox.showerror('MIDI Cleaner failed', str(error))
         raise
