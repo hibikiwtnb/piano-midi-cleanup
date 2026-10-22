@@ -14,15 +14,13 @@ from key_signature import KEY_SIGNATURES, scale_pitch_classes
 MIN_NOTE_DURATION_SECONDS = 0.03
 MIN_NOTE_VELOCITY = 30
 LOW_VELOCITY_AND_SHORT_VELOCITY = 45
-# Three quarters of a 16th note, so played 16th notes that come out slightly short are kept.
-LOW_VELOCITY_AND_SHORT_BEATS = 0.75 / 4
+# Up to a 16th note.
+LOW_VELOCITY_AND_SHORT_BEATS = 0.25
 PIANO_MIN_PITCH = 21
 PIANO_MAX_PITCH = 108
 # Notes a semitone apart starting within this window are a semitone pair; the likely misread one is removed.
 SEMITONE_PAIR_WINDOW_SECONDS = 0.05
-# When the softer note is at least this loud, both are kept as played.
-SEMITONE_PAIR_KEEP_VELOCITY = 70
-# Below this velocity gap the key signature decides first.
+# A misread note is often about as loud as the right one, so below this velocity gap the key signature decides first.
 SEMITONE_PAIR_VELOCITY_GAP = 10
 KEY_TONICS = dict(KEY_SIGNATURES)
 
@@ -37,14 +35,12 @@ RULE_ORDER = [
 RULE_LABELS = {
     'too_short': 'Duration < {:.3f}s'.format(MIN_NOTE_DURATION_SECONDS),
     'too_low_velocity': 'Velocity < {}'.format(MIN_NOTE_VELOCITY),
-    'low_velocity_and_short': 'Velocity < {} and duration < {:.4f} beat (3/4 of a 16th note)'.format(
+    'low_velocity_and_short': 'Velocity < {} and duration <= {} beat (16th note)'.format(
         LOW_VELOCITY_AND_SHORT_VELOCITY,
         LOW_VELOCITY_AND_SHORT_BEATS,
     ),
     'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
-    'semitone_pair': 'Softer or out-of-key note of a semitone pair (both kept when the softer one >= {})'.format(
-        SEMITONE_PAIR_KEEP_VELOCITY,
-    ),
+    'semitone_pair': 'Softer or out-of-key note of a semitone pair',
 }
 
 
@@ -69,7 +65,7 @@ def rule_too_low_velocity(note):
 def rule_low_velocity_and_short(note):
     return (
         note['velocity'] < LOW_VELOCITY_AND_SHORT_VELOCITY
-        and note['duration_beats'] < LOW_VELOCITY_AND_SHORT_BEATS
+        and note['duration_beats'] <= LOW_VELOCITY_AND_SHORT_BEATS
     )
 
 
@@ -177,10 +173,8 @@ def key_scales(midi_file):
 
 
 def semitone_pair_loser(first, second, in_key):
-    """The note of a semitone pair to remove, or None to keep both."""
+    """The note of a semitone pair to remove."""
     softer, louder = sorted((first, second), key=lambda note: note['velocity'])
-    if softer['velocity'] >= SEMITONE_PAIR_KEEP_VELOCITY:
-        return None
     if louder['velocity'] - softer['velocity'] < SEMITONE_PAIR_VELOCITY_GAP:
         first_in, second_in = in_key(first), in_key(second)
         if first_in != second_in:
@@ -208,9 +202,7 @@ def plan_semitone_pairs(notes, scales):
                 break
             if abs(other['note'] - note['note']) != 1 or id(other) in removed:
                 continue
-            loser = semitone_pair_loser(note, other, in_key)
-            if loser:
-                removed.add(id(loser))
+            removed.add(id(semitone_pair_loser(note, other, in_key)))
     return [note for note in notes if id(note) in removed]
 
 
