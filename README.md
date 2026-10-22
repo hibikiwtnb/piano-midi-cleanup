@@ -52,15 +52,17 @@ song_bpmfix_cleaned.mid
 
 轉錄完成後，對 `song_bpmfix_cleaned.mid` 依序執行（全部直接覆寫同一個檔案，不會多出 MIDI）：
 
-```text
-1. midi_workbench.command：對齊第一拍（自動或手動），第一拍有移動時重寫調號
-2. key_signature.command：第一拍沒移動時補寫調號
-3. hand_split_channels.command：需要三隻手的曲子用 --hands 3 重新分手
-4. trim_overlaps.command：裁短踏板造成的重疊
-5. note_text_review.py / pianoroll_snapshot.command：檢查結果
-```
+| 順序 | 工具 / 腳本 | 處理目的 | 備註 |
+|:---:|:---|:---|:---|
+| **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
+| **Step 1** | `midi_workbench.command` | 對齊第一拍（自動或手動） | 第一拍有移動時會一併重寫調號 |
+| **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
+| **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
+| **Step 4** | `trim_overlaps.command` | 裁短踏板造成的重疊 | 消除長音重疊，使五線譜與樂譜更整齊 |
+| **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | 檢查結果 | 輸出捲簾截圖或文字拍位以供確認 |
 
-裁短只移動音尾，重跑分手不會恢復原本的音長；要回到裁短前的狀態，需從 `song_bpmfix.mid` 重新清理，或用 git 還原（見 Test Data）。
+> [!NOTE]
+> 裁短只移動音尾，重跑分手不會恢復原本的音長；要回到裁短前的狀態，需從 `song_bpmfix.mid` 重新執行清理。
 
 非交互執行（agent 用）：
 

@@ -53,15 +53,17 @@ This pipeline only fixes the BPM: it does not align the first beat or write key 
 
 After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overwrites the same file, so no extra MIDI is created):
 
-```text
-1. midi_workbench.command: align the first beat (automatic or by hand); key signatures are rewritten when it moves
-2. key_signature.command: write key signatures when the first beat did not move
-3. hand_split_channels.command: split again with --hands 3 for songs that need three hands
-4. trim_overlaps.command: trim overlaps left by the sustain pedal
-5. note_text_review.py / pianoroll_snapshot.command: check the result
-```
+| Step | Tool / Script | Purpose | Notes |
+|:---:|:---|:---|:---|
+| **Step 0** | `transcribe.command` | Audio transcription, BPM fix, basic cleaning, preliminary hand split | Outputs `song_bpmfix_cleaned.mid` |
+| **Step 1** | `midi_workbench.command` | First beat alignment (auto or manual) | Rewrites key signature if the first beat moves |
+| **Step 2** | `key_signature.command` | Write key signature | Fills in key signatures when the first beat did not move |
+| **Step 3** | `hand_split_channels.command` | Re-split hands | Use when 3 or 4 hands are needed (e.g., `--hands 3`) |
+| **Step 4** | `trim_overlaps.command` | Trim sustain pedal overlaps | Removes overlapping notes for cleaner notation/score reading |
+| **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | Verify and review | Inspect piano roll snapshots or text review of notes |
 
-Trimming only moves note ends, and splitting hands again does not restore the original lengths; to go back before trimming, clean again from `song_bpmfix.mid` or restore with git (see Test Data).
+> [!NOTE]
+> Trimming only moves note ends, and splitting hands again does not restore original lengths; to revert to the pre-trimmed state, clean again from `song_bpmfix.mid`.
 
 Non-interactive (for agents):
 
