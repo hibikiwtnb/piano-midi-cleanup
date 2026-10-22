@@ -189,6 +189,13 @@ velocity < 45 and duration < 3/4 of a 16th note (0.1875 beat)
 pitch outside 21-108
 ```
 
+半音雙音：相差一個半音、起音相差 50ms 以內的兩顆音，刪掉疑似誤認的那顆（逐音規則之後判斷）：
+
+1. 較弱那顆力度 >= 70：兩顆都保留。
+2. 力度差 >= 10：刪較弱的。
+3. 力度差 < 10 且只有一顆在調外：刪調外的（用 BPMFix 寫入的調號）。
+4. 其他：刪較弱的；力度相同時刪較短的。
+
 清理報告示例：
 
 ```text
@@ -196,13 +203,14 @@ MIDI rule cleaning stats
 Input: song_bpmfix.mid
 Output: song_bpmfix_cleaned.mid
 Original notes: 1000
-Removed notes: 35 (3.50%)
-Kept notes: 965 (96.50%)
+Removed notes: 39 (3.90%)
+Kept notes: 961 (96.10%)
 Rule removals:
 - Duration < 0.030s: 12 (1.20%)
 - Velocity < 30: 3 (0.30%)
 - Velocity < 45 and duration < 0.1875 beat (3/4 of a 16th note): 18 (1.80%)
 - Pitch outside 21-108: 2 (0.20%)
+- Softer or out-of-key note of a semitone pair (both kept when the softer one >= 70): 4 (0.40%)
 ```
 
 所有百分比都以 `Original notes` 為分母。

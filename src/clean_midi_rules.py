@@ -1,4 +1,5 @@
 import argparse
+import bisect
 import os
 import sys
 import tkinter as tk
@@ -6,6 +7,8 @@ from collections import defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
+
+from key_signature import KEY_SIGNATURES, scale_pitch_classes
 
 
 MIN_NOTE_DURATION_SECONDS = 0.03
@@ -15,12 +18,20 @@ LOW_VELOCITY_AND_SHORT_VELOCITY = 45
 LOW_VELOCITY_AND_SHORT_BEATS = 0.75 / 4
 PIANO_MIN_PITCH = 21
 PIANO_MAX_PITCH = 108
+# Notes a semitone apart starting within this window are a semitone pair; the likely misread one is removed.
+SEMITONE_PAIR_WINDOW_SECONDS = 0.05
+# When the softer note is at least this loud, both are kept as played.
+SEMITONE_PAIR_KEEP_VELOCITY = 70
+# Below this velocity gap the key signature decides first.
+SEMITONE_PAIR_VELOCITY_GAP = 10
+KEY_TONICS = dict(KEY_SIGNATURES)
 
 RULE_ORDER = [
     'too_short',
     'too_low_velocity',
     'low_velocity_and_short',
     'outside_piano_range',
+    'semitone_pair',
 ]
 
 RULE_LABELS = {
@@ -31,6 +42,9 @@ RULE_LABELS = {
         LOW_VELOCITY_AND_SHORT_BEATS,
     ),
     'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
+    'semitone_pair': 'Softer or out-of-key note of a semitone pair (both kept when the softer one >= {})'.format(
+        SEMITONE_PAIR_KEEP_VELOCITY,
+    ),
 }
 
 
@@ -71,29 +85,51 @@ RULES = [
 ]
 
 
-def absolute_track_messages(midi_file, track):
-    tempo = 500000
+def tick_seconds(midi_file):
+    """Tick to seconds through the tempo changes of all tracks."""
+    changes = sorted(
+        (tick, message.tempo)
+        for _, tick, message in absolute_meta(midi_file)
+        if message.type == 'set_tempo'
+    )
+    points = [(0, 0.0, 500000)]
+    for tick, tempo in changes:
+        last_tick, last_seconds, last_tempo = points[-1]
+        points.append((tick, last_seconds + mido.tick2second(tick - last_tick, midi_file.ticks_per_beat, last_tempo), tempo))
+    point_ticks = [point[0] for point in points]
+
+    def seconds(tick):
+        start_tick, start_seconds, tempo = points[bisect.bisect_right(point_ticks, tick) - 1]
+        return start_seconds + mido.tick2second(tick - start_tick, midi_file.ticks_per_beat, tempo)
+
+    return seconds
+
+
+def absolute_meta(midi_file):
+    for track_index, track in enumerate(midi_file.tracks):
+        absolute_ticks = 0
+        for message in track:
+            absolute_ticks += message.time
+            if message.is_meta:
+                yield track_index, absolute_ticks, message
+
+
+def absolute_track_messages(midi_file, track, seconds=None):
+    seconds = seconds or tick_seconds(midi_file)
     absolute_ticks = 0
-    absolute_seconds = 0.0
 
     for index, message in enumerate(track):
         absolute_ticks += message.time
-        absolute_seconds += mido.tick2second(
-            message.time,
-            midi_file.ticks_per_beat,
-            tempo,
-        )
-        yield index, absolute_ticks, absolute_seconds, message
-        if message.type == 'set_tempo':
-            tempo = message.tempo
+        yield index, absolute_ticks, seconds(absolute_ticks), message
 
 
 def collect_notes(midi_file):
     notes = []
+    seconds = tick_seconds(midi_file)
 
     for track_index, track in enumerate(midi_file.tracks):
         active_notes = defaultdict(list)
-        for message_index, absolute_ticks, absolute_seconds, message in absolute_track_messages(midi_file, track):
+        for message_index, absolute_ticks, absolute_seconds, message in absolute_track_messages(midi_file, track, seconds):
             if message.type == 'note_on' and message.velocity > 0:
                 key = (message.channel, message.note)
                 active_notes[key].append({
@@ -114,6 +150,8 @@ def collect_notes(midi_file):
                         'end_index': message_index,
                         'note': start['note'],
                         'velocity': start['velocity'],
+                        'start_ticks': start['start_ticks'],
+                        'start_seconds': start['start_seconds'],
                         'duration_seconds': max(0.0, absolute_seconds - start['start_seconds']),
                         'duration_ticks': max(0, absolute_ticks - start['start_ticks']),
                         'duration_beats': max(0, absolute_ticks - start['start_ticks']) / midi_file.ticks_per_beat,
@@ -129,17 +167,71 @@ def first_matching_rule(note):
     return None
 
 
-def plan_removals(notes):
+def key_scales(midi_file):
+    """In-key pitch classes from each key signature, as (tick, pitch classes) in time order."""
+    return sorted(
+        (tick, scale_pitch_classes(KEY_TONICS[message.key]))
+        for _, tick, message in absolute_meta(midi_file)
+        if message.type == 'key_signature' and message.key in KEY_TONICS
+    )
+
+
+def semitone_pair_loser(first, second, in_key):
+    """The note of a semitone pair to remove, or None to keep both."""
+    softer, louder = sorted((first, second), key=lambda note: note['velocity'])
+    if softer['velocity'] >= SEMITONE_PAIR_KEEP_VELOCITY:
+        return None
+    if louder['velocity'] - softer['velocity'] < SEMITONE_PAIR_VELOCITY_GAP:
+        first_in, second_in = in_key(first), in_key(second)
+        if first_in != second_in:
+            return second if first_in else first
+    if softer['velocity'] == louder['velocity']:
+        return min((first, second), key=lambda note: note['duration_ticks'])
+    return softer
+
+
+def plan_semitone_pairs(notes, scales):
+    """Notes to remove from semitone pairs, in one pass over the notes sorted by onset."""
+    scale_ticks = [tick for tick, _ in scales]
+
+    def in_key(note):
+        index = bisect.bisect_right(scale_ticks, note['start_ticks']) - 1
+        return index < 0 or note['note'] % 12 in scales[index][1]
+
+    notes = sorted(notes, key=lambda note: note['start_seconds'])
+    removed = set()
+    for index, note in enumerate(notes):
+        for other in notes[index + 1:]:
+            if other['start_seconds'] - note['start_seconds'] > SEMITONE_PAIR_WINDOW_SECONDS:
+                break
+            if id(note) in removed:
+                break
+            if abs(other['note'] - note['note']) != 1 or id(other) in removed:
+                continue
+            loser = semitone_pair_loser(note, other, in_key)
+            if loser:
+                removed.add(id(loser))
+    return [note for note in notes if id(note) in removed]
+
+
+def plan_removals(notes, scales=()):
     removals = set()
     rule_counts = {rule_name: 0 for rule_name in RULE_ORDER}
 
-    for note in notes:
-        rule_name = first_matching_rule(note)
-        if not rule_name:
-            continue
+    def remove(note, rule_name):
         removals.add((note['track_index'], note['start_index']))
         removals.add((note['track_index'], note['end_index']))
         rule_counts[rule_name] += 1
+
+    kept = []
+    for note in notes:
+        rule_name = first_matching_rule(note)
+        if rule_name:
+            remove(note, rule_name)
+        else:
+            kept.append(note)
+    for note in plan_semitone_pairs(kept, scales):
+        remove(note, 'semitone_pair')
 
     return removals, rule_counts
 
@@ -172,7 +264,7 @@ def clean_midi(input_path, output_path=None):
 
     midi_file = mido.MidiFile(input_path)
     notes = collect_notes(midi_file)
-    removals, rule_counts = plan_removals(notes)
+    removals, rule_counts = plan_removals(notes, key_scales(midi_file))
 
     cleaned = mido.MidiFile(
         type=midi_file.type,
