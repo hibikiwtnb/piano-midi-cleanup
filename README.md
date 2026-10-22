@@ -405,15 +405,6 @@ vendor/tonal.min.js
 
 `hand_split_channels.py` 也提供讀取音符、分組和 channel 對應給其他工具使用。
 
-## Test Data
-
-`testdata/` 放以 git 管理版本的 MIDI 組（原始轉錄、`_bpmfix`、`_bpmfix_cleaned`、`_stats.txt`，部分附文字 review）。工具直接覆寫其中的 MIDI，前後差異用 git 比對；需要回到某一步時用 git 還原。
-
-```text
-La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*：
-  lalal.ai v6 鋼琴分離 + Pianotrans，BPM 135，手動對齊第一拍，三隻手分手，已裁短重疊
-```
-
 ## Dependencies
 
 所有 `.command` 和 BPM 偵測共用同一個使用者層級 Python 環境（需要 tkinter，Homebrew 用 `python@3.11` 加 `python-tk@3.11`）：

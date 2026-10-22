@@ -406,15 +406,6 @@ vendor/tonal.min.js
 
 `hand_split_channels.py` also provides note reading, onset grouping and the channel mapping to the other tools.
 
-## Test Data
-
-`testdata/` holds MIDI sets kept under git (original transcription, `_bpmfix`, `_bpmfix_cleaned`, `_stats.txt`, some with a note text review). Tools overwrite the MIDI there in place; compare steps with git and restore with git when needed.
-
-```text
-La la 勇気のうた_HiRes_piano_split_by_lalalai_pianotrans_*:
-  lalal.ai v6 piano stem + Pianotrans, BPM 135, first beat aligned by hand, three-hand split, overlaps trimmed
-```
-
 ## Dependencies
 
 All `.command` launchers and BPM detection share one user-level Python environment (tkinter is required; with Homebrew use `python@3.11` plus `python-tk@3.11`):
