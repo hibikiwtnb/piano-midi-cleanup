@@ -5,7 +5,7 @@
 
 也附轉錄入口（`pianotrans.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
 
-macOS 的 `.command` 和 Windows 的 `.cmd` 都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
+macOS 的 `macos/*.command` 和 Windows 的 `windows/*.cmd` 都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
 
 固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
 
@@ -506,7 +506,7 @@ PIANO_MIDI_CLEANUP_BPM_PYTHON
 
 ## Windows
 
-每個工具在倉庫根目錄都有同名的 `.cmd` 啟動檔（例如 `pianotrans.cmd`、`bpmfix.cmd`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
+每個工具在倉庫的 `windows/` 目錄都有同名的 `.cmd` 啟動檔（例如 `windows/pianotrans.cmd`、`windows/bpmfix.cmd`），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/pianotrans.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
 
 ```text
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe

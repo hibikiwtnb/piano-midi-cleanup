@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 PYTHON_BIN=""
 
@@ -23,12 +23,14 @@ if [ -z "$PYTHON_BIN" ]; then
   cat <<'EOF'
 Python 3 is not installed in a usable location.
 
-Set up .venv in this folder, then double-click this file again.
+Install Python from https://www.python.org/downloads/macos/ or set up .venv in this folder, then double-click this file again.
+
+This avoids the macOS Command Line Tools / Software Update prompt.
 EOF
   read -r -p "Press Return to close..."
   exit 1
 fi
 
-"$PYTHON_BIN" trim_overlaps.py
+"$PYTHON_BIN" pianotrans_mps.py
 
 read -r -p "Press Return to close..."

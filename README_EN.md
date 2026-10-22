@@ -6,7 +6,7 @@ Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BP
 
 A transcription entrypoint is included (`pianotrans.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
 
-The macOS `.command` and Windows `.cmd` launchers are double-clickable, and every tool also has a dialog-free command line for agents.
+The macOS `macos/*.command` and Windows `windows/*.cmd` launchers are double-clickable, and every tool also has a dialog-free command line for agents.
 
 4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
 
@@ -500,7 +500,7 @@ PIANO_MIDI_CLEANUP_BPM_PYTHON
 
 ## Windows
 
-Every tool has a matching `.cmd` launcher in the repository root (for example `pianotrans.cmd` and `bpmfix.cmd`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
+Every tool has a matching `.cmd` launcher in the `windows/` folder (for example `windows/pianotrans.cmd` and `windows/bpmfix.cmd`), and macOS launchers are located in the `macos/` folder (for example `macos/pianotrans.command`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
 
 ```text
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 PYTHON_BIN=""
 
@@ -29,6 +29,6 @@ EOF
   exit 1
 fi
 
-"$PYTHON_BIN" hand_split_channels.py
+"$PYTHON_BIN" midi_workbench.py
 
 read -r -p "Press Return to close..."
