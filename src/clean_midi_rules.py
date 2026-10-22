@@ -27,16 +27,23 @@ RULE_ORDER = [
     'semitone_pair',
 ]
 
-RULE_LABELS = {
-    'too_short': 'Duration < {:.3f}s'.format(MIN_NOTE_DURATION_SECONDS),
-    'too_low_velocity': 'Velocity < {}'.format(MIN_NOTE_VELOCITY),
-    'low_velocity_and_short': 'Velocity < {} and duration <= {} beat (16th note)'.format(
-        LOW_VELOCITY_AND_SHORT_VELOCITY,
-        LOW_VELOCITY_AND_SHORT_BEATS,
-    ),
-    'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
-    'semitone_pair': 'Softer note of a semitone pair (shorter at equal velocity)',
-}
+def rule_labels():
+    """Report labels from the current thresholds, which postprocess.py may override."""
+    return {
+        'too_short': 'Duration < {:.3f}s'.format(MIN_NOTE_DURATION_SECONDS),
+        'too_low_velocity': 'Velocity < {}'.format(MIN_NOTE_VELOCITY),
+        'low_velocity_and_short': 'Velocity < {} and duration <= {} beat'.format(
+            LOW_VELOCITY_AND_SHORT_VELOCITY,
+            LOW_VELOCITY_AND_SHORT_BEATS,
+        ),
+        'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
+        'semitone_pair': 'Softer note of a semitone pair within {:.3f}s (shorter at equal velocity)'.format(
+            SEMITONE_PAIR_WINDOW_SECONDS,
+        ),
+    }
+
+
+RULE_LABELS = rule_labels()
 
 
 def cleaned_path_for(midi_path):
@@ -287,13 +294,14 @@ def format_clean_stats(stats):
         'Rule removals:',
     ]
 
+    labels = rule_labels()
     for rule_name in RULE_ORDER:
         if rule_name == 'semitone_pair' and not stats.get('semitone_pairs'):
             continue
         count = stats['rule_counts'][rule_name]
         lines.append(
             '- {}: {} ({:.2%})'.format(
-                RULE_LABELS[rule_name],
+                labels[rule_name],
                 count,
                 count / original_notes if original_notes else 0.0,
             )

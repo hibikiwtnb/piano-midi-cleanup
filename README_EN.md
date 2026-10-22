@@ -85,7 +85,7 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 |:---:|---|:---:|---|
 | 1 | BPMFix, auto first beat, key signatures | Runs with `--bpm` / `--audio` | `--no-first-beat`, `--no-key-signature`; without either, the existing `song_bpmfix.mid` is reused |
 | 2 | Rule cleaning | On | `--no-clean`, `--semitone-pairs` |
-| 3 | Playable reduction | Off | `--playable`, `--max-notes-per-hand`, `--max-span` |
+| 3 | Playable reduction | Off | `--playable`; notes and span per hand with `--set` |
 | 4 | Hand split | On | `--no-split`, `--hands` |
 | 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
 | 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait / both` |
@@ -94,11 +94,23 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 - Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
 - Set the first beat by hand on `song_bpmfix.mid` in the workbench. If it was set by hand on `song_bpmfix_cleaned.mid`, rebuilding would lose it, so the runner stops; pass `--discard-cleaned-edits` to rebuild anyway.
 
+Thresholds are overridden with `--set name=value` (repeatable), and `--list-parameters` lists every threshold with its default; changed values are recorded in the step list of the report. The playable reduction's notes and span per hand are set here too (`playable.max_notes`, `playable.max_span`).
+
 ```bash
 python src/postprocess.py song.mid --audio song.flac
 python src/postprocess.py song.mid --bpm 135 --hands 3
 python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --set playable.max_notes=5
+python src/postprocess.py --list-parameters
 ```
+
+### `postprocess_panel.command`
+
+A tkinter panel for the runner: choose the MIDI, the BPM source (reuse `song_bpmfix.mid`, a known BPM, or detection from audio), each step's switch, the number of hands, the fast figure hands and snapshots, plus every threshold on tabs next to its default. Run shows the report below.
+
+- Switches and thresholds can be saved as presets, such as one player or three hands; Defaults restores the defaults.
+- The last choices and the presets are kept in `~/.piano-midi-cleanup-panel.json`.
+- The panel only turns the choices into a `postprocess.py` command line, which it prints first.
 
 ### `transcribe_mps.command`
 
@@ -229,7 +241,7 @@ Kept notes: 965 (96.50%)
 Rule removals:
 - Duration < 0.030s: 12 (1.20%)
 - Velocity < 30: 3 (0.30%)
-- Velocity < 45 and duration <= 0.25 beat (16th note): 18 (1.80%)
+- Velocity < 45 and duration <= 0.25 beat: 18 (1.80%)
 - Pitch outside 21-108: 2 (0.20%)
 ```
 
@@ -428,6 +440,7 @@ Python scripts used by the `.command` launchers:
 src/transcribe.py
 src/transcribe_mps.py
 postprocess.py
+postprocess_panel.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py

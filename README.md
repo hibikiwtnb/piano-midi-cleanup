@@ -84,7 +84,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 |:---:|---|:---:|---|
 | 1 | BPMFix、自動對齊第一拍、調號 | 有 `--bpm` / `--audio` 時執行 | `--no-first-beat`、`--no-key-signature`；都不給時沿用現有的 `song_bpmfix.mid` |
 | 2 | 規則清理 | 開 | `--no-clean`、`--semitone-pairs` |
-| 3 | 可彈性清理 | 關 | `--playable`、`--max-notes-per-hand`、`--max-span` |
+| 3 | 可彈性清理 | 關 | `--playable`；每手音數和跨度用 `--set` |
 | 4 | 分手 | 開 | `--no-split`、`--hands` |
 | 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
 | 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait / both` |
@@ -93,11 +93,23 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
 - 手動調第一拍請在工作台開 `song_bpmfix.mid`。如果第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
 
+閾值用 `--set 名稱=值` 覆蓋（可重複），`--list-parameters` 列出全部可調的閾值和預設值；有改的值會記在報告的步驟清單裡。可彈性清理的每手音數和跨度也在這裡（`playable.max_notes`、`playable.max_span`）。
+
 ```bash
 python src/postprocess.py song.mid --audio song.flac
 python src/postprocess.py song.mid --bpm 135 --hands 3
 python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --set playable.max_notes=5
+python src/postprocess.py --list-parameters
 ```
+
+### `postprocess_panel.command`
+
+統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用 `song_bpmfix.mid`、已知 BPM、從音訊偵測）、每一步的開關、手數、套用快速音型的手、截圖，以及分頁列出的全部閾值（旁邊標著預設值）。按 Run 後在下方顯示報告。
+
+- 開關和閾值可以存成預設組合（Preset），例如「一人彈」「三手」；Defaults 回到預設值。
+- 上次的選擇和預設組合存在 `~/.piano-midi-cleanup-panel.json`。
+- 面板只是把選擇轉成 `postprocess.py` 的命令列，執行時會先印出這行命令。
 
 ### `transcribe_mps.command`
 
@@ -228,7 +240,7 @@ Kept notes: 965 (96.50%)
 Rule removals:
 - Duration < 0.030s: 12 (1.20%)
 - Velocity < 30: 3 (0.30%)
-- Velocity < 45 and duration <= 0.25 beat (16th note): 18 (1.80%)
+- Velocity < 45 and duration <= 0.25 beat: 18 (1.80%)
 - Pitch outside 21-108: 2 (0.20%)
 ```
 
@@ -427,6 +439,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout p
 src/transcribe.py
 src/transcribe_mps.py
 postprocess.py
+postprocess_panel.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
