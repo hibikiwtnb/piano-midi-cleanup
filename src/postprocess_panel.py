@@ -44,7 +44,7 @@ def default_preset():
         'switches': {name: default for name, _, default in SWITCHES},
         'hands': 2,
         'fast_figure_hands': list(DEFAULT_FAST_FIGURE_HANDS),
-        'protect_pedal': True,
+        'protect_pedal': False,
         'snapshot': '',
         'parameters': {key: str(value) for key, value in postprocess.PARAMETER_DEFAULTS.items()},
     }
