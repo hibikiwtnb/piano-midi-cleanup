@@ -1,4 +1,4 @@
-"""Shared MIDI scheduling for built-in CoPiano audio and external MIDI ports."""
+"""Shared MIDI scheduling for built-in Coopiano audio and external MIDI ports."""
 
 import os
 import time
@@ -8,7 +8,7 @@ from threading import Event, Lock, Thread, current_thread
 import mido
 
 from hand_split_channels import CHANNELS
-from coopiano_output import OUTPUT_NAME as PIANO_OUTPUT_NAME, CoPianoOutput
+from coopiano_output import OUTPUT_NAME as PIANO_OUTPUT_NAME, CoopianoOutput
 
 
 VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
@@ -22,8 +22,8 @@ def default_output_name():
 
 def open_output(port_name=None):
     """Open the selected audio/MIDI sink; never silently change the selection."""
-    if port_name in (None, PIANO_OUTPUT_NAME):
-        return CoPianoOutput(), PIANO_OUTPUT_NAME
+    if port_name in (None, 'CoPiano', PIANO_OUTPUT_NAME):
+        return CoopianoOutput(), PIANO_OUTPUT_NAME
     if port_name == VIRTUAL_PORT_NAME and os.name != 'nt':
         try:
             output = mido.open_output(VIRTUAL_PORT_NAME, virtual=True)
@@ -57,7 +57,7 @@ def open_output(port_name=None):
 
 
 def output_names():
-    """List CoPiano first, followed by existing MIDI outputs."""
+    """List Coopiano first, followed by existing MIDI outputs."""
     try:
         names = mido.get_output_names()
     except Exception as error:

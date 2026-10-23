@@ -108,7 +108,7 @@ class PianoRollView(ttk.Frame):
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
-        self.output_var = tk.StringVar(value=midi_port or default_output_name())
+        self.output_var = tk.StringVar(value=default_output_name() if midi_port in (None, 'CoPiano') else midi_port)
         self.shading = tk.BooleanVar(value=True)
         self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}
         self.target_text = tk.StringVar()
@@ -406,7 +406,7 @@ class PianoRollView(ttk.Frame):
             self.status.set(tr('Could not start playback: {}').format(self.output.error))
             return False
         if not getattr(self.output, 'ready', True):
-            self.status.set(tr('Preparing CoPiano...'))
+            self.status.set(tr('Preparing Coopiano...'))
             return False
         return True
 

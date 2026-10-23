@@ -123,7 +123,7 @@ The Piano roll tab shows the selected MIDI and reloads it when you open the tab 
 - Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
 - Play, pause and click to seek; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
 - The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; run the processing again to rebuild `song_bpmfix_cleaned.mid`. Editing is off when the shown file has no matching `song_bpmfix.mid`.
-- Playback defaults to the built-in CoPiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new CoPiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
+- Playback defaults to the built-in Coopiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new Coopiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
 
 ### `transcribe_mps.command`
 
@@ -490,7 +490,7 @@ ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime piano roll playback uses CoPiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL is included. On macOS / Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
+Realtime piano roll playback uses Coopiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL is included. On macOS / Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
 
 Vendored JS:
 
@@ -540,7 +540,7 @@ For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index 
 
 `ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Realtime piano roll playback defaults to CoPiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. CoPiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. The native DLL was built, but actual GUI/RDP audition has not been verified for this integration. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+Realtime piano roll playback defaults to Coopiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. Coopiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. The native DLL was built, but actual GUI/RDP audition has not been verified for this integration. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
 
 Not available on Windows:
 

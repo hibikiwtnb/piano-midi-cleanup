@@ -122,7 +122,7 @@ python src/postprocess.py --list-parameters
 - 音條依手上色（右手藍、第二右手橙、第二左手紫、左手綠，與 PNG 截圖一致），深淺表示力度；上方標小節號，左側標音名，底部是延音踏板（CC64）踩下的區間。
 - 播放、暫停、點擊定位；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動。可依手關閉聲音。
 - 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號，之後重新執行後處理即可重建 `song_bpmfix_cleaned.mid`。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
-- 播放預設使用內建 CoPiano 物理建模鋼琴，直接送到系統預設音訊裝置。輸出選單保留本機 MIDI 埠（Windows 包含可用的 `Microsoft GS Wavetable Synth`），macOS／Linux 亦可選 `piano-midi-cleanup` 虛擬埠。選擇會記住；新增此預設時，舊的 MIDI 專用設定不會覆蓋 CoPiano，之後可自行改選並儲存。首次播放會在背景準備音源，完成後自動開始。錯誤會顯示在捲簾頁，不會靜默換成其他音源。
+- 播放預設使用內建 Coopiano 物理建模鋼琴，直接送到系統預設音訊裝置。輸出選單保留本機 MIDI 埠（Windows 包含可用的 `Microsoft GS Wavetable Synth`），macOS／Linux 亦可選 `piano-midi-cleanup` 虛擬埠。選擇會記住；新增此預設時，舊的 MIDI 專用設定不會覆蓋 Coopiano，之後可自行改選並儲存。首次播放會在背景準備音源，完成後自動開始。錯誤會顯示在捲簾頁，不會靜默換成其他音源。
 
 ### `transcribe_mps.command`
 
@@ -498,7 +498,7 @@ ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-鋼琴捲簾預設用 CoPiano 直接發聲，音訊輸出使用 `sounddevice`，外部 MIDI 輸出使用 `python-rtmidi`（均列在安裝指令中）。Windows x64 的原生音源 DLL 已隨 repo 提供；macOS／Linux 需先在 `sound_sources/coopiano` 執行 `make playback`。音源、授權與建置方式見 [sound_sources/README.md](sound_sources/README.md)。
+鋼琴捲簾預設用 Coopiano 直接發聲，音訊輸出使用 `sounddevice`，外部 MIDI 輸出使用 `python-rtmidi`（均列在安裝指令中）。Windows x64 的原生音源 DLL 已隨 repo 提供；macOS／Linux 需先在 `sound_sources/coopiano` 執行 `make playback`。音源、授權與建置方式見 [sound_sources/README.md](sound_sources/README.md)。
 
 Vendored JS:
 
@@ -548,7 +548,7 @@ py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
 
 `ffmpeg` 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
-鋼琴捲簾預設使用 CoPiano 直接發聲，不需 VST、虛擬 MIDI 線或外部播放器；仍可在輸出選單改選 GS 或其他 MIDI 埠。CoPiano 使用系統預設音訊裝置及其取樣率；遠端桌面工作階段須有可用的音訊播放裝置。本次整合已完成原生 DLL 建置，尚未實際驗證 GUI／RDP 試聽。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
+鋼琴捲簾預設使用 Coopiano 直接發聲，不需 VST、虛擬 MIDI 線或外部播放器；仍可在輸出選單改選 GS 或其他 MIDI 埠。Coopiano 使用系統預設音訊裝置及其取樣率；遠端桌面工作階段須有可用的音訊播放裝置。本次整合已完成原生 DLL 建置，尚未實際驗證 GUI／RDP 試聽。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
 
 Windows 上不支援：
 

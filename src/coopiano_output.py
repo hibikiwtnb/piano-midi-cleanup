@@ -1,4 +1,4 @@
-"""CoPiano MIDI sink, with sounddevice sending PCM to the OS default output."""
+"""Coopiano MIDI sink, with sounddevice sending PCM to the OS default output."""
 
 import ctypes
 from pathlib import Path
@@ -6,13 +6,13 @@ import sys
 from threading import Event, Lock, Thread
 
 
-OUTPUT_NAME = 'CoPiano'
+OUTPUT_NAME = 'Coopiano'
 SOURCE_DIR = Path(__file__).resolve().parents[1] / 'sound_sources' / 'coopiano'
 LIBRARY_NAME = 'coopiano.dll' if sys.platform == 'win32' else (
     'libcoopiano.dylib' if sys.platform == 'darwin' else 'libcoopiano.so')
 
 
-class CoPianoOutput:
+class CoopianoOutput:
     """Match the MIDI port send/close interface; initialize away from Tk."""
 
     def __init__(self):
@@ -37,8 +37,9 @@ class CoPianoOutput:
             library.coopiano_destroy.argtypes = [ctypes.c_void_p]
             library.coopiano_destroy.restype = None
             library.coopiano_error.restype = ctypes.c_char_p
-            library.coopiano_render.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint,
-                                                ctypes.c_void_p, ctypes.c_uint]
+            library.coopiano_send.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
+            library.coopiano_send.restype = ctypes.c_int
+            library.coopiano_render.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
             library.coopiano_render.restype = ctypes.c_int
             self._library = library
             sample_rate = sd.query_devices(kind='output')['default_samplerate']
@@ -50,7 +51,13 @@ class CoPianoOutput:
                                                   blocksize=1024, latency='high', callback=self._render)
                 self._stream.start()
                 self.ready = True
-                self._closed.wait()
+                while not self._closed.wait(0.005):
+                    with self._lock:
+                        commands = bytes(self._commands)
+                        self._commands.clear()
+                    command_buffer = ctypes.create_string_buffer(commands) if commands else None
+                    if not library.coopiano_send(self._handle, command_buffer, len(commands) // 3):
+                        raise RuntimeError('Coopiano could not prepare MIDI events')
         except Exception as error:
             self.error = str(error)
         finally:
@@ -66,14 +73,9 @@ class CoPianoOutput:
 
     def _render(self, outdata, frames, _time, _status):
         try:
-            with self._lock:
-                commands = bytes(self._commands)
-                self._commands.clear()
-            command_buffer = ctypes.create_string_buffer(commands) if commands else None
             samples = (ctypes.c_char * len(outdata)).from_buffer(outdata)
-            if not self._library.coopiano_render(self._handle, samples, frames,
-                                                  command_buffer, len(commands) // 3):
-                raise RuntimeError('CoPiano could not render audio')
+            if not self._library.coopiano_render(self._handle, samples, frames):
+                raise RuntimeError('Coopiano could not render audio')
         except Exception as error:
             outdata[:] = bytes(len(outdata))
             self.error = str(error)
@@ -91,7 +93,7 @@ class CoPianoOutput:
         with self._lock:
             if len(self._commands) >= 3 * 8192:
                 self._commands[:] = b'\xff\x00\x00'
-                self.error = 'CoPiano MIDI queue overflow'
+                self.error = 'Coopiano MIDI queue overflow'
                 self._closed.set()
             else:
                 self._commands.extend(data)
