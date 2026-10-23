@@ -135,11 +135,12 @@ class Panel:
         self.build_files(ttk.Frame(processing, padding=8))
         body = ttk.Frame(processing, padding=(8, 0, 8, 8))
         body.pack(fill='both', expand=False)
-        self.build_steps(ttk.LabelFrame(body, text=tr('Steps'), padding=8))
+        steps = ttk.LabelFrame(body, text=tr('Steps'), padding=8)
+        self.build_steps(steps)
         self.build_parameters(ttk.LabelFrame(body, text=tr('Thresholds'), padding=8))
         self.build_report(report)
         self.main_tabs.select(selected_tab)
-        self.build_run(ttk.Frame(processing, padding=8))
+        self.build_run(steps)
         self.show_preset(self.settings.get('last') or default_preset())
         self.update_source()
 
@@ -251,9 +252,8 @@ class Panel:
                       foreground='gray').grid(row=row, column=2, sticky='w')
 
     def build_run(self, frame):
-        frame.pack(fill='x')
         self.run_button = ttk.Button(frame, text=tr('Run'), command=self.run)
-        self.run_button.pack(side='left')
+        self.run_button.grid(row=len(SWITCHES) + 1, column=0, columnspan=2, sticky='w', pady=(12, 0))
         if self.running:
             self.run_button.configure(state='disabled')
         status_bar = tk.Frame(self.root, background='SystemButtonFace',
