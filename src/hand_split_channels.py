@@ -394,6 +394,59 @@ def summarize_groups(groups):
     return wide_span_groups, fast_run_chords
 
 
+PEDAL_CONTROLS = {64, 66, 69, 120, 121, 122, 123, 124, 125, 126, 127}
+
+
+def map_pedal_channels(midi_file, notes):
+    """Copy compatible source pedal streams to the hands before changing note channels."""
+    destinations = defaultdict(set)
+    for note in notes:
+        destinations[note['start_message'].channel].add(CHANNELS[note['hand']])
+    streams = defaultdict(list)
+    for track in midi_file.tracks:
+        tick = 0
+        for message in track:
+            tick += message.time
+            if message.type == 'control_change' and message.control in PEDAL_CONTROLS:
+                streams[message.channel].append((tick, message.control, message.value))
+    signatures = {channel: tuple(sorted(stream, key=lambda item: item[0])) for channel, stream in streams.items()}
+    sources = defaultdict(set)
+    for source, targets in destinations.items():
+        for target in targets:
+            sources[target].add(source)
+    owners = {}
+    for target, channels in sources.items():
+        # A controller-only destination channel must not be silently overwritten.
+        existing = {target} if target not in destinations and target in streams else set()
+        if len({signatures.get(source, ()) for source in channels | existing}) > 1:
+            raise ValueError('Conflicting pedal controls for hand channel {}; hand split was not saved.'.format(
+                target + 1))
+        owners[target] = min(channels)
+    routing = defaultdict(set)
+    for target, source in owners.items():
+        routing[source].add(target)
+    rebuilt = []
+    for track in midi_file.tracks:
+        events = []
+        tick = 0
+        for message in track:
+            tick += message.time
+            if message.type == 'control_change' and message.control in PEDAL_CONTROLS:
+                source = message.channel
+                targets = routing[source] if source in destinations else ({source} if source not in sources else set())
+                events.extend((tick, message.copy(channel=target)) for target in sorted(targets))
+            else:
+                events.append((tick, message))
+        rebuilt.append(events)
+    for track, events in zip(midi_file.tracks, rebuilt):
+        track.clear()
+        previous = 0
+        for tick, message in events:
+            message.time = tick - previous
+            track.append(message)
+            previous = tick
+
+
 def apply_channels(notes):
     for note in notes:
         channel = CHANNELS[note['hand']]
@@ -407,6 +460,7 @@ def split_hands_in_place(midi_path, hands=2):
     groups = group_notes(notes)
     blobs = blob_lines(notes, midi_file.ticks_per_beat)
     assign_groups(groups, hands, blobs, midi_file.ticks_per_beat)
+    map_pedal_channels(midi_file, notes)
     apply_channels(notes)
     midi_file.save(midi_path)
 

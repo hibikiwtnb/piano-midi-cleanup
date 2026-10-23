@@ -315,6 +315,8 @@ python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 
 
 Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
 
+Each proposed trim checks the pedal on the same channel. Both the new and original note ends must lie strictly inside one complete full-pedal interval (CC64 = 127 followed by CC64 = 0), without repeated/overlapping same-pitch notes or ambiguous controller boundaries. Missing pedal support, pedal-release crossings, half-pedal values, other hold controls, and incomplete note pairing preserve the original end. This conservative sustain guard does not guarantee identical sound across instruments or removal of every overlap. Hand splitting also maps compatible pedal controls; conflicting source pedal streams stop the split without saving that split.
+
 ```text
 Fast figure (right and second right hand by default): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next onset group of the same hand
 Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, held MIDI notes of the hand whose pitch class is not among them end there

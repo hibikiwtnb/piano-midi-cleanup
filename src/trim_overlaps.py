@@ -1,16 +1,18 @@
 import argparse
+import bisect
 import os
 import sys
 import tkinter as tk
+from collections import defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
-from report_utils import update_report
 
 from hand_split_channels import (
     CHANNELS, HARD_SPAN, MAX_FINGERS, collect_notes, group_notes,
 )
 from midi_stats import source_stats_path_for
+from report_utils import update_report
 
 
 # Fast figure: at least FAST_FIGURE_MIN_ONSETS onset groups, each within FAST_FIGURE_BEATS of the previous.
@@ -35,8 +37,94 @@ def hand_groups(notes):
     return {channel: group_notes(channel_notes) for channel, channel_notes in by_channel.items()}
 
 
+class PedalGuard:
+    """Accept only note-end moves strictly inside one complete full-pedal interval."""
+
+    def __init__(self, midi_file, notes):
+        self.intervals = defaultdict(list)
+        self.control_ticks = defaultdict(set)
+        self.unsupported = set()
+        controls = []
+        note_events = []
+        paired_events = {(note['track_index'], index) for note in notes
+                         for index in (note['start_index'], note['end_index'])}
+        for track_index, track in enumerate(midi_file.tracks):
+            tick = 0
+            for order, message in enumerate(track):
+                tick += message.time
+                if message.type == 'control_change':
+                    controls.append((tick, track_index, order, message))
+                elif message.type in ('note_on', 'note_off'):
+                    note_events.append((tick, track_index, order, message))
+                    if (track_index, order) not in paired_events:
+                        self.unsupported.add(message.channel)
+        active = defaultdict(int)
+        for _, _, _, message in sorted(note_events, key=lambda item: item[:3]):
+            key = (message.channel, message.note)
+            if message.type == 'note_on' and message.velocity > 0:
+                if active[key]:
+                    self.unsupported.add(message.channel)
+                active[key] += 1
+            elif active[key]:
+                active[key] -= 1
+            else:
+                self.unsupported.add(message.channel)
+        self.unsupported.update(channel for (channel, _), count in active.items() if count)
+        starts = {}
+        pedal_on = defaultdict(bool)
+        for tick, _, _, message in sorted(controls, key=lambda item: item[:3]):
+            channel = message.channel
+            if message.control in (66, 69) or message.control >= 120:
+                self.unsupported.add(channel)
+            if message.control != 64:
+                continue
+            self.control_ticks[channel].add(tick)
+            if message.value not in (0, 127):
+                self.unsupported.add(channel)
+            state = message.value >= 64
+            if state and not pedal_on[channel]:
+                starts[channel] = tick
+            elif not state and pedal_on[channel]:
+                self.intervals[channel].append((starts.pop(channel), tick))
+            pedal_on[channel] = state
+        self.starts = {channel: [start for start, _ in intervals]
+                       for channel, intervals in self.intervals.items()}
+        self.pitches = defaultdict(list)
+        for note in notes:
+            self.pitches[note['start_message'].channel, note['note']].append(note)
+        self.rejected = defaultdict(set)
+        self.accepted = set()
+
+    def reason(self, note, tick):
+        channel = note['start_message'].channel
+        original_end = note['end_ticks']
+        if tick <= note['start_ticks'] or channel in self.unsupported:
+            return 'uncertain'
+        if tick in self.control_ticks[channel] or original_end in self.control_ticks[channel]:
+            return 'uncertain'
+        index = bisect.bisect_right(self.starts.get(channel, []), tick) - 1
+        if index < 0:
+            return 'pedal'
+        start, end = self.intervals[channel][index]
+        if not start < tick < original_end < end:
+            return 'pedal'
+        for other in self.pitches[channel, note['note']]:
+            if other is not note and other['start_ticks'] <= original_end and other['end_ticks'] >= tick:
+                return 'uncertain'
+        return None
+
+    def allow(self, note, tick):
+        identity = (note['track_index'], note['start_index'])
+        reason = self.reason(note, tick)
+        if reason:
+            self.rejected[reason].add(identity)
+            return False
+        self.accepted.add(identity)
+        return True
+
+
 def release(note, tick, rule, counts):
-    if note['new_end'] > tick:
+    if note['new_end'] > tick and note['pedal_guard'].allow(note, tick):
         note['new_end'] = tick
         counts[rule] = counts.get(rule, 0) + 1
 
@@ -69,53 +157,53 @@ def mark_harmonies(notes):
 def trim_chord_changes(groups, counts, outer_sign=1):
     """A hand releases held notes when it moves to a new chord, when the harmony changes under them,
     when its outer line steps on, or when it could not hold them with the new notes."""
-    sounding = []
+    held_notes = []
     for group in groups:
         onset = group[0]['start_ticks']
-        sounding = [note for note in sounding if note['new_end'] > onset]
+        held_notes = [note for note in held_notes if note['new_end'] > onset]
         outer = max(group, key=lambda note: outer_sign * note['note'])
-        for note in sounding:
+        for note in held_notes:
             if note['outer'] and abs(note['note'] - outer['note']) <= OUTER_STEP_SEMITONES:
                 release(note, onset, 'outer_line', counts)
-        sounding = [note for note in sounding if note['new_end'] > onset]
+        held_notes = [note for note in held_notes if note['new_end'] > onset]
         harmony = group[0]['harmony']
         if harmony:
-            for note in sounding:
+            for note in held_notes:
                 if note['note'] % 12 not in harmony:
                     release(note, onset, 'harmony_change', counts)
-            sounding = [note for note in sounding if note['new_end'] > onset]
+            held_notes = [note for note in held_notes if note['new_end'] > onset]
         if len(group) > 1:
-            for note in sounding:
+            for note in held_notes:
                 if note['chord']:
                     release(note, onset, 'chord_change', counts)
-            sounding = [note for note in sounding if note['new_end'] > onset]
-        pitches = [note['note'] for note in sounding + group]
-        if sounding and (len(set(pitches)) > MAX_FINGERS or max(pitches) - min(pitches) > HARD_SPAN):
-            for note in sounding:
+            held_notes = [note for note in held_notes if note['new_end'] > onset]
+        pitches = [note['note'] for note in held_notes + group]
+        if held_notes and (len(set(pitches)) > MAX_FINGERS or max(pitches) - min(pitches) > HARD_SPAN):
+            for note in held_notes:
                 release(note, onset, 'out_of_reach', counts)
-            sounding = []
+            held_notes = [note for note in held_notes if note['new_end'] > onset]
         for note in group:
             note['chord'] = len(group) > 1
             note['outer'] = note is outer
-        sounding += group
+        held_notes += group
 
 
-def max_sounding(groups):
-    """Most notes of one hand sounding at once, from one sweep over starts and ends."""
+def max_simultaneous_keys(groups):
+    """Estimate held keys from MIDI note intervals, without adding CC64 pedal tails."""
     events = []
     for group in groups:
         for note in group:
             events.append((note['start_ticks'], 1))
             events.append((note['new_end'], -1))
-    peak = sounding = 0
+    peak = held_keys = 0
     for _, change in sorted(events):
-        sounding += change
-        peak = max(peak, sounding)
+        held_keys += change
+        peak = max(peak, held_keys)
     return peak
 
 
 def write_note_ends(midi_file, notes):
-    """Move each trimmed note's end message to its new tick; note ends sort before note starts on the same tick."""
+    """Move accepted note ends, preserving the order of all unchanged events."""
     moved = {(note['track_index'], note['end_index']): note['new_end']
              for note in notes if note['new_end'] != note['end_ticks']}
     for track_index, track in enumerate(midi_file.tracks):
@@ -124,8 +212,8 @@ def write_note_ends(midi_file, notes):
         for order, message in enumerate(track):
             absolute_tick += message.time
             tick = moved.get((track_index, order), absolute_tick)
-            is_end = message.type == 'note_off' or (message.type == 'note_on' and message.velocity == 0)
-            events.append((tick, 0 if is_end else 1, order, message))
+            is_moved = (track_index, order) in moved
+            events.append((tick, 0 if is_moved else 1, order, message))
         events.sort(key=lambda item: item[:3])
         track.clear()
         previous_tick = 0
@@ -137,12 +225,14 @@ def write_note_ends(midi_file, notes):
 def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
+    guard = PedalGuard(midi_file, notes)
     for note in notes:
         note['new_end'] = note['end_ticks']
+        note['pedal_guard'] = guard
     mark_harmonies(notes)
     groups_by_channel = hand_groups(notes)
 
-    peaks_before = {channel: max_sounding(groups) for channel, groups in groups_by_channel.items()}
+    peaks_before = {channel: max_simultaneous_keys(groups) for channel, groups in groups_by_channel.items()}
     fast_figure_channels = {CHANNELS[hand] for hand in fast_figure_hands}
     counts = {}
     for channel, groups in sorted(groups_by_channel.items()):
@@ -150,10 +240,11 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         if channel in fast_figure_channels:
             trim_fast_figures(groups, midi_file.ticks_per_beat, channel_counts)
         trim_chord_changes(groups, channel_counts, outer_sign=-1 if channel in LEFT_CHANNELS else 1)
-    peaks_after = {channel: max_sounding(groups) for channel, groups in groups_by_channel.items()}
+    peaks_after = {channel: max_simultaneous_keys(groups) for channel, groups in groups_by_channel.items()}
 
-    write_note_ends(midi_file, notes)
-    midi_file.save(midi_path)
+    if guard.accepted:
+        write_note_ends(midi_file, notes)
+        midi_file.save(midi_path)
     return {
         'midi_path': midi_path,
         'fast_figure_hands': fast_figure_hands,
@@ -161,6 +252,9 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         'counts': counts,
         'peaks_before': peaks_before,
         'peaks_after': peaks_after,
+        'pedal_trimmed': len(guard.accepted),
+        'pedal_kept': len(guard.rejected['pedal'] - guard.accepted),
+        'uncertain_kept': len(guard.rejected['uncertain'] - guard.rejected['pedal'] - guard.accepted),
     }
 
 
@@ -168,6 +262,9 @@ def format_trim_stats(stats):
     lines = [
         'MIDI overlap trim stats',
         'MIDI: {}'.format(stats['midi_path']),
+        'Notes shortened with pedal support: {}'.format(stats['pedal_trimmed']),
+        'Notes kept without continuous pedal support: {}'.format(stats['pedal_kept']),
+        'Notes kept with uncertain pedal or note events: {}'.format(stats['uncertain_kept']),
         'Fast figure: {}; {} or more onset groups each within {} beat'.format(
             ', '.join(hand.replace('_', ' ') for hand in stats['fast_figure_hands']),
             FAST_FIGURE_MIN_ONSETS, FAST_FIGURE_BEATS),
