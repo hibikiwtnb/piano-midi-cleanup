@@ -9,6 +9,8 @@ macOS 的 `macos/*.command` 和 Windows 的 `windows/*.cmd` 都可以直接雙�
 
 固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
 
+各步驟的規則、門檻依據與已知限制見[設計規格](docs/spec/README.md)。
+
 ## Main Pipeline
 
 ### `transcribe.command`

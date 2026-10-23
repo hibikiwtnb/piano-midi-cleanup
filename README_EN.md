@@ -10,6 +10,8 @@ The macOS `macos/*.command` and Windows `windows/*.cmd` launchers are double-cli
 
 4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
 
+The [design specification](docs/spec/README.md) (Traditional Chinese) describes each step, the basis of its thresholds and its known limits.
+
 ## Main Pipeline
 
 ### `transcribe.command`
