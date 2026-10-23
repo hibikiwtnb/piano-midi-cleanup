@@ -112,6 +112,8 @@ class PianoRollView(ttk.Frame):
         self.changes_mtime = None
         self.change_items = {}
         self.label_images = {}
+        self.change_tooltip = None
+        self.tooltip_item = None
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
@@ -333,6 +335,7 @@ class PianoRollView(ttk.Frame):
         return canvas.create_image(KEYS_WIDTH - 3, y, image=self.label_images[key], anchor='e')
 
     def reset_change_hint(self):
+        self.hide_change_tooltip()
         mode = self.change_modes[self.change_mode.get()]
         if mode == 'none':
             return
@@ -344,7 +347,13 @@ class PianoRollView(ttk.Frame):
             text = tr('Red: deleted notes   Orange: shortened tails')
         self.status.set(text)
 
-    def show_change_hint(self, _event):
+    def hide_change_tooltip(self):
+        if self.change_tooltip is not None:
+            self.change_tooltip.destroy()
+            self.change_tooltip = None
+        self.tooltip_item = None
+
+    def show_change_hint(self, event):
         current = self.canvas.find_withtag('current')
         change = self.change_items.get(current[0]) if current else None
         if change is None:
@@ -352,8 +361,24 @@ class PianoRollView(ttk.Frame):
             return
         stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}[change['stage']]
-        self.status.set(tr('{} | {} | Velocity {}').format(
-            tr(stage), note_name(change['pitch']), change['velocity']))
+        self.status.set(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
+        if self.tooltip_item != current[0]:
+            self.hide_change_tooltip()
+            self.tooltip_item = current[0]
+            self.change_tooltip = tk.Toplevel(self)
+            self.change_tooltip.overrideredirect(True)
+            title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
+            tk.Label(self.change_tooltip, text=title + '\n' + tr(stage), justify='left',
+                     background='#ffffe1', foreground='#202020', relief='solid', borderwidth=1,
+                     padx=8, pady=6, wraplength=260).pack()
+            self.change_tooltip.update_idletasks()
+        width = self.change_tooltip.winfo_reqwidth()
+        height = self.change_tooltip.winfo_reqheight()
+        x = max(0, min(event.x_root + 14, self.winfo_screenwidth() - width))
+        y = event.y_root + 18
+        if y + height > self.winfo_screenheight():
+            y = max(0, event.y_root - height - 8)
+        self.change_tooltip.geometry('+{}+{}'.format(x, y))
 
     def draw(self):
         width = self.width()
@@ -545,6 +570,7 @@ class PianoRollView(ttk.Frame):
         self.play_button.configure(text=tr('Play'))
 
     def shutdown(self):
+        self.hide_change_tooltip()
         if self.after_id is not None:
             self.after_cancel(self.after_id)
             self.after_id = None
