@@ -125,7 +125,8 @@ class Panel:
         processing = ttk.Frame(self.main_tabs)
         report = ttk.Frame(self.main_tabs, padding=8)
         self.roll = PianoRollView(self.main_tabs, midi_port=self.settings.get('playback_output'),
-                                  on_output=self.save_midi_output, on_first_beat=self.first_beat_saved)
+                                  on_output=self.save_midi_output, on_first_beat=self.first_beat_saved,
+                                  status=self.status)
         self.roll.configure(padding=8)
         self.main_tabs.add(processing, text=tr('Processing'))
         self.main_tabs.add(self.roll, text=tr('Piano roll'))

@@ -89,7 +89,7 @@ def shade(color, velocity):
 
 
 class PianoRollView(ttk.Frame):
-    def __init__(self, master, midi_port=None, on_output=None, on_first_beat=None):
+    def __init__(self, master, midi_port=None, on_output=None, on_first_beat=None, status=None):
         super().__init__(master)
         self.on_output = on_output
         self.on_first_beat = on_first_beat
@@ -116,10 +116,9 @@ class PianoRollView(ttk.Frame):
         self.output_var = tk.StringVar(value=default_output_name() if midi_port in (None, 'CoPiano') else midi_port)
         self.shading = tk.BooleanVar(value=True)
         self.change_mode = tk.StringVar(value=tr('Hide changes'))
-        self.change_hint = tk.StringVar()
         self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}
         self.target_text = tk.StringVar()
-        self.status = tk.StringVar(value=tr('Ready'))
+        self.status = status if status is not None else tk.StringVar(value=tr('Ready'))
         self.build()
         self.bpm.trace_add('write', lambda *_: self.draw_grid())
         self.offset.trace_add('write', lambda *_: self.draw_grid())
@@ -154,7 +153,7 @@ class PianoRollView(ttk.Frame):
         outputs = output_names()
         if self.output_var.get() not in outputs:
             outputs.insert(0, self.output_var.get())
-        selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=32, state='readonly')
+        selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=22, state='readonly')
         selector.pack(side='left')
         selector.bind('<<ComboboxSelected>>', self.change_output)
         for hand in HAND_ORDER:
@@ -162,18 +161,14 @@ class PianoRollView(ttk.Frame):
                             command=self.apply_mix).pack(side='left', padx=(8, 0))
         ttk.Checkbutton(play, text=tr('Velocity shading'), variable=self.shading,
                         command=self.draw).pack(side='left', padx=(12, 0))
-        changes = ttk.Frame(self, padding=(0, 0, 0, 4))
-        changes.pack(fill='x')
-        ttk.Label(changes, text=tr('Change overlay')).pack(side='left')
+        ttk.Label(play, text=tr('Change overlay')).pack(side='left', padx=(12, 4))
         self.change_modes = {tr(label): mode for label, mode in (
             ('Hide changes', 'none'), ('Deleted notes', 'deleted'),
             ('Shortened tails', 'shortened'), ('All changes', 'all'))}
-        selector = ttk.Combobox(changes, textvariable=self.change_mode, values=tuple(self.change_modes),
-                                width=20, state='readonly')
-        selector.pack(side='left', padx=(4, 12))
+        selector = ttk.Combobox(play, textvariable=self.change_mode, values=tuple(self.change_modes),
+                                width=14, state='readonly')
+        selector.pack(side='left')
         selector.bind('<<ComboboxSelected>>', lambda _event: self.draw())
-        ttk.Label(changes, textvariable=self.change_hint).pack(side='left')
-        ttk.Label(self, textvariable=self.status).pack(fill='x')
 
         roll = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
@@ -319,14 +314,14 @@ class PianoRollView(ttk.Frame):
     def reset_change_hint(self):
         mode = self.change_modes[self.change_mode.get()]
         if mode == 'none':
-            text = ''
+            return
         elif self.changes is None:
             text = tr('No matching change record. Run processing to record changes.')
         elif not self.changes:
             text = tr('No notes were deleted or shortened.')
         else:
             text = tr('Red: deleted notes   Orange: shortened tails')
-        self.change_hint.set(text)
+        self.status.set(text)
 
     def show_change_hint(self, _event):
         current = self.canvas.find_withtag('current')
@@ -336,7 +331,7 @@ class PianoRollView(ttk.Frame):
             return
         stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}[change['stage']]
-        self.change_hint.set(tr('{} | {} | Velocity {}').format(
+        self.status.set(tr('{} | {} | Velocity {}').format(
             tr(stage), note_name(change['pitch']), change['velocity']))
 
     def draw(self):
