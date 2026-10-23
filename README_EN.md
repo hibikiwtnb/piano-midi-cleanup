@@ -322,6 +322,7 @@ Fast figure (right and second right hand by default): 3 or more onset groups eac
 Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, held MIDI notes of the hand whose pitch class is not among them end there
 Chord change: when a hand plays a new chord or octave (2 or more notes), held MIDI notes of its previous chord end there
 Out of reach: when held MIDI notes plus the new ones exceed 5 notes or span more than 14 semitones, the held notes end there
+Beat line: when a hand has an onset within 1/8 beat of a beat line, its MIDI notes held across that line end there; notes that started within 1/4 beat before the line are kept
 ```
 
 The trim counts per rule and each hand's maximum simultaneous keys, before and after, are updated in the source transcription `*_stats.txt`. These rules estimate key-holding requirements from MIDI note intervals; they do not limit how many notes may keep sounding under the pedal. CC64 sustain tails are not added to the count. If the transcription has already extended note lengths for the pedal, the estimate can exceed the actual number of held keys.

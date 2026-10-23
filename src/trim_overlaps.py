@@ -27,6 +27,10 @@ HARMONY_MIN_PITCH_CLASSES = 3
 # A new outer note (top of a right hand, bottom of a left hand) within this many semitones of a held outer note
 # continues a scale line, so the held note ends there.
 OUTER_STEP_SEMITONES = 2
+# A hand's onset within BEAT_LINE_WINDOW_BEATS of a beat line ends its notes held across that line,
+# except notes that started within BEAT_LINE_MIN_LEAD_BEATS before the line (early downbeat notes).
+BEAT_LINE_WINDOW_BEATS = 0.125
+BEAT_LINE_MIN_LEAD_BEATS = 0.25
 LEFT_CHANNELS = {CHANNELS['left'], CHANNELS['second_left']}
 HAND_NAMES = {channel: hand.replace('_', ' ') for hand, channel in CHANNELS.items()}
 # A trim may end a note's sound, sustain-pedal (CC64) tail included, at most this many seconds earlier.
@@ -204,6 +208,23 @@ def trim_chord_changes(groups, counts, outer_sign=1):
         held_notes += group
 
 
+def trim_beat_lines(groups, ticks_per_beat, counts):
+    """A hand releases notes held across a beat line when it plays a new onset on that line."""
+    window = BEAT_LINE_WINDOW_BEATS * ticks_per_beat
+    min_lead = BEAT_LINE_MIN_LEAD_BEATS * ticks_per_beat
+    held_notes = []
+    for group in groups:
+        onset = group[0]['start_ticks']
+        held_notes = [note for note in held_notes if note['new_end'] > onset]
+        line = round(onset / ticks_per_beat) * ticks_per_beat
+        if abs(onset - line) <= window:
+            for note in held_notes:
+                if note['new_end'] > line and line - note['start_ticks'] > min_lead:
+                    release(note, onset, 'beat_line', counts)
+            held_notes = [note for note in held_notes if note['new_end'] > onset]
+        held_notes += group
+
+
 def max_simultaneous_keys(groups):
     """Estimate held keys from MIDI note intervals, without adding CC64 pedal tails."""
     events = []
@@ -256,6 +277,7 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         if channel in fast_figure_channels:
             trim_fast_figures(groups, midi_file.ticks_per_beat, channel_counts)
         trim_chord_changes(groups, channel_counts, outer_sign=-1 if channel in LEFT_CHANNELS else 1)
+        trim_beat_lines(groups, midi_file.ticks_per_beat, channel_counts)
     peaks_after = {channel: max_simultaneous_keys(groups) for channel, groups in groups_by_channel.items()}
 
     if guard.accepted:
@@ -288,11 +310,11 @@ def format_trim_stats(stats):
     for channel in sorted(stats['notes']):
         counts = stats['counts'][channel]
         lines.append('- Channel {} / {}: {} notes, fast figure {}, harmony change {}, chord change {}, '
-                     'outer line {}, out of reach {}, most keys held {} -> {}'.format(
+                     'outer line {}, out of reach {}, beat line {}, most keys held {} -> {}'.format(
                          channel + 1, HAND_NAMES.get(channel, 'unsplit'), stats['notes'][channel],
                          counts.get('fast_figure', 0), counts.get('harmony_change', 0),
                          counts.get('chord_change', 0), counts.get('outer_line', 0),
-                         counts.get('out_of_reach', 0),
+                         counts.get('out_of_reach', 0), counts.get('beat_line', 0),
                          stats['peaks_before'][channel], stats['peaks_after'][channel]))
     return '\n'.join(lines)
 
