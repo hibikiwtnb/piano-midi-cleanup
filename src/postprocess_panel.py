@@ -5,15 +5,19 @@ import queue
 import re
 import sys
 import threading
+import webbrowser
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from tkinter import font as tkfont
+from tkinter.scrolledtext import ScrolledText
 
 from gui_i18n import LANGUAGES, get_language, set_language, tr, tr_report
 import postprocess
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
+from app_info import APP_NAME, VERSION, PROJECT_URL, ISSUES_URL, BUNDLED_COMPONENTS
 
 
 # Last choices and saved presets, per user.
@@ -124,6 +128,7 @@ class Panel:
         self.main_tabs.pack(fill='both', expand=True, padx=8, pady=(8, 0))
         processing = ttk.Frame(self.main_tabs)
         report = ttk.Frame(self.main_tabs, padding=8)
+        about = ttk.Frame(self.main_tabs, padding=8)
         self.roll = PianoRollView(self.main_tabs, midi_port=self.settings.get('playback_output'),
                                   on_output=self.save_midi_output, on_first_beat=self.first_beat_saved,
                                   status=self.status)
@@ -131,6 +136,7 @@ class Panel:
         self.main_tabs.add(processing, text=tr('Processing'))
         self.main_tabs.add(self.roll, text=tr('Piano roll'))
         self.main_tabs.add(report, text=tr('Detailed report'))
+        self.main_tabs.add(about, text=tr('About'))
         self.main_tabs.bind('<<NotebookTabChanged>>', lambda _event: self.refresh_roll())
         self.build_files(ttk.Frame(processing, padding=8))
         body = ttk.Frame(processing, padding=(8, 0, 8, 8))
@@ -139,10 +145,70 @@ class Panel:
         self.build_steps(steps)
         self.build_parameters(ttk.LabelFrame(body, text=tr('Thresholds'), padding=8))
         self.build_report(report)
+        self.build_about(about)
         self.main_tabs.select(selected_tab)
         self.build_run(steps)
         self.show_preset(self.settings.get('last') or default_preset())
         self.update_source()
+
+    def build_about(self, frame):
+        canvas = tk.Canvas(frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(frame, orient='vertical', command=canvas.yview)
+        scrollbar.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        content = ttk.Frame(canvas, padding=16)
+        window = canvas.create_window(0, 0, window=content, anchor='nw')
+        content.bind('<Configure>', lambda _event: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda event: canvas.itemconfigure(window, width=event.width))
+        content.columnconfigure(1, weight=1)
+
+        title_font = tkfont.nametofont('TkDefaultFont').copy()
+        title_font.configure(size=16, weight='bold')
+        self.about_title_font = title_font
+        ttk.Label(content, text=APP_NAME, font=title_font).grid(row=0, column=0, columnspan=3, sticky='w')
+        ttk.Label(content, text=tr('Version: {} (development build)').format(VERSION)).grid(
+            row=1, column=0, columnspan=3, sticky='w', pady=(4, 12))
+        ttk.Label(content, text=tr('Prepare piano transcription MIDI for reading and editing.')).grid(
+            row=2, column=0, columnspan=3, sticky='w')
+        links = ttk.Frame(content)
+        links.grid(row=3, column=0, columnspan=3, sticky='w', pady=(12, 24))
+        ttk.Button(links, text=tr('Project home'), command=lambda: webbrowser.open(PROJECT_URL)).pack(side='left')
+        ttk.Button(links, text=tr('Report an issue'), command=lambda: webbrowser.open(ISSUES_URL)).pack(
+            side='left', padx=8)
+        ttk.Label(content, text=tr('Bundled open-source components')).grid(
+            row=4, column=0, columnspan=3, sticky='w', pady=(0, 8))
+        for column, heading in enumerate(('Component', 'Purpose', 'License')):
+            ttk.Label(content, text=tr(heading)).grid(row=5, column=column, sticky='w', padx=(0, 20))
+        for row, (name, purpose, license_name, url, license_path, credit) in enumerate(BUNDLED_COMPONENTS, 6):
+            ttk.Button(content, text=name, command=lambda url=url: webbrowser.open(url)).grid(
+                row=row, column=0, sticky='w', padx=(0, 20), pady=6)
+            ttk.Label(content, text=tr(purpose) + '\n' + credit).grid(
+                row=row, column=1, sticky='w', padx=(0, 20), pady=6)
+            ttk.Button(content, text=license_name,
+                       command=lambda path=license_path, name=name: self.show_license(name, path)).grid(
+                row=row, column=2, sticky='w', pady=6)
+        ttk.Separator(content).grid(row=9, column=0, columnspan=3, sticky='ew', pady=16)
+        ttk.Label(content, text=tr('Project license')).grid(row=10, column=0, columnspan=3, sticky='w')
+        ttk.Label(content, text=tr('The project license has not been specified. Third-party licenses remain applicable.')).grid(
+            row=11, column=0, columnspan=3, sticky='w', pady=(4, 16))
+        ttk.Label(content, text=tr('This interface processes MIDI. Audio transcription is performed by upstream models.')).grid(
+            row=12, column=0, columnspan=3, sticky='w')
+
+    def show_license(self, name, relative_path):
+        path = Path(__file__).resolve().parents[1] / relative_path
+        try:
+            text = path.read_text(encoding='utf-8')
+        except OSError as error:
+            messagebox.showerror(tr('License'), str(error), parent=self.root)
+            return
+        window = tk.Toplevel(self.root)
+        window.title('{} — {}'.format(name, tr('License')))
+        window.geometry('760x560')
+        viewer = ScrolledText(window, wrap='word', padx=12, pady=12)
+        viewer.pack(fill='both', expand=True)
+        viewer.insert('1.0', text)
+        viewer.configure(state='disabled')
 
     def change_language(self, _event=None):
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),

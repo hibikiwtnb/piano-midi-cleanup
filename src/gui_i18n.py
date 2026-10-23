@@ -84,6 +84,18 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'About': '關於', 'Version: {} (development build)': '版本：{}（開發版）',
+        'Prepare piano transcription MIDI for reading and editing.': '將鋼琴轉譜 MIDI 整理成更容易閱讀、編輯的版本。',
+        'Project home': '專案首頁', 'Report an issue': '問題回報',
+        'Bundled open-source components': '隨程式附帶的開源元件',
+        'Component': '元件', 'Purpose': '用途', 'License': '授權',
+        'Built-in piano sound': '內建鋼琴音源', 'Chord analysis': '和弦分析',
+        'Automatic tempo detection on Windows': 'Windows 自動 BPM 偵測',
+        'Project license': '本專案授權',
+        'The project license has not been specified. Third-party licenses remain applicable.':
+            '本專案尚未指定授權；第三方元件仍適用各自的授權條款。',
+        'This interface processes MIDI. Audio transcription is performed by upstream models.':
+            '本介面用於 MIDI 後處理；音訊轉譜由上游模型完成。',
         'Deletion reason:': '刪除理由：', 'Trimming reason:': '截短理由：',
         '{} | Velocity {}': '{}｜力度 {}',
         'Change overlay': '修改痕跡',
@@ -229,6 +241,18 @@ _TEXT = {
             '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
     },
     'zh_CN': {
+        'About': '关于', 'Version: {} (development build)': '版本：{}（开发版）',
+        'Prepare piano transcription MIDI for reading and editing.': '将钢琴转谱 MIDI 整理成更容易阅读、编辑的版本。',
+        'Project home': '项目首页', 'Report an issue': '问题反馈',
+        'Bundled open-source components': '随程序附带的开源组件',
+        'Component': '组件', 'Purpose': '用途', 'License': '许可',
+        'Built-in piano sound': '内置钢琴音源', 'Chord analysis': '和弦分析',
+        'Automatic tempo detection on Windows': 'Windows 自动 BPM 检测',
+        'Project license': '本项目许可',
+        'The project license has not been specified. Third-party licenses remain applicable.':
+            '本项目尚未指定许可；第三方组件仍适用各自的许可条款。',
+        'This interface processes MIDI. Audio transcription is performed by upstream models.':
+            '本界面用于 MIDI 后处理；音频转谱由上游模型完成。',
         'Deletion reason:': '删除理由：', 'Trimming reason:': '截短理由：',
         '{} | Velocity {}': '{}｜力度 {}',
         'Change overlay': '修改痕迹',
