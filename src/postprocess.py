@@ -68,7 +68,6 @@ PARAMETER_BY_KEY = {parameter.key: parameter for parameter in PARAMETERS}
 SNAPSHOT_LAYOUTS = {
     'landscape': ('landscape',),
     'portrait': ('portrait',),
-    'both': ('landscape', 'portrait'),
 }
 
 

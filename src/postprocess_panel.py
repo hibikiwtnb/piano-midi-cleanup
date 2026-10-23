@@ -195,7 +195,7 @@ class Panel:
             self.step_checks[name] = check
         row = len(SWITCHES)
         ttk.Label(frame, text=tr('Snapshots')).grid(row=row, column=0, sticky='w', pady=(8, 0))
-        snapshot_values = ('', 'landscape', 'portrait', 'both')
+        snapshot_values = ('', 'landscape', 'portrait')
         self.snapshot_values = {tr(value) if value else tr('No image'): value for value in snapshot_values}
         ttk.Combobox(frame, textvariable=self.snapshot, values=tuple(self.snapshot_values), width=10,
                      state='readonly').grid(row=row, column=1, sticky='w', pady=(8, 0))
@@ -398,7 +398,8 @@ class Panel:
         self.protect_pedal.set(preset['protect_pedal'])
         for hand, variable in self.fast_figure.items():
             variable.set(hand in preset['fast_figure_hands'])
-        self.snapshot.set(tr(preset['snapshot']) if preset['snapshot'] else tr('No image'))
+        snapshot = 'landscape' if preset['snapshot'] == 'both' else preset['snapshot']
+        self.snapshot.set(tr(snapshot) if snapshot else tr('No image'))
         defaults = default_preset()['parameters']
         for key, variable in self.parameters.items():
             variable.set(preset['parameters'].get(key, defaults[key]))

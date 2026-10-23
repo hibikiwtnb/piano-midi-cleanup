@@ -122,7 +122,7 @@ def default_output_dir(midi_path):
     return os.path.splitext(midi_path)[0] + '_pianoroll'
 
 
-def write_snapshots(midi_path, output_dir=None, bars=None, layouts=('landscape', 'portrait')):
+def write_snapshots(midi_path, output_dir=None, bars=None, layouts=('landscape',)):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     ticks_per_beat = midi_file.ticks_per_beat
@@ -160,8 +160,8 @@ def main(argv=None):
     )
     parser.add_argument('input_midi', nargs='?', help='Bar-aligned MIDI to read. Without it a dialog opens.')
     parser.add_argument('--bars', type=parse_bars, help='Bar range such as 17-32; images start at its first bar.')
-    parser.add_argument('--layout', choices=('landscape', 'portrait', 'both'), default='both',
-                        help='landscape: four bars in a row; portrait: rotated clockwise for phones (default: both).')
+    parser.add_argument('--layout', choices=('landscape', 'portrait'), default='landscape',
+                        help='landscape: four bars in a row (default); portrait: rotated clockwise for phones.')
     parser.add_argument('-o', '--output-dir', help='Output folder (default: <midi name>_pianoroll next to the MIDI).')
     args = parser.parse_args(argv)
 
@@ -173,8 +173,7 @@ def main(argv=None):
         print('MIDI file does not exist: {}'.format(midi_path))
         return 1
 
-    layouts = ('landscape', 'portrait') if args.layout == 'both' else (args.layout,)
-    paths = write_snapshots(midi_path, output_dir=args.output_dir, bars=args.bars, layouts=layouts)
+    paths = write_snapshots(midi_path, output_dir=args.output_dir, bars=args.bars, layouts=(args.layout,))
     if not args.input_midi:
         messagebox.showinfo('Piano Roll complete', 'Wrote {} image(s) to:\n{}'.format(
             len(paths), os.path.dirname(paths[0]) if paths else ''))
