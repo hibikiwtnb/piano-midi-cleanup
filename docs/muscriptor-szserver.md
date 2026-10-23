@@ -50,16 +50,41 @@ Large 權重的上游 revision 仍與已下載版本一致，因此本次是執�
 - 鋼琴分離音軌可用官方樂器條件 `acoustic_piano`；比較時記錄是否啟用此限制。
 - 原始轉譜比較應使用 `--detect-tempo false`，不啟用量化、補空隙或裁除前導小節，再統一使用本專案的 BPM 與第一拍對齊。
 - 新版節拍偵測使用 Beat This；相關節拍模型未在本次執行或確認快取，首次使用可能需要額外下載。
-- Large 載入及轉譜前須重新閱讀 szserver 的 `/models/apps/HARDWARE_USAGE.md` 並記錄資源使用；本次沒有佔用 GPU、啟動服務或轉譜歌曲。
+- Large 載入及轉譜前須重新閱讀 szserver 的 `/models/apps/HARDWARE_USAGE.md` 並記錄資源使用，完成後標記釋放。官方載入器的暫時顯存需求及本次處理方式見下節。
 - 程式碼為 MIT，模型權重為 CC BY-NC 4.0 並附模型頁使用條件；不能把程式碼授權當作權重可商用的依據。
 
 ## 已確認與尚未確認
 
 已確認新版 CLI help、樂器列表、Python 模組匯入、實際版本與模組路徑、模型 API 簽名、硬樂器限制 API，以及現有 Large 模型與設定檔的快取路徑。舊環境仍報告 MuScriptor 0.2.2a1。
 
-尚未執行模型載入、GPU 推論、歌曲轉譜、節拍偵測、試聽或官方 Web UI。安裝完成不等於已驗證端到端轉譜品質。
+已完成下節記錄的 Large GPU 鋼琴限定轉譜；尚未執行節拍偵測、人工試聽評分或官方 Web UI。轉譜成功不等於已驗證準確率。
 
 伺服器安裝紀錄位於 `/data/apps/muscriptor/`：`README.md`、`installation-status.json`、`install.log`、`transcribe-help.txt`、`requirements-lock.txt`。版本清單只涵蓋新版環境新增的套件，不是包含共用環境的完整重建鎖檔。
+
+## La la 勇気のうた：鋼琴限定實際轉譜
+
+使用與 [Transkun 比較](lala-bytedance-transkun-comparison.md) 相同的 256.077 秒分離鋼琴 WAV，來源 SHA-256 為 `3c962dd413c6bdc95d2b79655f3583c5a3ff018d1b10fda3f7a1ccd55ca582e1`。
+
+| 項目 | 本次設定或結果 |
+|---|---|
+| 模型 | Large，revision 同上 |
+| 執行環境 | MuScriptor 0.4.0、PyTorch 2.9.1、GPU 1 |
+| 精度 | float32；CUDA 計算沿用官方 autocast 行為 |
+| 樂器限制 | `--instruments acoustic_piano`，在生成階段限制 |
+| 解碼 | 單片段 batch 1、beam 1、CFG 1、保留 prelude forcing，未啟用 sampling |
+| 額外後處理 | 關閉節拍偵測、量化、補空隙；未套用本專案清理 |
+| 成功執行耗時 | 346.223 秒，不含初次載入失敗 |
+| 音符數 | 2,550 |
+| 有音符的 MIDI channel | 0（零起算） |
+| 有音符的 MIDI program | 0（零起算，Acoustic Grand Piano） |
+| 鼓通道 | 無 |
+| 力度 | 所有音符固定 100，不能當成估計出的演奏力度 |
+
+輸出 MIDI SHA-256：`ab1163f58b24e59294d9d2d2181860b6672daf83d87aac52f48752bce664342a`。
+
+官方 0.4.0 載入器先在 GPU 建立模型，再把完整 safetensors 權重也載入同一 GPU。本機 GPU 1 當時另有約 1.5 GB 佔用，初次 float32 載入因兩份模型暫時並存而顯存不足。成功執行採用僅對該程序生效的載入函數替換：safetensors 先在 CPU 解碼，再由官方 `load_state_dict()` 複製至 GPU 模型。未變更權重、float32 精度、官方解碼邏輯或已安裝套件原始碼，也未終止其他服務。一般官方 CLI 直接載入仍可能遇到同一顯存限制；本次成功不表示該載入限制已在套件中修好。
+
+伺服器證據位於 `/data/apps/muscriptor/lala-comparison-20261023/`，保留完整執行腳本、命令列、來源與輸出雜湊、成功與初次 OOM 日誌。結果已取回本機 repo 的 `testdata/transkun-lala-20261023/lala-muscriptor-piano-raw.mid`；原始資料依 repo 規則不提交。GPU 已釋放並更新資源交流記錄。
 
 ## 官方資料
 
