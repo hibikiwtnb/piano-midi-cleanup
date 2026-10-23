@@ -19,10 +19,9 @@ PITCH_PADDING = 2
 KEYBOARD_WIDTH = 44
 HEADER_HEIGHT = 34
 MARGIN = 8
-# Landscape: four bars in one row. Portrait: one bar per row, four rows, sized for a phone.
+# Portrait is the landscape image rotated clockwise, with time running downward.
 LAYOUTS = {
-    'landscape': {'width': 1920, 'roll_height': 900, 'bars_per_row': 4},
-    'portrait': {'width': 1080, 'roll_height': 1900, 'bars_per_row': 1},
+    'landscape': {'width': 1920, 'roll_height': 900},
 }
 HAND_COLORS = {
     CHANNELS['right']: ('#1976d2', 'R right'),
@@ -92,16 +91,15 @@ def draw_row(draw, box, first_bar, bar_count, notes, low, high, ticks_per_beat):
 
 
 def render_image(notes, first_bar, ticks_per_beat, layout_name):
+    if layout_name == 'portrait':
+        return render_image(notes, first_bar, ticks_per_beat, 'landscape').transpose(Image.Transpose.ROTATE_270)
     layout = LAYOUTS[layout_name]
-    bars_per_row = layout['bars_per_row']
-    rows = BARS_PER_IMAGE // bars_per_row
     bar_ticks = ticks_per_beat * BEATS_PER_BAR
     start_tick = (first_bar - 1) * bar_ticks
     end_tick = start_tick + BARS_PER_IMAGE * bar_ticks
     visible = [note for note in notes if note['end_ticks'] > start_tick and note['start_ticks'] < end_tick]
     low, high = pitch_range(visible)
 
-    row_gap = 12
     height = HEADER_HEIGHT + layout['roll_height'] + MARGIN
     image = Image.new('RGB', (layout['width'], height), '#e7e7e7')
     draw = ImageDraw.Draw(image)
@@ -115,11 +113,8 @@ def render_image(notes, first_bar, ticks_per_beat, layout_name):
         draw.rectangle([legend_x - 18, HEADER_HEIGHT / 2 - 6, legend_x - 6, HEADER_HEIGHT / 2 + 6], fill=color)
         legend_x -= 34
 
-    row_height = (layout['roll_height'] - row_gap * (rows - 1)) / rows
-    for row in range(rows):
-        top = HEADER_HEIGHT + row * (row_height + row_gap)
-        draw_row(draw, (MARGIN, top, layout['width'] - MARGIN, top + row_height),
-                 first_bar + row * bars_per_row, bars_per_row, visible, low, high, ticks_per_beat)
+    draw_row(draw, (MARGIN, HEADER_HEIGHT, layout['width'] - MARGIN, HEADER_HEIGHT + layout['roll_height']),
+             first_bar, BARS_PER_IMAGE, visible, low, high, ticks_per_beat)
     return image
 
 
@@ -166,7 +161,7 @@ def main(argv=None):
     parser.add_argument('input_midi', nargs='?', help='Bar-aligned MIDI to read. Without it a dialog opens.')
     parser.add_argument('--bars', type=parse_bars, help='Bar range such as 17-32; images start at its first bar.')
     parser.add_argument('--layout', choices=('landscape', 'portrait', 'both'), default='both',
-                        help='landscape: four bars in a row; portrait: one bar per row for phones (default: both).')
+                        help='landscape: four bars in a row; portrait: rotated clockwise for phones (default: both).')
     parser.add_argument('-o', '--output-dir', help='Output folder (default: <midi name>_pianoroll next to the MIDI).')
     args = parser.parse_args(argv)
 

@@ -426,7 +426,7 @@ Saves piano roll PNGs of a bar-aligned MIDI, four bars per image, without modify
 
 ```text
 landscape: four bars in one row, 1920 wide
-portrait: one bar per row, four rows, 1080 wide, for phones
+portrait: landscape image rotated 90 degrees clockwise, with four continuous bars running downward, for phones
 ```
 
 By default both are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git).

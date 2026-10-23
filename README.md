@@ -427,7 +427,7 @@ m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
 
 ```text
 landscape：4 小節排成一行，1920 寬
-portrait：一行一小節、排 4 行，1080 寬，適合手機查看
+portrait：橫向圖順時針旋轉 90 度，4 小節由上往下連續排列，適合手機查看
 ```
 
 預設兩種都輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。
