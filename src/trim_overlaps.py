@@ -49,7 +49,8 @@ class PedalGuard:
     """Accept a note-end move only if the note's sound, pedal tail included, ends at most
     SUSTAIN_TOLERANCE_SECONDS earlier."""
 
-    def __init__(self, midi_file, notes):
+    def __init__(self, midi_file, notes, enabled=True):
+        self.enabled = enabled
         self.seconds = tick_seconds(midi_file)
         self.intervals = defaultdict(list)
         self.unsupported = set()
@@ -120,6 +121,8 @@ class PedalGuard:
         return max(outcomes) if latest else min(outcomes)
 
     def reason(self, note, tick):
+        if not self.enabled:
+            return None
         channel = note['start_message'].channel
         original_end = note['end_ticks']
         if tick <= note['start_ticks'] or channel in self.unsupported:
@@ -259,10 +262,10 @@ def write_note_ends(midi_file, notes):
             previous_tick = tick
 
 
-def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS):
+def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS, protect_pedal=True):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
-    guard = PedalGuard(midi_file, notes)
+    guard = PedalGuard(midi_file, notes, enabled=protect_pedal)
     for note in notes:
         note['new_end'] = note['end_ticks']
         note['pedal_guard'] = guard
@@ -285,6 +288,7 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         midi_file.save(midi_path)
     return {
         'midi_path': midi_path,
+        'protect_pedal': protect_pedal,
         'fast_figure_hands': fast_figure_hands,
         'notes': {channel: sum(len(group) for group in groups) for channel, groups in groups_by_channel.items()},
         'counts': counts,
@@ -300,7 +304,9 @@ def format_trim_stats(stats):
     lines = [
         'MIDI overlap trim stats',
         'MIDI: {}'.format(stats['midi_path']),
-        'Notes shortened within sustain tolerance: {}'.format(stats['sustain_trimmed']),
+        'Protect pedal sustain: {}'.format('On' if stats['protect_pedal'] else 'Off'),
+        '{}: {}'.format('Notes shortened within sustain tolerance' if stats['protect_pedal'] else 'Notes shortened',
+                        stats['sustain_trimmed']),
         'Notes kept to avoid ending the sound early: {}'.format(stats['sustain_kept']),
         'Notes kept with uncertain pedal or note events: {}'.format(stats['uncertain_kept']),
         'Fast figure: {}; {} or more onset groups each within {} beat'.format(
@@ -319,8 +325,8 @@ def format_trim_stats(stats):
     return '\n'.join(lines)
 
 
-def apply_overlap_trim(midi_path, report_path=None, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS):
-    stats = trim_overlaps_in_place(midi_path, fast_figure_hands=fast_figure_hands)
+def apply_overlap_trim(midi_path, report_path=None, fast_figure_hands=DEFAULT_FAST_FIGURE_HANDS, protect_pedal=True):
+    stats = trim_overlaps_in_place(midi_path, fast_figure_hands=fast_figure_hands, protect_pedal=protect_pedal)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_trim_stats(stats)
     update_report(report_path, report)
@@ -347,6 +353,7 @@ def main(argv=None):
     )
     parser.add_argument('input_midi', nargs='?', help='Hand-split MIDI to modify in place. Without it a dialog opens.')
     parser.add_argument('--report', help='Report path (default: the source transcription *_stats.txt).')
+    parser.add_argument('--no-pedal-protection', action='store_true', help='Trim without checking pedal sustain.')
     parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=DEFAULT_FAST_FIGURE_HANDS,
                         help='Hands that get the fast figure rule (default: right second_right).')
     args = parser.parse_args(argv)
@@ -359,7 +366,8 @@ def main(argv=None):
         print('MIDI file does not exist: {}'.format(midi_path))
         return 1
 
-    stats = apply_overlap_trim(midi_path, report_path=args.report, fast_figure_hands=args.fast_figure_hands)
+    stats = apply_overlap_trim(midi_path, report_path=args.report, fast_figure_hands=args.fast_figure_hands,
+                               protect_pedal=not args.no_pedal_protection)
     if not args.input_midi:
         messagebox.showinfo('Trim Overlaps complete', format_trim_stats(stats))
     return 0

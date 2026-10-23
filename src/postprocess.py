@@ -193,7 +193,8 @@ def run_postprocess(args):
         elif name == 'split':
             apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands)
         elif name == 'trim':
-            apply_overlap_trim(cleaned_path, report_path=stats_path, fast_figure_hands=tuple(args.fast_figure_hands))
+            apply_overlap_trim(cleaned_path, report_path=stats_path, fast_figure_hands=tuple(args.fast_figure_hands),
+                               protect_pedal=not args.no_pedal_protection)
         elif name == 'snapshot':
             write_snapshots(cleaned_path, layouts=SNAPSHOT_LAYOUTS[args.snapshot])
 
@@ -226,6 +227,7 @@ def build_parser():
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')
+    parser.add_argument('--no-pedal-protection', action='store_true', help='Trim without checking pedal sustain.')
     parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=list(DEFAULT_FAST_FIGURE_HANDS),
                         help='Overlap trim: hands that get the fast figure rule (default: right second_right).')
     parser.add_argument('--discard-cleaned-edits', action='store_true',

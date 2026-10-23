@@ -11,6 +11,10 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'Protect pedal sustain': 'Protect pedal sustain',
+        'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
+            'Use pedal states to preserve note tails that trimming could silence earlier. Fewer notes may be shortened.',
+        'Notes shortened': 'Notes shortened',
         'Preparing CoPiano...': 'Preparing CoPiano...',
         'Could not start playback: {}': 'Could not start playback: {}',
         'Playback output: {}': 'Playback output: {}',
@@ -72,6 +76,11 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'Protect pedal sustain': '保護踏板延音',
+        'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
+            '根據踏板狀態，保留截短後可能提早停止延音的音尾。開啟後，截短的音符可能減少。',
+        'Notes shortened': '截短的音符數',
+        'On': '開啟', 'Off': '關閉',
         'Preparing CoPiano...': '正在準備 CoPiano 鋼琴音源…',
         'Could not start playback: {}': '無法播放：{}',
         'Playback output: {}': '試聽輸出：{}',
@@ -204,6 +213,11 @@ _TEXT = {
             '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
     },
     'zh_CN': {
+        'Protect pedal sustain': '保护踏板延音',
+        'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
+            '根据踏板状态，保留截短后可能提早停止延音的音尾。开启后，截短的音符可能减少。',
+        'Notes shortened': '截短的音符数',
+        'On': '开启', 'Off': '关闭',
         'Preparing CoPiano...': '正在准备 CoPiano 钢琴音源…',
         'Could not start playback: {}': '无法播放：{}',
         'Playback output: {}': '试听输出：{}',

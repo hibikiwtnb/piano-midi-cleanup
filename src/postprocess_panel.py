@@ -44,6 +44,7 @@ def default_preset():
         'switches': {name: default for name, _, default in SWITCHES},
         'hands': 2,
         'fast_figure_hands': list(DEFAULT_FAST_FIGURE_HANDS),
+        'protect_pedal': True,
         'snapshot': '',
         'parameters': {key: str(value) for key, value in postprocess.PARAMETER_DEFAULTS.items()},
     }
@@ -88,6 +89,7 @@ class Panel:
         self.switches = {name: tk.BooleanVar() for name, _, _ in SWITCHES}
         self.hands = tk.StringVar()
         self.fast_figure = {hand: tk.BooleanVar() for hand in HAND_ORDER}
+        self.protect_pedal = tk.BooleanVar()
         self.snapshot = tk.StringVar()
         self.parameters = {parameter.key: tk.StringVar() for parameter in postprocess.PARAMETERS}
         self.preset_name = tk.StringVar()
@@ -213,15 +215,19 @@ class Panel:
                 parameter_frame = ttk.Frame(tab)
                 parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
             elif prefix == 'trim':
-                ttk.Label(tab, text=tr('Fast figure hands')).grid(row=0, column=0, sticky='nw')
+                ttk.Checkbutton(tab, text=tr('Protect pedal sustain'), variable=self.protect_pedal).grid(
+                    row=0, column=0, columnspan=2, sticky='w')
+                ttk.Label(tab, text=tr('Keep note tails that trimming could silence earlier; fewer notes may be shortened.'),
+                          wraplength=340).grid(row=1, column=0, columnspan=2, sticky='w', pady=(0, 8))
+                ttk.Label(tab, text=tr('Fast figure hands')).grid(row=2, column=0, sticky='nw')
                 hands = ttk.Frame(tab)
-                hands.grid(row=0, column=1, sticky='w')
+                hands.grid(row=2, column=1, sticky='w')
                 for index, hand in enumerate(HAND_ORDER):
                     ttk.Checkbutton(hands, text=tr(hand.replace('_', ' ')),
                                     variable=self.fast_figure[hand]).grid(
                         row=index // 2, column=index % 2, sticky='w', padx=(0, 12))
                 parameter_frame = ttk.Frame(tab)
-                parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
+                parameter_frame.grid(row=3, column=0, columnspan=2, sticky='w', pady=(12, 0))
             self.add_parameter_rows(parameter_frame, [
                 parameter for parameter in postprocess.PARAMETERS
                 if parameter.key.startswith(prefix + '.')
@@ -380,6 +386,7 @@ class Panel:
             'switches': {name: variable.get() for name, variable in self.switches.items()},
             'hands': int(self.hands.get()),
             'fast_figure_hands': [hand for hand in HAND_ORDER if self.fast_figure[hand].get()],
+            'protect_pedal': self.protect_pedal.get(),
             'snapshot': self.snapshot_values.get(self.snapshot.get(), self.snapshot.get()),
             'parameters': {key: variable.get().strip() for key, variable in self.parameters.items()},
         }
@@ -389,6 +396,7 @@ class Panel:
         for name, variable in self.switches.items():
             variable.set(preset['switches'].get(name, dict((n, d) for n, _, d in SWITCHES)[name]))
         self.hands.set(str(preset['hands']))
+        self.protect_pedal.set(preset['protect_pedal'])
         for hand, variable in self.fast_figure.items():
             variable.set(hand in preset['fast_figure_hands'])
         self.snapshot.set(tr(preset['snapshot']) if preset['snapshot'] else tr('No image'))
@@ -440,6 +448,8 @@ class Panel:
                 args.append(flag)
         args += ['--hands', str(preset['hands'])]
         if switches['trim']:
+            if not preset['protect_pedal']:
+                args.append('--no-pedal-protection')
             if not preset['fast_figure_hands']:
                 raise ValueError(tr('Choose at least one fast figure hand, or turn overlap trim off.'))
             args += ['--fast-figure-hands'] + preset['fast_figure_hands']
