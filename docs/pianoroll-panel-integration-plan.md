@@ -95,4 +95,4 @@ Windows 預設送到 Microsoft GS Wavetable Synth，也可選其他 MIDI 輸出�
 - 對應的啟動器：`macos/bpmfix.command`、`macos/midi_workbench.command`、`windows/bpmfix.cmd`、`windows/midi_workbench.cmd`
 - README 中這兩個工具的視窗用法
 
-`bpmfix.py --bpm/--audio` 與 `midi_workbench.py --auto-first-beat --no-workbench` 這兩個不開視窗的命令列用法，功能已被統一執行器涵蓋（第 8 章）；實作時連同上列一併處理前，先向使用者確認是否也移除。
+不開視窗的命令列用法保留，供 agent 使用：`bpmfix.py --bpm/--audio`、`midi_workbench.py --auto-first-beat --no-workbench`。
