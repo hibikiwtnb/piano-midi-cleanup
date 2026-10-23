@@ -8,3 +8,4 @@ librosa
 piano_transcription_inference
 python-rtmidi
 pillow
+sounddevice>=0.5
