@@ -121,9 +121,13 @@ class PianoRollView(ttk.Frame):
         ttk.Label(edit, text=tr('BPM')).pack(side='left')
         self.bpm_entry = ttk.Entry(edit, textvariable=self.bpm, width=8)
         self.bpm_entry.pack(side='left', padx=(4, 12))
+        for key, amount in (('<Up>', 0.1), ('<Right>', 0.1), ('<Down>', -0.1), ('<Left>', -0.1)):
+            self.bpm_entry.bind(key, lambda _event, amount=amount: self.step_bpm(amount))
         ttk.Label(edit, text=tr('第一拍 offset (秒)')).pack(side='left')
         self.offset_entry = ttk.Entry(edit, textvariable=self.offset, width=8)
         self.offset_entry.pack(side='left', padx=4)
+        for key, amount in (('<Up>', 0.1), ('<Down>', -0.1), ('<Right>', 0.005), ('<Left>', -0.005)):
+            self.offset_entry.bind(key, lambda _event, amount=amount: self.step_offset_seconds(amount))
         self.minus_button = ttk.Button(edit, text=tr('−1 beat'), command=lambda: self.step_offset(-1))
         self.minus_button.pack(side='left', padx=2)
         self.plus_button = ttk.Button(edit, text=tr('+1 beat'), command=lambda: self.step_offset(1))
@@ -335,6 +339,23 @@ class PianoRollView(ttk.Frame):
             self.canvas.tag_raise('grid', 'bg')
         if self.canvas.find_withtag('note'):
             self.canvas.tag_lower('grid', 'note')
+
+    def step_bpm(self, amount):
+        try:
+            value = float(self.bpm.get()) + amount
+            if value <= 0:
+                return 'break'
+            self.bpm.set('{:.2f}'.format(value))
+        except ValueError:
+            self.status.set(tr('請輸入有效 BPM 和 offset'))
+        return 'break'
+
+    def step_offset_seconds(self, amount):
+        try:
+            self.offset.set('{:.4f}'.format(float(self.offset.get()) + amount))
+        except ValueError:
+            self.status.set(tr('請輸入有效 BPM 和 offset'))
+        return 'break'
 
     def step_offset(self, direction):
         try:
