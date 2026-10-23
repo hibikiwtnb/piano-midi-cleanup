@@ -2,6 +2,8 @@
 
 2026-10-21，以 La la 勇気のうた 比較。機器是 Intel iMac Pro，只用 CPU。
 
+本曲 HiRes 字節版與 TX1310 重跑 Transkun 的逐音、小節圖及聽感比較，見 [2026-10-23 結果報告](lala-bytedance-transkun-comparison.md)。下表 A 是舊 m4a 字節版，與該報告使用的 HiRes 字節版不同。
+
 ## 比較對象
 
 | 代號 | 音源 | 鋼琴分離 | 轉譜模型 |
