@@ -1,5 +1,6 @@
 import argparse
 import bisect
+import math
 import os
 import sys
 import tkinter as tk
@@ -8,6 +9,7 @@ from tkinter import filedialog, messagebox
 
 import mido
 
+from clean_midi_rules import tick_seconds
 from hand_split_channels import (
     CHANNELS, HARD_SPAN, MAX_FINGERS, collect_notes, group_notes,
 )
@@ -27,6 +29,8 @@ HARMONY_MIN_PITCH_CLASSES = 3
 OUTER_STEP_SEMITONES = 2
 LEFT_CHANNELS = {CHANNELS['left'], CHANNELS['second_left']}
 HAND_NAMES = {channel: hand.replace('_', ' ') for hand, channel in CHANNELS.items()}
+# A trim may end a note's sound, sustain-pedal (CC64) tail included, at most this many seconds earlier.
+SUSTAIN_TOLERANCE_SECONDS = 0.1
 
 
 def hand_groups(notes):
@@ -38,11 +42,12 @@ def hand_groups(notes):
 
 
 class PedalGuard:
-    """Accept only note-end moves strictly inside one complete full-pedal interval."""
+    """Accept a note-end move only if the note's sound, pedal tail included, ends at most
+    SUSTAIN_TOLERANCE_SECONDS earlier."""
 
     def __init__(self, midi_file, notes):
+        self.seconds = tick_seconds(midi_file)
         self.intervals = defaultdict(list)
-        self.control_ticks = defaultdict(set)
         self.unsupported = set()
         controls = []
         note_events = []
@@ -78,7 +83,6 @@ class PedalGuard:
                 self.unsupported.add(channel)
             if message.control != 64:
                 continue
-            self.control_ticks[channel].add(tick)
             if message.value not in (0, 127):
                 self.unsupported.add(channel)
             state = message.value >= 64
@@ -87,6 +91,9 @@ class PedalGuard:
             elif not state and pedal_on[channel]:
                 self.intervals[channel].append((starts.pop(channel), tick))
             pedal_on[channel] = state
+        for channel, start in starts.items():
+            # A pedal that is never released sustains to the end.
+            self.intervals[channel].append((start, math.inf))
         self.starts = {channel: [start for start, _ in intervals]
                        for channel, intervals in self.intervals.items()}
         self.pitches = defaultdict(list)
@@ -95,22 +102,31 @@ class PedalGuard:
         self.rejected = defaultdict(set)
         self.accepted = set()
 
+    def sound_end(self, channel, tick, latest):
+        """Tick where a note released at tick stops sounding. A pedal change on the same tick may come
+        before or after the release, so take the latest or earliest outcome."""
+        intervals = self.intervals.get(channel, [])
+        index = bisect.bisect_right(self.starts.get(channel, []), tick) - 1
+        outcomes = {tick}
+        for start, end in intervals[max(index - 1, 0):index + 1]:
+            if start < tick < end:
+                return end
+            if tick in (start, end):
+                outcomes.add(end)
+        return max(outcomes) if latest else min(outcomes)
+
     def reason(self, note, tick):
         channel = note['start_message'].channel
         original_end = note['end_ticks']
         if tick <= note['start_ticks'] or channel in self.unsupported:
             return 'uncertain'
-        if tick in self.control_ticks[channel] or original_end in self.control_ticks[channel]:
-            return 'uncertain'
-        index = bisect.bisect_right(self.starts.get(channel, []), tick) - 1
-        if index < 0:
-            return 'pedal'
-        start, end = self.intervals[channel][index]
-        if not start < tick < original_end < end:
-            return 'pedal'
         for other in self.pitches[channel, note['note']]:
             if other is not note and other['start_ticks'] <= original_end and other['end_ticks'] >= tick:
                 return 'uncertain'
+        old_end = self.sound_end(channel, original_end, latest=True)
+        new_end = self.sound_end(channel, tick, latest=False)
+        if old_end != new_end and self.seconds(old_end) - self.seconds(new_end) > SUSTAIN_TOLERANCE_SECONDS:
+            return 'sustain'
         return None
 
     def allow(self, note, tick):
@@ -252,9 +268,9 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         'counts': counts,
         'peaks_before': peaks_before,
         'peaks_after': peaks_after,
-        'pedal_trimmed': len(guard.accepted),
-        'pedal_kept': len(guard.rejected['pedal'] - guard.accepted),
-        'uncertain_kept': len(guard.rejected['uncertain'] - guard.rejected['pedal'] - guard.accepted),
+        'sustain_trimmed': len(guard.accepted),
+        'sustain_kept': len(guard.rejected['sustain'] - guard.accepted),
+        'uncertain_kept': len(guard.rejected['uncertain'] - guard.rejected['sustain'] - guard.accepted),
     }
 
 
@@ -262,8 +278,8 @@ def format_trim_stats(stats):
     lines = [
         'MIDI overlap trim stats',
         'MIDI: {}'.format(stats['midi_path']),
-        'Notes shortened with pedal support: {}'.format(stats['pedal_trimmed']),
-        'Notes kept without continuous pedal support: {}'.format(stats['pedal_kept']),
+        'Notes shortened within sustain tolerance: {}'.format(stats['sustain_trimmed']),
+        'Notes kept to avoid ending the sound early: {}'.format(stats['sustain_kept']),
         'Notes kept with uncertain pedal or note events: {}'.format(stats['uncertain_kept']),
         'Fast figure: {}; {} or more onset groups each within {} beat'.format(
             ', '.join(hand.replace('_', ' ') for hand in stats['fast_figure_hands']),

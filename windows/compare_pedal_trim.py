@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,7 @@ import mido
 import hand_split_channels as split
 import postprocess
 import trim_overlaps as trim
+from clean_midi_rules import tick_seconds
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -79,9 +81,11 @@ def compare(before_path, after_path):
             'details': changed}
 
 
-def sustain_end_changes(comparison, path):
-    """Estimate changed damping times under binary MIDI sustain, not acoustic differences."""
+def sustain_end_changes(comparison, path, tolerance=0.0):
+    """Count damping times under binary MIDI sustain that move earlier by more than tolerance seconds;
+    not acoustic differences."""
     pedals = pedal_events(path)
+    seconds = tick_seconds(mido.MidiFile(path))
 
     def sustain_end(end, channel):
         down = False
@@ -96,8 +100,14 @@ def sustain_end_changes(comparison, path):
                 return end
         return None if down else end
 
-    return sum(sustain_end(item['old_end_tick'], item['channel']) !=
-               sustain_end(item['new_end_tick'], item['channel']) for item in comparison['details'])
+    def shift(item):
+        old = sustain_end(item['old_end_tick'], item['channel'])
+        new = sustain_end(item['new_end_tick'], item['channel'])
+        if old == new:
+            return 0.0
+        return math.inf if old is None or new is None else seconds(old) - seconds(new)
+
+    return sum(shift(item) > tolerance for item in comparison['details'])
 
 
 def arguments(path, settings):
@@ -199,14 +209,14 @@ def main():
                'pedal_events_legacy': len(pedal_events(paths['legacy'])),
                'pedal_events_latest': len(pedal_events(paths['latest'])),
                'pedal_unchanged_during_trim': pedal_events(original) == pedal_events(paths['latest']),
-               'pedal_kept': new_stats['pedal_kept'], 'uncertain_kept': new_stats['uncertain_kept'],
+               'sustain_kept': new_stats['sustain_kept'], 'uncertain_kept': new_stats['uncertain_kept'],
                'peak_keys_before': new_stats['peaks_before'], 'peak_keys_after': new_stats['peaks_after']}
         for label in ('legacy_trim', 'latest_trim'):
             row[label]['changed_basic_sustain_ends'] = sustain_end_changes(row[label], original)
         if not row['pedal_unchanged_during_trim']:
             raise AssertionError('Trimming changed pedal events.')
-        if row['latest_trim']['changed_basic_sustain_ends']:
-            raise AssertionError('A guarded trim changed the estimated MIDI sustain end.')
+        if sustain_end_changes(row['latest_trim'], original, trim.SUSTAIN_TOLERANCE_SECONDS):
+            raise AssertionError('A guarded trim ended the estimated MIDI sustain beyond the tolerance.')
         rows.append(row)
         (song_dir / 'comparison.json').write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps({'completed': number, 'file': source.name,
@@ -237,13 +247,13 @@ def main():
         'legacy_revision': LEGACY_REVISION, 'results': rows}, ensure_ascii=False, indent=2), encoding='utf-8')
     lines = ['# Pedal-aware trim comparison', '',
              'Same BPM-fixed inputs and saved GUI settings. No audio transcription or rendering.', '',
-             '| File | Notes | Legacy trimmed | Latest trimmed | Different ends | Pedal kept | Uncertain kept | Published |',
+             '| File | Notes | Legacy trimmed | Latest trimmed | Different ends | Sustain kept | Uncertain kept | Published |',
              '|---|---:|---:|---:|---:|---:|---:|---|']
     for row in rows:
         lines.append('| {} | {} | {} | {} | {} | {} | {} | {} |'.format(
             row['file'], row['latest_trim']['notes'], row['legacy_trim']['changed'],
             row['latest_trim']['changed'], row['trim_logic_difference']['changed'],
-            row['pedal_kept'], row['uncertain_kept'], row['published']))
+            row['sustain_kept'], row['uncertain_kept'], row['published']))
     lines += ['', 'Legacy trim is also run on the newly mapped input to isolate the trim logic.',
               'Full legacy outputs retain the previous missing pedal-channel mapping.',
               'Previous outputs, reports, per-note differences and complete run logs are retained.',
