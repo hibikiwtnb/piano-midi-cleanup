@@ -134,7 +134,7 @@ class Panel:
         self.main_tabs.bind('<<NotebookTabChanged>>', lambda _event: self.refresh_roll())
         self.build_files(ttk.Frame(processing, padding=8))
         body = ttk.Frame(processing, padding=(8, 0, 8, 8))
-        body.pack(fill='both', expand=False)
+        body.pack(fill='both', expand=True)
         steps = ttk.LabelFrame(body, text=tr('Steps'), padding=8)
         self.build_steps(steps)
         self.build_parameters(ttk.LabelFrame(body, text=tr('Thresholds'), padding=8))
@@ -198,7 +198,7 @@ class Panel:
         self.step_checks = {}
         for row, (name, label, _) in enumerate(SWITCHES):
             check = ttk.Checkbutton(frame, text=tr(label), variable=self.switches[name])
-            check.grid(row=row, column=0, columnspan=2, sticky='w')
+            check.grid(row=row, column=0, columnspan=2, sticky='w', pady=3)
             self.step_checks[name] = check
         row = len(SWITCHES)
         ttk.Label(frame, text=tr('Snapshots')).grid(row=row, column=0, sticky='w', pady=(8, 0))
@@ -252,7 +252,7 @@ class Panel:
 
     def add_parameter_rows(self, frame, parameters):
         for row, parameter in enumerate(parameters):
-            ttk.Label(frame, text=tr(parameter.label)).grid(row=row, column=0, sticky='w')
+            ttk.Label(frame, text=tr(parameter.label)).grid(row=row, column=0, sticky='w', pady=4)
             ttk.Entry(frame, textvariable=self.parameters[parameter.key], width=8).grid(row=row, column=1, padx=4)
             ttk.Label(frame, text=tr('default {}').format(postprocess.PARAMETER_DEFAULTS[parameter.key]),
                       foreground='gray').grid(row=row, column=2, sticky='w')
