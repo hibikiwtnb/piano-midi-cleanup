@@ -123,7 +123,7 @@ The Piano roll tab shows the selected MIDI and reloads it when you open the tab 
 - Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
 - Play, pause and click to seek; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
 - The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; run the processing again to rebuild `song_bpmfix_cleaned.mid`. Editing is off when the shown file has no matching `song_bpmfix.mid`.
-- `midi_playback.py` sends playback to a MIDI output port: on macOS / Linux a virtual port named `piano-midi-cleanup` that any synth can connect to; on Windows `Microsoft GS Wavetable Synth` by default, or any other installed output, which is remembered. Without an output the roll still opens, without sound.
+- Playback defaults to the built-in CoPiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new CoPiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
 
 ### `transcribe_mps.command`
 
@@ -481,7 +481,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ```
 
 ```bash
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow sounddevice
 ```
 
 `pianoroll_snapshot.py` draws with Pillow.
@@ -490,7 +490,7 @@ ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime piano roll playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `piano-midi-cleanup` virtual MIDI output port, which any synth can connect to; on Windows it defaults to `Microsoft GS Wavetable Synth`, and any installed MIDI output can be selected. Without an output the roll still opens, without sound.
+Realtime piano roll playback uses CoPiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL is included. On macOS / Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
 
 Vendored JS:
 
@@ -533,14 +533,14 @@ Create the shared Python 3.11 environment:
 ```bat
 py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow
+%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow sounddevice
 ```
 
 For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index from PyTorch (for example `--index-url https://download.pytorch.org/whl/cu126`). Essentia has no Windows wheels, so it is not installed; automatic BPM detection uses the vendored essentia.js (WebAssembly) instead and requires Node.js. Because audio decoding and resampling differ, results may differ slightly from the Python Essentia build.
 
 `ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Realtime piano roll playback goes to the `Microsoft GS Wavetable Synth` MIDI output through mido / python-rtmidi by default; no virtual MIDI port is opened. Another existing output can be chosen in the Piano roll tab. Without an output the roll still opens, without sound. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+Realtime piano roll playback defaults to CoPiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. CoPiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. The native DLL was built, but actual GUI/RDP audition has not been verified for this integration. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
 
 Not available on Windows:
 

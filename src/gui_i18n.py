@@ -11,6 +11,9 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'Preparing CoPiano...': 'Preparing CoPiano...',
+        'Could not start playback: {}': 'Could not start playback: {}',
+        'Playback output: {}': 'Playback output: {}',
         'Max polyphony': 'Max simultaneous keys',
         'most notes sounding': 'Max simultaneous keys (before → after)',
         'most keys held': 'Max simultaneous keys (before → after)',
@@ -69,6 +72,9 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'Preparing CoPiano...': '正在準備 CoPiano 鋼琴音源…',
+        'Could not start playback: {}': '無法播放：{}',
+        'Playback output: {}': '試聽輸出：{}',
         'Item': '項目', 'Value': '值', 'Details': '說明',
         'MIDI quality stats': '音符統計', 'MIDI BPMFix stats': '速度修正',
         'MIDI auto first beat stats': '自動對齊第一拍',
@@ -198,6 +204,9 @@ _TEXT = {
             '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
     },
     'zh_CN': {
+        'Preparing CoPiano...': '正在准备 CoPiano 钢琴音源…',
+        'Could not start playback: {}': '无法播放：{}',
+        'Playback output: {}': '试听输出：{}',
         'Item': '项目', 'Value': '值', 'Details': '说明',
         'MIDI quality stats': '音符统计', 'MIDI BPMFix stats': '速度修正',
         'MIDI auto first beat stats': '自动对齐第一拍',

@@ -1,12 +1,4 @@
-"""Realtime MIDI playback.
-
-On macOS and Linux a virtual output port named piano-midi-cleanup is created; any
-synth can listen to it. On Windows the events go to Microsoft GS Wavetable Synth,
-because python-rtmidi cannot create virtual ports there.
-
-MidiPlayback is ported from vsti-webui-wes7-pcm app/playback/service.py; the UDP
-output is replaced by the MIDI output below.
-"""
+"""Shared MIDI scheduling for built-in CoPiano audio and external MIDI ports."""
 
 import os
 import time
@@ -16,6 +8,7 @@ from threading import Event, Lock, Thread, current_thread
 import mido
 
 from hand_split_channels import CHANNELS
+from coopiano_output import OUTPUT_NAME as PIANO_OUTPUT_NAME, CoPianoOutput
 
 
 VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
@@ -24,12 +17,14 @@ HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
 
 def default_output_name():
-    return WINDOWS_OUTPUT_NAME if os.name == 'nt' else VIRTUAL_PORT_NAME
+    return PIANO_OUTPUT_NAME
 
 
 def open_output(port_name=None):
-    """Open the MIDI output to play on; return (output or None, label)."""
-    if port_name in (None, VIRTUAL_PORT_NAME) and os.name != 'nt':
+    """Open the selected audio/MIDI sink; never silently change the selection."""
+    if port_name in (None, PIANO_OUTPUT_NAME):
+        return CoPianoOutput(), PIANO_OUTPUT_NAME
+    if port_name == VIRTUAL_PORT_NAME and os.name != 'nt':
         try:
             output = mido.open_output(VIRTUAL_PORT_NAME, virtual=True)
         except Exception as error:
@@ -62,12 +57,15 @@ def open_output(port_name=None):
 
 
 def output_names():
-    """Return available MIDI output names, or an empty list if the backend is unavailable."""
+    """List CoPiano first, followed by existing MIDI outputs."""
     try:
-        return mido.get_output_names()
+        names = mido.get_output_names()
     except Exception as error:
         print('Cannot list MIDI outputs ({}).'.format(error))
-        return []
+        names = []
+    if os.name != 'nt' and VIRTUAL_PORT_NAME not in names:
+        names.insert(0, VIRTUAL_PORT_NAME)
+    return [PIANO_OUTPUT_NAME] + [name for name in names if name != PIANO_OUTPUT_NAME]
 
 
 @dataclass(frozen=True)
@@ -214,3 +212,6 @@ class MidiPlayback:
             # Release the sustain pedal too, or pedalled notes keep ringing after stop.
             self._send_message(mido.Message('control_change', channel=channel, control=64, value=0))
             self._send_message(mido.Message('control_change', channel=channel, control=123, value=0))
+        if self._output is not None and hasattr(self._output, 'panic'):
+            with self._output_lock:
+                self._output.panic()

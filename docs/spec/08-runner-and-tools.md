@@ -91,7 +91,10 @@
 
 ## 開發用腳本
 
+捲簾播放預設使用 CoPiano，輸出選單亦保留 MIDI 埠；兩者共用 `midi_playback.py` 的事件排程。`coopiano_output.py` 在背景初始化音源，透過原生橋接與 sounddevice 將 PCM 送到系統預設音訊裝置；初始化完成前不開始播放時鐘。暫停與切換輸出會停止事件並清除內建音源的延音。選擇以 `playback_output` 儲存，未設定時為 CoPiano。
+
 | 腳本 | 用途 |
 |---|---|
 | `windows/compare_pedal_trim.py` | 以既有測試曲比較舊版截斷與目前截斷，並檢查聲音提前量是否在容差內 |
 | `windows/capture_gui.py` | 擷取 GUI 畫面供文件使用 |
+| `windows/build_coopiano.cmd` | 建置隨專案分發的 Windows x64 CoPiano 播放 DLL；使用靜態 MSVC runtime |

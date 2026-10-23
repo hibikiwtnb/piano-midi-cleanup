@@ -102,6 +102,7 @@ class PianoRollView(ttk.Frame):
         self.play_started = None
         self.play_start_seconds = 0.0
         self.after_id = None
+        self.play_after_id = None
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
@@ -371,6 +372,16 @@ class PianoRollView(ttk.Frame):
             self.playback = MidiPlayback(self.output)
             if self.output is None:
                 self.status.set(tr('No sound: {} is not available').format(name))
+                return False
+        if self.output is None:
+            return False
+        if getattr(self.output, 'error', None):
+            self.status.set(tr('Could not start playback: {}').format(self.output.error))
+            return False
+        if not getattr(self.output, 'ready', True):
+            self.status.set(tr('Preparing CoPiano...'))
+            return False
+        return True
 
     def change_output(self, _event=None):
         self.release_output()
@@ -385,9 +396,16 @@ class PianoRollView(ttk.Frame):
         self.playback = None
 
     def play(self):
+        if self.play_after_id is not None:
+            self.after_cancel(self.play_after_id)
+        self.play_after_id = None
         if not self.path:
             return
-        self.ensure_playback()
+        if not self.ensure_playback():
+            if self.output is not None and not getattr(self.output, 'error', None):
+                self.play_after_id = self.after(100, self.play)
+            return
+        self.status.set(tr('Playback output: {}').format(self.output_var.get()))
         position = self.position_seconds()
         self.playback.play(self.path, position)
         self.apply_mix()
@@ -399,6 +417,9 @@ class PianoRollView(ttk.Frame):
             self.playback.set_mix([hand for hand, enabled in self.hand_enabled.items() if not enabled.get()], None)
 
     def stop(self):
+        if self.play_after_id is not None:
+            self.after_cancel(self.play_after_id)
+            self.play_after_id = None
         if self.playback is not None:
             self.playback.stop()
         self.play_start_seconds = self.position_seconds()
@@ -431,6 +452,9 @@ class PianoRollView(ttk.Frame):
         return x
 
     def update_playhead(self):
+        if self.play_started is not None and getattr(self.output, 'error', None):
+            self.stop()
+            self.status.set(tr('Could not start playback: {}').format(self.output.error))
         if self.play_started is not None:
             seconds = self.position_seconds()
             x = self.move_playhead(seconds)
