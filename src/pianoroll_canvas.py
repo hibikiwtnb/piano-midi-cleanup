@@ -6,6 +6,7 @@ import time
 import tkinter as tk
 from collections import defaultdict
 from tkinter import ttk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import mido
 
@@ -24,7 +25,7 @@ from note_changes import changes_path, load_changes
 KEYS_WIDTH = 44
 RULER_HEIGHT = 20
 ROW_HEIGHT = 9
-PEDAL_ROW_HEIGHT = 12
+PEDAL_ROW_HEIGHT = 18
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
 HORIZONTAL_SCROLL_INCREMENT = 24
@@ -110,6 +111,7 @@ class PianoRollView(ttk.Frame):
         self.changes = None
         self.changes_mtime = None
         self.change_items = {}
+        self.label_images = {}
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
@@ -311,6 +313,25 @@ class PianoRollView(ttk.Frame):
             widget.configure(state=state)
 
     # Drawing.
+    def draw_small_label(self, canvas, text, y, size):
+        """Supersample small labels, since Windows Tk Canvas text can be jagged."""
+        key = (text, size)
+        if key not in self.label_images:
+            try:
+                font = ImageFont.truetype('msjh.ttc', size * 4)
+            except OSError:
+                # Keep the platform's native font and script coverage outside Windows.
+                return canvas.create_text(KEYS_WIDTH - 3, y, text=text, anchor='e',
+                                          font=('TkDefaultFont', 8), fill='#334155')
+            left, top, right, bottom = font.getbbox(text)
+            width = max(1, math.ceil((right - left) / 4))
+            height = max(1, math.ceil((bottom - top) / 4))
+            image = Image.new('RGB', (width * 4, height * 4), 'white')
+            ImageDraw.Draw(image).text((-left, -top), text, font=font, fill='#334155')
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+            self.label_images[key] = ImageTk.PhotoImage(image, master=self)
+        return canvas.create_image(KEYS_WIDTH - 3, y, image=self.label_images[key], anchor='e')
+
     def reset_change_hint(self):
         mode = self.change_modes[self.change_mode.get()]
         if mode == 'none':
@@ -355,8 +376,7 @@ class PianoRollView(ttk.Frame):
                                        outline='#d5dae0')
             if pitch % 12 == 0:
                 self.canvas.create_line(0, y + ROW_HEIGHT, width, y + ROW_HEIGHT, fill='#dce2e8', tags='bg')
-                self.keys.create_text(KEYS_WIDTH - 3, y + ROW_HEIGHT / 2, text=note_name(pitch), anchor='e',
-                                      font=('TkDefaultFont', 7), fill='#435365')
+                self.draw_small_label(self.keys, note_name(pitch), y + ROW_HEIGHT / 2, 9)
 
         pps = self.pixels_per_second
         self.change_items.clear()
@@ -387,8 +407,7 @@ class PianoRollView(ttk.Frame):
                            key=lambda hand: HAND_ORDER.index(hand))
             label = tr('Pedal') if len(self.pedal_rows) == 1 else '/'.join(
                 tr(hand.replace('_', ' ')) for hand in names) or tr('Pedal')
-            self.pedal_labels.create_text(KEYS_WIDTH - 3, y + PEDAL_ROW_HEIGHT / 2, text=label, anchor='e',
-                                          font=('TkDefaultFont', 7), fill='#435365')
+            self.draw_small_label(self.pedal_labels, label, y + PEDAL_ROW_HEIGHT / 2, 12)
             for down, up in intervals:
                 self.pedal.create_rectangle(down * pps, y + 2, max(up * pps, down * pps + 2),
                                             y + PEDAL_ROW_HEIGHT - 2, fill='#8a94a6', outline='')
