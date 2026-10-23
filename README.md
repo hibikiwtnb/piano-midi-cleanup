@@ -89,7 +89,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 | 3 | 可彈性清理 | 關 | `--playable`；每手音數和跨度用 `--set` |
 | 4 | 分手 | 開 | `--no-split`、`--hands` |
 | 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
-| 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait / both` |
+| 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait` |
 
 - 可彈性清理只能配兩隻手，截斷重疊必須在分手之後；組合不成立時不會執行。
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
@@ -422,7 +422,7 @@ landscape：4 小節排成一行，1920 寬
 portrait：橫向圖順時針旋轉 90 度，4 小節由上往下連續排列，適合手機查看
 ```
 
-預設兩種都輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。
+每次選擇橫向或直向一種格式，輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。獨立截圖腳本預設輸出橫向；主面板預設不輸出。
 
 ```bash
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid

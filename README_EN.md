@@ -90,7 +90,7 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 | 3 | Playable reduction | Off | `--playable`; notes and span per hand with `--set` |
 | 4 | Hand split | On | `--no-split`, `--hands` |
 | 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
-| 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait / both` |
+| 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait` |
 
 - Playable reduction needs two hands and overlap trimming needs the hand split; other combinations do not run.
 - Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
@@ -421,7 +421,7 @@ landscape: four bars in one row, 1920 wide
 portrait: landscape image rotated 90 degrees clockwise, with four continuous bars running downward, for phones
 ```
 
-By default both are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git).
+Choose one orientation per export. Images are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git). The standalone script defaults to landscape; the panel defaults to no image export.
 
 ```bash
 python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid

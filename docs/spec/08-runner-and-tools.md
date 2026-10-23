@@ -11,7 +11,7 @@
 | 3 | 可彈性清理 | 關 | `--playable` |
 | 4 | 分手 | 開 | `--no-split`、`--hands 2/3/4` |
 | 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
-| 6 | 捲簾截圖 | 關 | `--snapshot landscape/portrait/both` |
+| 6 | 捲簾截圖 | 關 | `--snapshot landscape/portrait` |
 
 ### 重建語義
 
