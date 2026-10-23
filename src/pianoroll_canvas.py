@@ -474,6 +474,7 @@ class PianoRollView(ttk.Frame):
         first = math.floor(-offset / sixteenth)
         last = math.ceil((self.duration - offset) / sixteenth)
         key_times = [start for start, _ in self.key_signatures]
+        previous_key = None
         for index in range(first, last + 1):
             x = (offset + index * sixteenth) * pps
             if index % 16 == 0:
@@ -484,8 +485,10 @@ class PianoRollView(ttk.Frame):
                     key_index = bisect_right(key_times, offset + index * sixteenth + 1e-9) - 1
                     if key_index >= 0:
                         key = self.key_signatures[key_index][1]
-                        tonic = key[:-1] if key.endswith('m') else key
-                        label += ' ' + tonic + (' minor' if key.endswith('m') else ' Major')
+                        if key != previous_key:
+                            tonic = key[:-1] if key.endswith('m') else key
+                            label += ' ' + tonic + (' minor' if key.endswith('m') else ' Major')
+                            previous_key = key
                     self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=label, anchor='w',
                                            fill='#435365')
             elif index % 4 == 0:
