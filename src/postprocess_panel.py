@@ -176,9 +176,15 @@ class Panel:
         frame.columnconfigure(3, weight=1)
 
     def refresh_roll(self):
-        """Show the selected MIDI in the piano roll while its tab is open; it reloads only changed files."""
+        """Preview the processed result when available, otherwise the selected input."""
         if self.main_tabs.select() == str(self.roll) and not self.running:
-            self.roll.show(self.midi.get().strip())
+            midi_path = self.midi.get().strip()
+            if midi_path:
+                source_path = postprocess.source_midi_path(midi_path)
+                cleaned_path = postprocess.cleaned_path_for(postprocess.bpmfix_path_for(source_path))
+                if os.path.isfile(cleaned_path):
+                    midi_path = cleaned_path
+            self.roll.show(midi_path)
 
     def save_midi_output(self, name):
         self.settings['playback_output'] = name
