@@ -1,6 +1,7 @@
 """Tk Canvas piano roll for the main panel: playback, hands, sustain pedal and first-beat alignment."""
 
 import math
+from bisect import bisect_right
 import os
 import time
 import tkinter as tk
@@ -44,11 +45,12 @@ def first_beat_target(midi_path):
 
 
 def read_roll(midi_path):
-    """Notes as (start s, end s, pitch, channel, velocity), pedal-down intervals per channel, duration and BPM."""
+    """Read notes, pedal intervals, duration, BPM and timed key signatures."""
     midi = mido.MidiFile(midi_path)
     seconds = tick_seconds(midi)
     notes = []
     pedal_events = defaultdict(list)
+    key_signatures = []
     for track in midi.tracks:
         active = defaultdict(list)
         tick = 0
@@ -64,6 +66,8 @@ def read_roll(midi_path):
                     notes.append((seconds(start), seconds(tick), message.note, message.channel, velocity))
             elif message.type == 'control_change' and message.control == 64:
                 pedal_events[message.channel].append((tick, message.value >= 64))
+            elif message.type == 'key_signature':
+                key_signatures.append((seconds(tick), message.key))
     duration = max((end for _, end, _, _, _ in notes), default=0.0)
     pedals = {}
     for channel, events in pedal_events.items():
@@ -79,7 +83,8 @@ def read_roll(midi_path):
             intervals.append((seconds(down), max(duration, seconds(down))))
         pedals[channel] = intervals
         duration = max([duration] + [end for _, end in intervals])
-    return notes, pedals, duration, mido.tempo2bpm(midi_tempo(midi))
+    key_signatures.sort(key=lambda item: item[0])
+    return notes, pedals, duration, mido.tempo2bpm(midi_tempo(midi)), key_signatures
 
 
 def shade(color, velocity):
@@ -98,6 +103,7 @@ class PianoRollView(ttk.Frame):
         self.loaded_mtime = None
         self.target = None
         self.notes = []
+        self.key_signatures = []
         self.pedal_rows = []
         self.duration = 0.0
         self.pixels_per_second = DEFAULT_PIXELS_PER_SECOND
@@ -268,6 +274,7 @@ class PianoRollView(ttk.Frame):
             self.changes = None
             self.changes_mtime = None
             self.notes, self.pedal_rows, self.duration = [], [], 0.0
+            self.key_signatures = []
             self.set_editable(False)
             self.target_text.set('')
             self.draw()
@@ -285,7 +292,7 @@ class PianoRollView(ttk.Frame):
         same_file = midi_path == self.path
         view = (self.canvas.xview()[0], self.canvas.yview()[0])
         self.stop()
-        self.notes, pedals, self.duration, bpm = read_roll(midi_path)
+        self.notes, pedals, self.duration, bpm, self.key_signatures = read_roll(midi_path)
         self.path, self.loaded_mtime = midi_path, mtime
         self.changes = load_changes(midi_path)
         self.changes_mtime = record_mtime
@@ -466,13 +473,21 @@ class PianoRollView(ttk.Frame):
         sixteenth = beat / 4
         first = math.floor(-offset / sixteenth)
         last = math.ceil((self.duration - offset) / sixteenth)
+        key_times = [start for start, _ in self.key_signatures]
         for index in range(first, last + 1):
             x = (offset + index * sixteenth) * pps
             if index % 16 == 0:
                 self.canvas.create_line(x, 0, x, height, fill='#8996a5', width=2, tags='grid')
                 self.ruler.create_line(x, 0, x, RULER_HEIGHT, fill='#8996a5')
                 if index >= 0:
-                    self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=str(index // 16 + 1), anchor='w',
+                    label = str(index // 16 + 1)
+                    key_index = bisect_right(key_times, offset + index * sixteenth + 1e-9) - 1
+                    if key_index >= 0:
+                        key = self.key_signatures[key_index][1]
+                        tonic = key[:-1] if key.endswith('m') else key
+                        tonic = tonic.replace('#', '♯').replace('b', '♭')
+                        label += ' ' + tr('{} minor' if key.endswith('m') else '{} major').format(tonic)
+                    self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=label, anchor='w',
                                            fill='#435365')
             elif index % 4 == 0:
                 self.canvas.create_line(x, 0, x, height, fill='#d3d9e0', tags='grid')
