@@ -15,19 +15,25 @@ from threading import Event, Lock, Thread, current_thread
 
 import mido
 
+from hand_split_channels import CHANNELS
+
 
 VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
 WINDOWS_OUTPUT_NAME = 'Microsoft GS Wavetable Synth'
-LEFT_HAND_CHANNELS = (2, 3)
+HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
+
+
+def default_output_name():
+    return WINDOWS_OUTPUT_NAME if os.name == 'nt' else VIRTUAL_PORT_NAME
 
 
 def open_output(port_name=None):
     """Open the MIDI output to play on; return (output or None, label)."""
-    if port_name is None and os.name != 'nt':
+    if port_name in (None, VIRTUAL_PORT_NAME) and os.name != 'nt':
         try:
             output = mido.open_output(VIRTUAL_PORT_NAME, virtual=True)
         except Exception as error:
-            print('Cannot open virtual MIDI port {} ({}); the workbench opens without sound.'.format(
+            print('Cannot open virtual MIDI port {} ({}); playback has no sound.'.format(
                 VIRTUAL_PORT_NAME, error))
             return None, VIRTUAL_PORT_NAME
         print('Playback output: {}'.format(VIRTUAL_PORT_NAME))
@@ -37,7 +43,7 @@ def open_output(port_name=None):
     try:
         names = mido.get_output_names()
     except Exception as error:
-        print('Cannot list MIDI outputs ({}); the workbench opens without sound.'.format(error))
+        print('Cannot list MIDI outputs ({}); playback has no sound.'.format(error))
         return None, wanted
     name = next((candidate for candidate in names if candidate == wanted), None)
     if name is None:
@@ -46,11 +52,11 @@ def open_output(port_name=None):
         try:
             output = mido.open_output(name)
         except Exception as error:
-            print('Cannot open {} ({}); the workbench opens without sound.'.format(name, error))
+            print('Cannot open {} ({}); playback has no sound.'.format(name, error))
             return None, wanted
         print('Playback output: {}'.format(name))
         return output, name
-    print('{} not found; the workbench opens without sound.'.format(wanted))
+    print('{} not found; playback has no sound.'.format(wanted))
     print('Available MIDI outputs: {}'.format(', '.join(names) if names else '(none)'))
     return None, wanted
 
@@ -72,7 +78,8 @@ class MidiEvent:
 
 
 def hand_for_channel(channel):
-    return 'left' if channel in LEFT_HAND_CHANNELS else 'right'
+    """Hand name of a hand-split channel; other channels count as the right hand."""
+    return HAND_BY_CHANNEL.get(channel, 'right')
 
 
 def read_midi_events(path):

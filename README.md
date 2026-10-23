@@ -1,7 +1,7 @@
 # Piano MIDI Cleanup
 [English README](README_EN.md)
 
-把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（Tk Canvas 工作台即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
+把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（主面板鋼琴捲簾即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
 
 也附轉錄入口（`src/transcribe.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
 
@@ -57,7 +57,7 @@ song_bpmfix_cleaned.mid
 | 順序 | 工具 / 腳本 | 處理目的 | 備註 |
 |:---:|:---|:---|:---|
 | **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
-| **Step 1** | `midi_workbench.command` | 對齊第一拍（自動或手動） | 第一拍有移動時會一併重寫調號 |
+| **Step 1** | 主面板「鋼琴捲簾」頁 | 對齊第一拍（手動） | 寫入 `song_bpmfix.mid` 並重寫調號，之後重新執行後處理 |
 | **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
 | 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 做一個人彈的譜時，在分手前執行 |
 | **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
@@ -70,7 +70,7 @@ song_bpmfix_cleaned.mid
 非交互執行（agent 用）：
 
 ```bash
-python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/midi_workbench.py song_bpmfix.mid
 python src/key_signature.py song_bpmfix_cleaned.mid
 python src/playable_reduction.py song_bpmfix_cleaned.mid
 python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
@@ -94,8 +94,8 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 - 可彈性清理只能配兩隻手，截斷重疊必須在分手之後；組合不成立時不會執行。
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
 
-報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。取消第一拍視窗不改報告。
-- 手動調第一拍請在工作台開 `song_bpmfix.mid`。如果第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
+報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。
+- 主面板的鋼琴捲簾把手動調整的第一拍寫入 `song_bpmfix.mid`。舊報告若記錄第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
 
 閾值用 `--set 名稱=值` 覆蓋（可重複），`--list-parameters` 列出全部可調的閾值和預設值；有改的值會記在報告的步驟清單裡。可彈性清理的每手音數和跨度也在這裡（`playable.max_notes`、`playable.max_span`）。
 
@@ -117,6 +117,13 @@ python src/postprocess.py --list-parameters
 - 上次的選擇和預設組合存在 `~/.piano-midi-cleanup-panel.json`。
 - 面板只是把選擇轉成 `postprocess.py` 的命令列，執行時會先印出這行命令。
 
+「鋼琴捲簾」頁顯示目前選的 MIDI，切換到這頁或處理完成時自動重新載入，保留捲動位置與縮放：
+
+- 音條依手上色（右手藍、第二右手橙、第二左手紫、左手綠，與 PNG 截圖一致），深淺表示力度；上方標小節號，左側標音名，底部是延音踏板（CC64）踩下的區間。
+- 播放、暫停、點擊定位；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動。可依手關閉聲音。
+- 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號，之後重新執行後處理即可重建 `song_bpmfix_cleaned.mid`。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
+- 播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS／Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`，也可選本機其他 MIDI 輸出埠，選擇會記住。找不到輸出埠時仍可檢視，但沒有聲音。
+
 ### `transcribe_mps.command`
 
 保留的 Apple GPU / MPS 支持版入口，流程與 `transcribe.command` 相同，但設備選擇順序為：
@@ -129,24 +136,13 @@ MPS -> CUDA -> CPU
 
 ## Standalone Tools
 
-### `bpmfix.command`
+### `bpmfix.py`
 
-BPM 修正，再在 Tk 工作台調整 BPM 和第一拍。
+BPM 修正、自動對齊第一拍、寫入調號，輸出 `*_bpmfix.mid`。只有命令列用法（給 agent 或腳本），一般使用請用統一執行器或主面板；手動調整第一拍在主面板的鋼琴捲簾。
 
-使用方式：
+寫入第一拍時依 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會更新至 `*_stats.txt`。
 
-1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
-2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
-3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
-4. Tk MIDI 工作台顯示鋼琴捲簾和拍線，可設定 BPM / 第一拍 offset、按拍移動、播放、暫停、點擊定位，並縮放與捲動。播放時 MIDI 即時送到 MIDI 輸出埠。
-5. 調好 BPM 和第一拍後按 Apply，直接覆寫 `*_bpmfix.mid`；按 Cancel 則不修改。
-6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
-
-工作台由 `pianoroll_canvas.py` 繪製，直接呼叫 Python MIDI 與播放函式，沒有本機 HTTP server 或瀏覽器。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`；鋼琴卷軸也可直接選擇本機 MIDI 輸出埠（例如已安裝 VST MIDI System Synth 後選 `VST MIDI Synth (port A)`）。命令列可用 `--midi-port <名稱>` 指定輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
-
-寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會更新至 `*_stats.txt`。
-
-`transcribe.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號、不開工作台。
+`transcribe.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號。
 
 自動對齊第一拍只看 BPM 修正後的 MIDI（不需要原音訊），假設固定 4/4：
 
@@ -157,16 +153,16 @@ BPM 修正，再在 Tk 工作台調整 BPM 和第一拍。
 4. 取離 0 秒最近的小節線，已對齊的 MIDI 再跑一次幾乎不動
 ```
 
-結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）更新至 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在工作台用 ±1 拍修正。
+結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）更新至 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在主面板的鋼琴捲簾用 ±1 拍修正。
 
-agent 或腳本可非交互執行（有 `input_midi` 時不開任何對話框，預設也不開工作台）：
+命令列用法：
 
 ```bash
 python src/bpmfix.py song.mid --audio song.flac
 ```
 
 ```bash
-python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature --workbench
+python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature
 ```
 
 自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
@@ -339,21 +335,12 @@ python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right se
 
 `--fast-figure-hands` 指定套用快速音型的手。左手預設不套，因為它也會截斷分解和弦下按著的低音。
 
-### `midi_workbench.command`
+### `midi_workbench.py`
 
-不經過 BPM 修正，直接用瀏覽器 MIDI 工作台打開任一 MIDI，調整 BPM 和第一拍（介面、MIDI 輸出埠即時播放與寫入方式同 `bpmfix.command` 的工作台）。
-
-使用方式：
-
-1. 選擇 MIDI（通常是 `*_bpmfix.mid` 或 `*_bpmfix_cleaned.mid`）。
-2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
-
-結果會更新至來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。第一拍有移動時會重新寫入調號（`--no-key-signature` 關閉）。
-
-非交互執行（agent 用）：只自動對齊、不開工作台並直接覆寫：
+不經過 BPM 修正，依音符自動把第一拍對齊到小節線，直接覆寫所選檔案（通常是 `song_bpmfix.mid`）；第一拍有移動時重新寫入調號（`--no-key-signature` 關閉）。只有命令列用法，手動調整請用主面板的鋼琴捲簾。
 
 ```bash
-python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-workbench
+python src/midi_workbench.py song_bpmfix.mid
 ```
 
 ### `key_signature.command`
@@ -453,7 +440,6 @@ postprocess.py
 postprocess_panel.py
 first_beat.py
 pianoroll_canvas.py
-first_beat_ui.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
@@ -471,7 +457,6 @@ pianoroll_snapshot.py
 
 ```text
 bpmfix_utils.py
-first_beat_ui.py
 midi_playback.py
 midi_stats.py
 detect_chords_tonal.js
@@ -513,7 +498,7 @@ ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `piano-midi-cleanup` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 預設使用 `Microsoft GS Wavetable Synth`，鋼琴卷軸可選擇其他已安裝 MIDI 輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
+鋼琴捲簾的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `piano-midi-cleanup` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 預設使用 `Microsoft GS Wavetable Synth`，也可選擇其他已安裝 MIDI 輸出埠。找不到輸出埠時仍可檢視，但沒有聲音。
 
 Vendored JS:
 
@@ -540,7 +525,7 @@ PIANO_MIDI_CLEANUP_BPM_PYTHON
 
 ## Windows
 
-每個工具在倉庫的 `windows/` 目錄都有同名的 `.cmd` 啟動檔（例如 `windows/transcribe.cmd`、`windows/bpmfix.cmd`），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/transcribe.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
+各工具在倉庫的 `windows/` 目錄有同名的 `.cmd` 啟動檔（例如 `windows/transcribe.cmd`；只有命令列用法的 `bpmfix.py`、`midi_workbench.py` 沒有），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/transcribe.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
 
 ```text
 %USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
@@ -563,7 +548,7 @@ py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
 
 `ffmpeg` 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
-工作台的即時播放會送到 `Microsoft GS Wavetable Synth` 這個 MIDI 輸出（透過 mido / python-rtmidi），不建立虛擬 MIDI 埠；可用 `--midi-port <名稱>` 改用其他既有輸出。找不到輸出時工作台仍會開啟，但沒有聲音。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
+鋼琴捲簾的即時播放預設送到 `Microsoft GS Wavetable Synth` 這個 MIDI 輸出（透過 mido / python-rtmidi），不建立虛擬 MIDI 埠；可在捲簾頁改選其他既有輸出。找不到輸出時仍可檢視，但沒有聲音。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
 
 Windows 上不支援：
 

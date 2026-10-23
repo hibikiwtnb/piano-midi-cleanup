@@ -47,9 +47,9 @@
 
 ### 手動調整
 
-工作台（`src/pianoroll_canvas.py`，Tk Canvas 捲簾）可邊播放邊調 BPM 與第一拍；播放經 MIDI 輸出埠（`src/midi_playback.py`）。
+主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。儲存時一律寫入同一首的 `song_bpmfix.mid`，並重寫調號；之後重新執行後處理，才會重建 `song_bpmfix_cleaned.mid`。顯示的檔案是 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 且找得到對應的 `song_bpmfix.mid` 時才能調整。
 
-手動調整應在 `song_bpmfix.mid` 上做。若在 `song_bpmfix_cleaned.mid` 上調，重建會把它蓋掉，執行器偵測到報告中有這類記錄時會停下來，除非加 `--discard-cleaned-edits`。
+舊版曾允許在 `song_bpmfix_cleaned.mid` 上手動調整；報告中留有這類記錄時，重建會蓋掉它，執行器會停下來，除非加 `--discard-cleaned-edits`。
 
 ## 報告
 

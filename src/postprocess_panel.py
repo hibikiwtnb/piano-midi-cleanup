@@ -11,9 +11,8 @@ from tkinter import font as tkfont
 
 from gui_i18n import LANGUAGES, get_language, set_language, tr, tr_report
 import postprocess
-from first_beat import append_first_beat_stats
 from midi_stats import source_stats_path_for
-from pianoroll_canvas import PianoRollWorkbench
+from pianoroll_canvas import PianoRollView
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
 
 
@@ -95,12 +94,20 @@ class Panel:
         self.status = tk.StringVar(value=tr('Ready'))
         self.status_fragment = ''
         self.report_text = ''
+        self.roll = None
         self.build_ui()
         self.load_existing_report()
+        root.protocol('WM_DELETE_WINDOW', self.close)
         root.after(100, self.drain)
+
+    def close(self):
+        self.roll.shutdown()
+        self.root.destroy()
 
     def build_ui(self):
         selected_tab = self.main_tabs.index('current') if hasattr(self, 'main_tabs') else 0
+        if self.roll is not None:
+            self.roll.shutdown()
         for child in self.root.winfo_children():
             child.destroy()
         self.root.title(tr('Piano MIDI Cleanup'))
@@ -116,8 +123,13 @@ class Panel:
         self.main_tabs.pack(fill='both', expand=True, padx=8, pady=(8, 0))
         processing = ttk.Frame(self.main_tabs)
         report = ttk.Frame(self.main_tabs, padding=8)
+        self.roll = PianoRollView(self.main_tabs, midi_port=self.settings.get('midi_output'),
+                                  on_output=self.save_midi_output, on_first_beat=self.first_beat_saved)
+        self.roll.configure(padding=8)
         self.main_tabs.add(processing, text=tr('Processing'))
+        self.main_tabs.add(self.roll, text=tr('Piano roll'))
         self.main_tabs.add(report, text=tr('Detailed report'))
+        self.main_tabs.bind('<<NotebookTabChanged>>', lambda _event: self.refresh_roll())
         self.build_files(ttk.Frame(processing, padding=8))
         body = ttk.Frame(processing, padding=(8, 0, 8, 8))
         body.pack(fill='both', expand=False)
@@ -144,7 +156,8 @@ class Panel:
         midi_entry.bind('<FocusOut>', self.load_existing_report)
         midi_entry.bind('<Return>', self.load_existing_report)
         ttk.Button(frame, text=tr('Choose...'), command=self.choose_midi).grid(row=0, column=4)
-        ttk.Button(frame, text=tr('Piano Roll / First Beat'), command=self.open_first_beat).grid(row=0, column=5, padx=(6, 0))
+        ttk.Button(frame, text=tr('Piano Roll / First Beat'),
+                   command=lambda: self.main_tabs.select(self.roll)).grid(row=0, column=5, padx=(6, 0))
         ttk.Radiobutton(frame, text=tr('Reuse song_bpmfix.mid'), variable=self.source, value='reuse',
                         command=self.update_source).grid(row=1, column=1, sticky='w')
         ttk.Radiobutton(frame, text=tr('Known BPM'), variable=self.source, value='bpm',
@@ -159,20 +172,17 @@ class Panel:
         self.audio_button.grid(row=3, column=4)
         frame.columnconfigure(3, weight=1)
 
-    def open_first_beat(self):
-        midi_path = self.midi.get().strip()
-        if not os.path.isfile(midi_path):
-            messagebox.showerror(tr('Piano MIDI Cleanup'), tr('Choose a MIDI file first.'))
-            return
-        window = tk.Toplevel(self.root)
+    def refresh_roll(self):
+        """Show the selected MIDI in the piano roll while its tab is open; it reloads only changed files."""
+        if self.main_tabs.select() == str(self.roll) and not self.running:
+            self.roll.show(self.midi.get().strip())
 
-        def completed(result):
-            if result is None:
-                return
-            append_first_beat_stats(midi_path, result)
-            self.load_existing_report()
+    def save_midi_output(self, name):
+        self.settings['midi_output'] = name
+        save_settings(self.settings)
 
-        PianoRollWorkbench(window, midi_path, on_complete=completed)
+    def first_beat_saved(self, _target):
+        self.load_existing_report(update_status=False)
 
     def build_steps(self, frame):
         frame.pack(side='left', fill='y', padx=(0, 8))
@@ -346,6 +356,7 @@ class Panel:
         self.report_tree.yview_moveto(0)
         if update_status:
             self.status.set(message)
+        self.refresh_roll()
 
     def choose_audio(self):
         path = filedialog.askopenfilename(title=tr('Choose source audio for BPM detection'),
@@ -459,6 +470,7 @@ class Panel:
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
                              audio=self.audio.get(), last=preset)
         save_settings(self.settings)
+        self.roll.stop()
         self.running = True
         self.run_button.configure(state='disabled')
         self.status_fragment = ''

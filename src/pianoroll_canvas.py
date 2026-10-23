@@ -1,162 +1,393 @@
-"""Compact Tk Canvas piano roll for first-beat adjustment."""
+"""Tk Canvas piano roll for the main panel: playback, hands, sustain pedal and first-beat alignment."""
 
 import math
+import os
 import time
 import tkinter as tk
+from collections import defaultdict
 from tkinter import ttk
 
 import mido
 
+from bpmfix_utils import bpmfix_path_for
+from clean_midi_rules import tick_seconds
+from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
+from hand_split_channels import CHANNELS
+from key_signature import apply_key_signatures
+from midi_playback import MidiPlayback, default_output_name, open_output, output_names
+from midi_stats import note_name
+from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
-from first_beat import build_bpm_fixed_midi, midi_tempo
-from midi_playback import MidiPlayback, open_output, output_names, read_midi_events
 
 
-class PianoRollWorkbench:
-    def __init__(self, root, midi_path, midi_port=None, on_complete=None):
-        self.root = root
-        self.midi_path = midi_path
-        self.on_complete = on_complete
-        self.output, self.backend = open_output(midi_port)
-        self.playback = MidiPlayback(self.output)
-        self.outputs = output_names()
-        if self.backend not in self.outputs:
-            self.outputs.insert(0, self.backend)
-        self.output_var = tk.StringVar(value=self.backend)
-        self.bpm = tk.StringVar()
-        self.offset = tk.StringVar(value='0')
-        self.status = tk.StringVar(value=tr('就緒 · {}').format(self.backend))
-        self.pixels_per_second = 100.0
-        self.row_height = 9
-        self.notes, self.duration = self.read_notes()
-        midi = mido.MidiFile(midi_path)
-        self.bpm.set('{:.2f}'.format(mido.tempo2bpm(midi_tempo(midi))))
+KEYS_WIDTH = 44
+RULER_HEIGHT = 20
+ROW_HEIGHT = 9
+PEDAL_ROW_HEIGHT = 12
+PITCHES = 128
+DEFAULT_PIXELS_PER_SECOND = 100.0
+HAND_ORDER = ('right', 'second_right', 'second_left', 'left')
+HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
-        root.title(tr('First Beat · {}').format(midi_path))
-        root.geometry('1000x620')
-        controls = ttk.Frame(root, padding=8)
-        controls.pack(fill='x')
-        ttk.Label(controls, text=tr('BPM')).pack(side='left')
-        ttk.Entry(controls, textvariable=self.bpm, width=8).pack(side='left', padx=(4, 12))
-        ttk.Label(controls, text=tr('第一拍 offset (秒)')).pack(side='left')
-        ttk.Entry(controls, textvariable=self.offset, width=8).pack(side='left', padx=4)
-        ttk.Button(controls, text=tr('−1 beat'), command=lambda: self.step_offset(-1)).pack(side='left', padx=2)
-        ttk.Button(controls, text=tr('+1 beat'), command=lambda: self.step_offset(1)).pack(side='left', padx=2)
-        ttk.Button(controls, text=tr('Play'), command=self.play).pack(side='left', padx=(12, 2))
-        ttk.Button(controls, text=tr('Pause'), command=self.pause).pack(side='left', padx=2)
-        ttk.Button(controls, text=tr('Apply'), command=self.apply).pack(side='right', padx=2)
-        ttk.Button(controls, text=tr('Cancel'), command=self.cancel).pack(side='right', padx=2)
-        output_row = ttk.Frame(root, padding=(8, 0, 8, 4))
-        output_row.pack(fill='x')
-        ttk.Label(output_row, text=tr('MIDI Output')).pack(side='left')
-        self.output_selector = ttk.Combobox(
-            output_row, textvariable=self.output_var, values=self.outputs,
-            width=38, state='readonly' if self.outputs else 'disabled',
-        )
-        self.output_selector.pack(side='left', padx=(8, 0))
-        self.output_selector.bind('<<ComboboxSelected>>', self.change_output)
-        ttk.Label(root, textvariable=self.status, padding=(8, 0)).pack(fill='x')
 
-        container = ttk.Frame(root, padding=8)
-        container.pack(fill='both', expand=True)
-        self.canvas = tk.Canvas(container, background='#fbfcfe', highlightthickness=0,
-                                xscrollincrement=24, yscrollincrement=self.row_height)
-        horizontal = ttk.Scrollbar(container, orient='horizontal', command=self.canvas.xview)
-        vertical = ttk.Scrollbar(container, orient='vertical', command=self.canvas.yview)
-        self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
-        self.canvas.grid(row=0, column=0, sticky='nsew')
-        vertical.grid(row=0, column=1, sticky='ns')
-        horizontal.grid(row=1, column=0, sticky='ew')
-        container.rowconfigure(0, weight=1)
-        container.columnconfigure(0, weight=1)
-        self.canvas.bind('<Button-1>', self.seek_click)
-        self.canvas.bind('<Control-MouseWheel>', self.zoom)
-        self.canvas.bind('<Alt-MouseWheel>', self.zoom)
-        self.canvas.bind('<Shift-MouseWheel>', lambda event: self.canvas.xview_scroll(-1 if event.delta > 0 else 1, 'units'))
-        self.canvas.bind('<MouseWheel>', self.scroll_vertical)
-        self.draw()
+def first_beat_target(midi_path):
+    """song_bpmfix.mid of the song when the shown MIDI shares its timeline, else None."""
+    base = os.path.splitext(midi_path)[0]
+    for suffix in ('_bpmfix_cleaned', '_bpmfix'):
+        if base.endswith(suffix):
+            target = bpmfix_path_for(base[:-len(suffix)] + '.mid')
+            return target if os.path.isfile(target) else None
+    return None
+
+
+def read_roll(midi_path):
+    """Notes as (start s, end s, pitch, channel, velocity), pedal-down intervals per channel, duration and BPM."""
+    midi = mido.MidiFile(midi_path)
+    seconds = tick_seconds(midi)
+    notes = []
+    pedal_events = defaultdict(list)
+    active = defaultdict(list)
+    for track in midi.tracks:
+        tick = 0
+        for message in track:
+            tick += message.time
+            if message.type == 'note_on' and message.velocity > 0:
+                active[message.channel, message.note].append((tick, message.velocity))
+            elif message.type in ('note_on', 'note_off'):
+                starts = active[message.channel, message.note]
+                if starts:
+                    start, velocity = starts.pop(0)
+                    notes.append((seconds(start), seconds(tick), message.note, message.channel, velocity))
+            elif message.type == 'control_change' and message.control == 64:
+                pedal_events[message.channel].append((tick, message.value >= 64))
+    duration = max((end for _, end, _, _, _ in notes), default=0.0)
+    pedals = {}
+    for channel, events in pedal_events.items():
+        intervals = []
+        down = None
+        for tick, state in sorted(events, key=lambda item: item[0]):
+            if state and down is None:
+                down = tick
+            elif not state and down is not None:
+                intervals.append((seconds(down), seconds(tick)))
+                down = None
+        if down is not None:
+            intervals.append((seconds(down), max(duration, seconds(down))))
+        pedals[channel] = intervals
+        duration = max([duration] + [end for _, end in intervals])
+    return notes, pedals, duration, mido.tempo2bpm(midi_tempo(midi))
+
+
+def shade(color, velocity):
+    """Blend a hex colour towards white for soft notes."""
+    strength = 0.35 + 0.65 * velocity / 127
+    channels = [int(color[index:index + 2], 16) for index in (1, 3, 5)]
+    return '#' + ''.join('{:02x}'.format(round(255 - (255 - value) * strength)) for value in channels)
+
+
+class PianoRollView(ttk.Frame):
+    def __init__(self, master, midi_port=None, on_output=None, on_first_beat=None):
+        super().__init__(master)
+        self.on_output = on_output
+        self.on_first_beat = on_first_beat
+        self.path = None
+        self.loaded_mtime = None
+        self.target = None
+        self.notes = []
+        self.pedal_rows = []
+        self.duration = 0.0
+        self.pixels_per_second = DEFAULT_PIXELS_PER_SECOND
+        self.output = None
+        self.playback = None
         self.play_started = None
         self.play_start_seconds = 0.0
-        self.closed = False
-        root.protocol('WM_DELETE_WINDOW', self.cancel)
-        root.after(100, self.update_playhead)
+        self.after_id = None
 
-    def read_notes(self):
-        events, _, duration = read_midi_events(self.midi_path)
-        active = {}
-        notes = []
-        for event in events:
-            message = event.message
-            if message.type == 'note_on' and message.velocity > 0:
-                active.setdefault((message.channel, message.note), []).append((event.seconds, event.track_id))
-            elif message.type in ('note_on', 'note_off'):
-                starts = active.get((message.channel, message.note))
-                if starts:
-                    start, hand = starts.pop(0)
-                    notes.append((start, max(event.seconds, start + 0.01), message.note, hand))
-        return notes, max(duration, max((note[1] for note in notes), default=0.0))
+        self.bpm = tk.StringVar()
+        self.offset = tk.StringVar(value='0')
+        self.output_var = tk.StringVar(value=midi_port or default_output_name())
+        self.shading = tk.BooleanVar(value=True)
+        self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}
+        self.target_text = tk.StringVar()
+        self.status = tk.StringVar(value=tr('Ready'))
+        self.build()
+        self.bpm.trace_add('write', lambda *_: self.draw_grid())
+        self.offset.trace_add('write', lambda *_: self.draw_grid())
+        self.after_id = self.after(50, self.update_playhead)
 
+    def build(self):
+        edit = ttk.Frame(self, padding=(0, 0, 0, 4))
+        edit.pack(fill='x')
+        ttk.Label(edit, text=tr('BPM')).pack(side='left')
+        self.bpm_entry = ttk.Entry(edit, textvariable=self.bpm, width=8)
+        self.bpm_entry.pack(side='left', padx=(4, 12))
+        ttk.Label(edit, text=tr('第一拍 offset (秒)')).pack(side='left')
+        self.offset_entry = ttk.Entry(edit, textvariable=self.offset, width=8)
+        self.offset_entry.pack(side='left', padx=4)
+        self.minus_button = ttk.Button(edit, text=tr('−1 beat'), command=lambda: self.step_offset(-1))
+        self.minus_button.pack(side='left', padx=2)
+        self.plus_button = ttk.Button(edit, text=tr('+1 beat'), command=lambda: self.step_offset(1))
+        self.plus_button.pack(side='left', padx=2)
+        self.apply_button = ttk.Button(edit, text=tr('Apply'), command=self.apply)
+        self.apply_button.pack(side='left', padx=(12, 2))
+        ttk.Label(edit, textvariable=self.target_text, foreground='gray').pack(side='left', padx=8)
+
+        play = ttk.Frame(self, padding=(0, 0, 0, 4))
+        play.pack(fill='x')
+        ttk.Button(play, text=tr('Play'), command=self.play).pack(side='left', padx=(0, 2))
+        ttk.Button(play, text=tr('Pause'), command=self.stop).pack(side='left', padx=2)
+        ttk.Label(play, text=tr('MIDI Output')).pack(side='left', padx=(12, 4))
+        outputs = output_names()
+        if self.output_var.get() not in outputs:
+            outputs.insert(0, self.output_var.get())
+        selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=32, state='readonly')
+        selector.pack(side='left')
+        selector.bind('<<ComboboxSelected>>', self.change_output)
+        for hand in HAND_ORDER:
+            ttk.Checkbutton(play, text=tr(hand.replace('_', ' ')), variable=self.hand_enabled[hand],
+                            command=self.apply_mix).pack(side='left', padx=(8, 0))
+        ttk.Checkbutton(play, text=tr('Velocity shading'), variable=self.shading,
+                        command=self.draw).pack(side='left', padx=(12, 0))
+        ttk.Label(self, textvariable=self.status).pack(fill='x')
+
+        roll = ttk.Frame(self)
+        roll.pack(fill='both', expand=True)
+        self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background='#eef1f5', highlightthickness=0)
+        self.keys = tk.Canvas(roll, width=KEYS_WIDTH, background='white', highlightthickness=0,
+                              yscrollincrement=ROW_HEIGHT)
+        self.canvas = tk.Canvas(roll, width=800, height=360, background='#fbfcfe', highlightthickness=0,
+                                xscrollincrement=24, yscrollincrement=ROW_HEIGHT)
+        self.pedal_labels = tk.Canvas(roll, width=KEYS_WIDTH, height=PEDAL_ROW_HEIGHT, background='white',
+                                      highlightthickness=0)
+        self.pedal = tk.Canvas(roll, height=PEDAL_ROW_HEIGHT, background='#f6f7f9', highlightthickness=0)
+        vertical = ttk.Scrollbar(roll, orient='vertical', command=self.yview)
+        horizontal = ttk.Scrollbar(roll, orient='horizontal', command=self.xview)
+        self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+        self.ruler.grid(row=0, column=1, sticky='ew')
+        self.keys.grid(row=1, column=0, sticky='ns')
+        self.canvas.grid(row=1, column=1, sticky='nsew')
+        vertical.grid(row=1, column=2, sticky='ns')
+        self.pedal_labels.grid(row=2, column=0, sticky='ns')
+        self.pedal.grid(row=2, column=1, sticky='ew')
+        horizontal.grid(row=3, column=1, sticky='ew')
+        roll.rowconfigure(1, weight=1)
+        roll.columnconfigure(1, weight=1)
+
+        for widget in (self.canvas, self.ruler, self.pedal):
+            widget.bind('<Button-1>', self.seek_click)
+        for widget in (self.canvas, self.keys, self.ruler, self.pedal):
+            widget.bind('<MouseWheel>', self.wheel)
+        self.set_editable(False)
+
+    # Scrolling and zoom keep every canvas on the same time or pitch axis.
+    def xview(self, *args):
+        for widget in (self.canvas, self.ruler, self.pedal):
+            widget.xview(*args)
+
+    def yview(self, *args):
+        for widget in (self.canvas, self.keys):
+            widget.yview(*args)
+
+    def wheel(self, event):
+        step = -1 if event.delta > 0 else 1
+        if event.state & 0x0004 or event.state & 0x20000:
+            self.zoom(1.15 if event.delta > 0 else 1 / 1.15)
+        elif event.state & 0x0001:
+            self.xview('scroll', step, 'units')
+        else:
+            self.yview('scroll', step, 'units')
+        return 'break'
+
+    def zoom(self, factor):
+        left = self.canvas.canvasx(0) / self.pixels_per_second
+        self.pixels_per_second = max(20.0, min(500.0, self.pixels_per_second * factor))
+        self.draw()
+        self.xview('moveto', left * self.pixels_per_second / self.width())
+
+    def width(self):
+        return max(800.0, self.duration * self.pixels_per_second + 80)
+
+    # Loading.
+    def show(self, midi_path):
+        """Load midi_path unless the same file version is already shown."""
+        if not midi_path or not os.path.isfile(midi_path):
+            self.stop()
+            self.path = None
+            self.notes, self.pedal_rows, self.duration = [], [], 0.0
+            self.set_editable(False)
+            self.target_text.set('')
+            self.draw()
+            self.status.set(tr('Choose a MIDI file first.'))
+            return
+        mtime = os.path.getmtime(midi_path)
+        if midi_path == self.path and mtime == self.loaded_mtime:
+            return
+        same_file = midi_path == self.path
+        view = (self.canvas.xview()[0], self.canvas.yview()[0])
+        self.stop()
+        self.notes, pedals, self.duration, bpm = read_roll(midi_path)
+        self.path, self.loaded_mtime = midi_path, mtime
+        streams = defaultdict(list)
+        for channel, intervals in sorted(pedals.items()):
+            streams[tuple(intervals)].append(channel)
+        self.pedal_rows = [(channels, list(intervals)) for intervals, channels in streams.items()]
+        self.play_start_seconds = 0.0
+        self.bpm.set('{:.2f}'.format(bpm))
+        self.offset.set('0')
+        self.target = first_beat_target(midi_path)
+        self.set_editable(self.target is not None)
+        self.target_text.set(tr('First beat is saved to {}').format(os.path.basename(self.target)) if self.target
+                             else tr('First beat editing needs song_bpmfix.mid'))
+        self.draw()
+        if same_file:
+            self.xview('moveto', view[0])
+            self.yview('moveto', view[1])
+        else:
+            pitches = [pitch for _, _, pitch, _, _ in self.notes] or [60]
+            self.yview('moveto', max(0, PITCHES - 1 - max(pitches) - 4) / PITCHES)
+        self.status.set(tr('Loaded: {}').format(os.path.basename(midi_path)))
+
+    def set_editable(self, editable):
+        state = 'normal' if editable else 'disabled'
+        for widget in (self.bpm_entry, self.offset_entry, self.minus_button, self.plus_button, self.apply_button):
+            widget.configure(state=state)
+
+    # Drawing.
     def draw(self):
-        self.canvas.delete('all')
-        height = 128 * self.row_height
-        width = max(800, self.duration * self.pixels_per_second + 80)
+        width = self.width()
+        height = PITCHES * ROW_HEIGHT
+        rows = max(1, len(self.pedal_rows))
+        for widget in (self.canvas, self.keys, self.ruler, self.pedal, self.pedal_labels):
+            widget.delete('all')
         self.canvas.configure(scrollregion=(0, 0, width, height))
-        for pitch in range(128):
-            y = (127 - pitch) * self.row_height
-            if pitch % 12 in (1, 3, 6, 8, 10):
-                self.canvas.create_rectangle(0, y, width, y + self.row_height, fill='#f1f3f6', outline='')
+        self.keys.configure(scrollregion=(0, 0, KEYS_WIDTH, height))
+        self.ruler.configure(scrollregion=(0, 0, width, RULER_HEIGHT))
+        self.pedal.configure(scrollregion=(0, 0, width, rows * PEDAL_ROW_HEIGHT), height=rows * PEDAL_ROW_HEIGHT)
+        self.pedal_labels.configure(height=rows * PEDAL_ROW_HEIGHT)
+
+        for pitch in range(PITCHES):
+            y = (PITCHES - 1 - pitch) * ROW_HEIGHT
+            black = pitch % 12 in (1, 3, 6, 8, 10)
+            if black:
+                self.canvas.create_rectangle(0, y, width, y + ROW_HEIGHT, fill='#f1f3f6', outline='', tags='bg')
+            self.keys.create_rectangle(0, y, KEYS_WIDTH, y + ROW_HEIGHT, fill='#3a3f47' if black else 'white',
+                                       outline='#d5dae0')
             if pitch % 12 == 0:
-                self.canvas.create_line(0, y, width, y, fill='#dce2e8')
+                self.canvas.create_line(0, y + ROW_HEIGHT, width, y + ROW_HEIGHT, fill='#dce2e8', tags='bg')
+                self.keys.create_text(KEYS_WIDTH - 3, y + ROW_HEIGHT / 2, text=note_name(pitch), anchor='e',
+                                      font=('TkDefaultFont', 7), fill='#435365')
+
+        pps = self.pixels_per_second
+        for start, end, pitch, channel, velocity in self.notes:
+            color = HAND_COLORS.get(channel, (OTHER_COLOR,))[0]
+            if self.shading.get():
+                color = shade(color, velocity)
+            y = (PITCHES - 1 - pitch) * ROW_HEIGHT + 1
+            self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
+                                         fill=color, outline='', tags='note')
+
+        for row, (channels, intervals) in enumerate(self.pedal_rows):
+            y = row * PEDAL_ROW_HEIGHT
+            names = sorted({HAND_BY_CHANNEL.get(channel, '') for channel in channels} - {''},
+                           key=lambda hand: HAND_ORDER.index(hand))
+            label = tr('Pedal') if len(self.pedal_rows) == 1 else '/'.join(
+                tr(hand.replace('_', ' ')) for hand in names) or tr('Pedal')
+            self.pedal_labels.create_text(KEYS_WIDTH - 3, y + PEDAL_ROW_HEIGHT / 2, text=label, anchor='e',
+                                          font=('TkDefaultFont', 7), fill='#435365')
+            for down, up in intervals:
+                self.pedal.create_rectangle(down * pps, y + 2, max(up * pps, down * pps + 2),
+                                            y + PEDAL_ROW_HEIGHT - 2, fill='#8a94a6', outline='')
+        self.playhead = self.canvas.create_line(0, 0, 0, height, fill='#e53935', width=2)
+        self.pedal_playhead = self.pedal.create_line(0, 0, 0, rows * PEDAL_ROW_HEIGHT, fill='#e53935', width=2)
+        self.draw_grid()
+        self.move_playhead(self.position_seconds())
+
+    def draw_grid(self):
+        """Bar, beat and 16th lines from the BPM and first beat fields, so edits preview before saving."""
+        self.canvas.delete('grid')
+        self.ruler.delete('all')
         try:
             beat = 60.0 / float(self.bpm.get())
+            offset = float(self.offset.get())
         except (ValueError, ZeroDivisionError):
-            beat = 0.5
-        tick = beat / 4
-        for index in range(math.ceil(self.duration / tick) + 1):
-            seconds = index * tick
-            x = 64 + seconds * self.pixels_per_second
-            major = index % 16 == 0
-            self.canvas.create_line(x, 0, x, height, fill='#8996a5' if major else '#e7ebef', width=2 if major else 1)
-            if index % 4 == 0:
-                self.canvas.create_text(x + 3, 4, text=str(index // 4 + 1), anchor='nw', fill='#435365')
-        for start, end, pitch, hand in self.notes:
-            x1 = 64 + start * self.pixels_per_second
-            x2 = 64 + end * self.pixels_per_second
-            y1 = (127 - pitch) * self.row_height + 1
-            color = '#1976d2' if hand == 'right' else '#008b8b'
-            self.canvas.create_rectangle(x1, y1, max(x2, x1 + 3), y1 + self.row_height - 1,
-                                         fill=color, outline='')
-        self.playhead = self.canvas.create_line(64, 0, 64, height, fill='#e53935', width=2)
+            return
+        if beat <= 0:
+            return
+        pps = self.pixels_per_second
+        height = PITCHES * ROW_HEIGHT
+        sixteenth = beat / 4
+        first = math.floor(-offset / sixteenth)
+        last = math.ceil((self.duration - offset) / sixteenth)
+        for index in range(first, last + 1):
+            x = (offset + index * sixteenth) * pps
+            if index % 16 == 0:
+                self.canvas.create_line(x, 0, x, height, fill='#8996a5', width=2, tags='grid')
+                self.ruler.create_line(x, 0, x, RULER_HEIGHT, fill='#8996a5')
+                if index >= 0:
+                    self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=str(index // 16 + 1), anchor='w',
+                                           fill='#435365')
+            elif index % 4 == 0:
+                self.canvas.create_line(x, 0, x, height, fill='#d3d9e0', tags='grid')
+                self.ruler.create_line(x, RULER_HEIGHT * 0.6, x, RULER_HEIGHT, fill='#b8c0ca')
+            elif pps * sixteenth >= 6:
+                self.canvas.create_line(x, 0, x, height, fill='#eef1f4', tags='grid')
+        if self.canvas.find_withtag('bg'):
+            self.canvas.tag_raise('grid', 'bg')
+        if self.canvas.find_withtag('note'):
+            self.canvas.tag_lower('grid', 'note')
 
     def step_offset(self, direction):
         try:
-            beat_seconds = 60.0 / float(self.bpm.get())
-            self.offset.set('{:.3f}'.format(float(self.offset.get()) + direction * beat_seconds))
+            beat = 60.0 / float(self.bpm.get())
+            self.offset.set('{:.3f}'.format(float(self.offset.get()) + direction * beat))
         except (ValueError, ZeroDivisionError):
             self.status.set(tr('請輸入有效 BPM 和 offset'))
 
+    # Playback.
+    def ensure_playback(self):
+        if self.playback is None:
+            self.output, name = open_output(self.output_var.get())
+            self.playback = MidiPlayback(self.output)
+            if self.output is None:
+                self.status.set(tr('No sound: {} is not available').format(name))
+
+    def change_output(self, _event=None):
+        self.release_output()
+        if self.on_output:
+            self.on_output(self.output_var.get())
+
+    def release_output(self):
+        self.stop()
+        if self.output is not None:
+            self.output.close()
+        self.output = None
+        self.playback = None
+
     def play(self):
+        if not self.path:
+            return
+        self.ensure_playback()
         position = self.position_seconds()
-        self.playback.play(self.midi_path, position)
+        self.playback.play(self.path, position)
+        self.apply_mix()
         self.play_started = time.monotonic()
         self.play_start_seconds = position
 
-    def pause(self):
-        self.playback.stop()
-        self.play_started = None
+    def apply_mix(self):
+        if self.playback is not None:
+            self.playback.set_mix([hand for hand, enabled in self.hand_enabled.items() if not enabled.get()], None)
+
+    def stop(self):
+        if self.playback is not None:
+            self.playback.stop()
+        self.play_start_seconds = self.position_seconds()
         self.play_started = None
 
-    def change_output(self, _event=None):
-        selected = self.output_var.get()
-        if selected == self.backend:
-            return
-        self.playback.stop()
-        previous_output = self.output
-        self.output, self.backend = open_output(selected)
-        if previous_output:
-            previous_output.close()
-        self.playback = MidiPlayback(self.output)
-        self.status.set(tr('就緒 · {}').format(self.backend))
+    def shutdown(self):
+        if self.after_id is not None:
+            self.after_cancel(self.after_id)
+            self.after_id = None
+        self.release_output()
 
     def position_seconds(self):
         if self.play_started is None:
@@ -164,37 +395,35 @@ class PianoRollWorkbench:
         return min(self.duration, self.play_start_seconds + time.monotonic() - self.play_started)
 
     def seek_click(self, event):
-        seconds = max(0, (self.canvas.canvasx(event.x) - 64) / self.pixels_per_second)
-        self.pause()
-        self.play_start_seconds = seconds
-        self.update_playhead()
+        seconds = max(0.0, event.widget.canvasx(event.x) / self.pixels_per_second)
+        playing = self.play_started is not None
+        self.stop()
+        self.play_start_seconds = min(seconds, self.duration)
+        self.move_playhead(self.play_start_seconds)
+        if playing:
+            self.play()
+
+    def move_playhead(self, seconds):
+        x = seconds * self.pixels_per_second
+        self.canvas.coords(self.playhead, x, 0, x, PITCHES * ROW_HEIGHT)
+        self.pedal.coords(self.pedal_playhead, x, 0, x, max(1, len(self.pedal_rows)) * PEDAL_ROW_HEIGHT)
+        return x
 
     def update_playhead(self):
-        if self.closed:
-            return
-        seconds = self.position_seconds()
-        x = 64 + seconds * self.pixels_per_second
-        self.canvas.coords(self.playhead, x, 0, x, 128 * self.row_height)
-        viewport_right = self.canvas.canvasx(self.canvas.winfo_width())
-        if x > viewport_right - 40:
-            region = self.canvas.cget('scrollregion').split()
-            if len(region) == 4:
-                total_width = float(region[2])
-                self.canvas.xview_moveto(min(1.0, x / total_width))
-        if self.play_started is not None and seconds >= self.duration:
-            self.play_started = None
-        self.root.after(50, self.update_playhead)
+        if self.play_started is not None:
+            seconds = self.position_seconds()
+            x = self.move_playhead(seconds)
+            right = self.canvas.canvasx(self.canvas.winfo_width())
+            if x > right - 40 or x < self.canvas.canvasx(0):
+                self.xview('moveto', max(0.0, (x - 40) / self.width()))
+            if seconds >= self.duration:
+                self.stop()
+        self.after_id = self.after(50, self.update_playhead)
 
-    def zoom(self, event):
-        self.pixels_per_second = max(20, min(500, self.pixels_per_second * (1.15 if event.delta > 0 else 1 / 1.15)))
-        self.draw()
-        return 'break'
-
-    def scroll_vertical(self, event):
-        if not (event.state & 0x0004 or event.state & 0x0008):
-            self.canvas.yview_scroll(-1 if event.delta > 0 else 1, 'units')
-
+    # First beat.
     def apply(self):
+        if not self.target:
+            return
         try:
             bpm = float(self.bpm.get())
             offset = float(self.offset.get())
@@ -203,24 +432,18 @@ class PianoRollWorkbench:
         except ValueError as error:
             self.status.set(tr('輸入錯誤：{}').format(error))
             return
-        self.pause()
+        self.stop()
         try:
-            result = build_bpm_fixed_midi(self.midi_path, bpm, offset)
+            result = build_bpm_fixed_midi(self.target, bpm, offset)
+            append_first_beat_stats(self.target, result)
+            # Shifting moves the old key signature events off the bar lines.
+            apply_key_signatures(self.target)
         except (OSError, ValueError) as error:
             self.status.set(tr('寫入失敗：{}').format(error))
             return
-        self.status.set(tr('已寫入 MIDI · BPM {:.2f}').format(bpm))
-        self.close(result)
-
-    def cancel(self):
-        self.pause()
-        self.close(None)
-
-    def close(self, result):
-        self.result = result
-        self.closed = True
-        if self.output:
-            self.output.close()
-        self.root.destroy()
-        if self.on_complete:
-            self.on_complete(result)
+        target = self.target
+        self.show(target)
+        self.status.set(tr('Saved the first beat to {}. Run the processing again to rebuild the cleaned MIDI.')
+                        .format(os.path.basename(target)))
+        if self.on_first_beat:
+            self.on_first_beat(target)
