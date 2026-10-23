@@ -27,7 +27,7 @@ PEDAL_ROW_HEIGHT = 12
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
 HORIZONTAL_SCROLL_INCREMENT = 24
-HAND_ORDER = ('right', 'second_right', 'second_left', 'left')
+HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
 
