@@ -543,6 +543,7 @@ class Panel:
 
 def main():
     root = tk.Tk()
+    root.geometry('1280x720')
     Panel(root)
     root.mainloop()
     return 0
