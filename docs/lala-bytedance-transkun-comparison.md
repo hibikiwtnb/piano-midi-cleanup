@@ -252,7 +252,7 @@ MuScriptor 與字節、Transkun 的配對起音差中位數分別為 16.406 ms�
 
 最新版縮短 1,314 個原始音尾，保留 377 個會超過 100 ms 估計延音提前容差的候選，沒有不確定事件保留項。逐音重新檢查這 1,314 個截斷，最大獨立估計延音提前量為 99.537 ms，超過 100 ms 者為 0。相較舊最終版，579 個音尾較長、90 個較短、2,157 個不變。拍線規則亦使用現有預設：接近拍線 0.125 拍、舊音需提前超過 0.25 拍起音；沒有另外調整門檻。
 
-已更新本地正式最終 MIDI 及報告，舊檔和舊報告保留在 `testdata/lala-protected-rebuild-20261023-222418/previous-final.mid`、`previous-stats.txt`。同目錄保存 `before-trim.mid`、`latest-final.mid`、`rebuild-audit.json` 與 `trim-report.txt`。BPM 修正版的 SHA-256 仍為 `f7b79fc89ee09b53c99a92dbb427cabd88b7b7f76258bfc010b6e261f54f8b29`；新最終版 SHA-256 為 `941ed1487e0ae435a9bf2d02ae1cab7ea96b04be79b78552d277304da06e8275`。
+使用者比較後認為舊版聽感較好，本地正式最終 MIDI 及報告已恢復為重建前的備份；正式 MIDI 的 SHA-256 為 `f667dd867c7f6b5ac395ff2499930ecf94f2c726bc9d5892ca024e6d8448a055`。備份位於 `testdata/lala-protected-rebuild-20261023-222418/previous-final.mid`、`previous-stats.txt`。同目錄保留本次重建的 `before-trim.mid`、`latest-final.mid`、`rebuild-audit.json` 與 `trim-report.txt` 供研究比較；其中 `latest-final.mid` 並非目前正式版本。BPM 修正版的 SHA-256 仍為 `f7b79fc89ee09b53c99a92dbb427cabd88b7b7f76258bfc010b6e261f54f8b29`；本次重建版 SHA-256 為 `941ed1487e0ae435a9bf2d02ae1cab7ea96b04be79b78552d277304da06e8275`。
 
 踏板保護只是在二值 MIDI 踏板模型下控制估計音尾提前量，不保證真實鋼琴或任何音源聽感完全不變；實際效果仍以使用者試聽為準。
 
