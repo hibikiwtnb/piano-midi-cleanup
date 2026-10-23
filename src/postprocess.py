@@ -101,16 +101,6 @@ def source_midi_path(midi_path):
     return filename + ext
 
 
-def cleaned_first_beat_edits(stats_path):
-    """Whether a first beat was set by hand on song_bpmfix_cleaned.mid, which rebuilding it would lose."""
-    if not os.path.exists(stats_path):
-        return False
-    with open(stats_path, encoding='utf-8') as file:
-        sections = report_blocks(file.read())
-    return any(line.startswith('MIDI: ') and '_cleaned.mid' in line
-               for line in sections.get('MIDI first beat stats', []))
-
-
 def keep_bpmfix_sections(stats_path):
     """Drop the report sections of earlier runs that came after song_bpmfix.mid was made."""
     if not os.path.exists(stats_path):
@@ -169,10 +159,6 @@ def run_postprocess(args):
     else:
         if not os.path.isfile(bpmfix_path):
             raise ValueError('No BPM-fixed MIDI to reuse; give --bpm or --audio: {}'.format(bpmfix_path))
-        if cleaned_first_beat_edits(stats_path) and not args.discard_cleaned_edits:
-            raise ValueError(
-                'The first beat was set by hand on {}, which this run rebuilds from {}. Set the first beat on '
-                'the BPM-fixed MIDI in the workbench, or pass --discard-cleaned-edits.'.format(cleaned_path, bpmfix_path))
         keep_bpmfix_sections(stats_path)
 
     changes = []
@@ -240,8 +226,6 @@ def build_parser():
     parser.add_argument('--no-pedal-protection', action='store_true', help='Trim without checking pedal sustain.')
     parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=list(DEFAULT_FAST_FIGURE_HANDS),
                         help='Overlap trim: hands that get the fast figure rule (default: right second_right).')
-    parser.add_argument('--discard-cleaned-edits', action='store_true',
-                        help='Rebuild song_bpmfix_cleaned.mid even when its first beat was set by hand.')
     parser.add_argument('--snapshot', choices=sorted(SNAPSHOT_LAYOUTS),
                         help='Also save piano roll images of the result.')
     parser.add_argument('--set', dest='settings', type=parse_setting, action='append', default=[], metavar='KEY=VALUE',

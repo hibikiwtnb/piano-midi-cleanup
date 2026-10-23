@@ -25,7 +25,6 @@
 
 - 可彈性清理只適用兩隻手。
 - 截斷必須在分手之後。
-- `song_bpmfix_cleaned.mid` 上有手動調整的第一拍時，重建會讓它消失；需加 `--discard-cleaned-edits` 才繼續。
 
 ### 參數覆蓋
 

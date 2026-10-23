@@ -123,8 +123,6 @@ def arguments(path, settings):
     for key, value in preset['parameters'].items():
         argv += ['--set', '{}={}'.format(key, value)]
     args = postprocess.build_parser().parse_args(argv)
-    # Only isolated copies may discard a previous cleaned-file first-beat edit.
-    args.discard_cleaned_edits = True
     return args
 
 
@@ -162,7 +160,6 @@ def main():
         base = Path(postprocess.source_midi_path(str(source))).stem
         report = Path(source_stats_path_for(str(source)))
         destination = source.with_name(base + '_bpmfix_cleaned.mid')
-        protected = report.exists() and postprocess.cleaned_first_beat_edits(str(report))
         for label, path in (('previous_cleaned.mid', destination), ('previous_stats.txt', report)):
             if path.exists():
                 shutil.copy2(path, song_dir / label)
@@ -175,7 +172,8 @@ def main():
             shutil.copy2(source, copied)
             if report.exists():
                 shutil.copy2(report, Path(source_stats_path_for(str(copied))))
-            def trim_step(midi_path, report_path=None, fast_figure_hands=trim.DEFAULT_FAST_FIGURE_HANDS):
+            def trim_step(midi_path, report_path=None, fast_figure_hands=trim.DEFAULT_FAST_FIGURE_HANDS,
+                          protect_pedal=True):
                 before = song_dir / (mode + '_before_trim.mid')
                 shutil.copy2(midi_path, before)
                 if mode == 'legacy':
@@ -201,7 +199,7 @@ def main():
             paths[mode] = copied.with_name(base + '_bpmfix_cleaned.mid')
         original = song_dir / 'latest_before_trim.mid'
         old_output = song_dir / 'mapped_legacy_trim.mid'
-        row = {'file': source.name, 'protected_manual_edit': protected,
+        row = {'file': source.name,
                'legacy_trim': compare(original, old_output),
                'latest_trim': compare(original, paths['latest']),
                'trim_logic_difference': compare(old_output, paths['latest']),
@@ -228,9 +226,6 @@ def main():
     for number, (source, row) in enumerate(zip(sources, rows), 1):
         base = Path(postprocess.source_midi_path(str(source))).stem
         folder = output / '{:02d}'.format(number) / 'latest'
-        if row['protected_manual_edit']:
-            row['published'] = False
-            continue
         staged_midi = folder / (base + '_bpmfix_cleaned.mid')
         staged_report = Path(source_stats_path_for(str(staged_midi)))
         destination = source.with_name(staged_midi.name)

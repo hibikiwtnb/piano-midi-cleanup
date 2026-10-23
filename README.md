@@ -95,7 +95,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
 
 報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。
-- 主面板的鋼琴捲簾把手動調整的第一拍寫入 `song_bpmfix.mid`。舊報告若記錄第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
+- 主面板的鋼琴捲簾把手動調整的第一拍寫入 `song_bpmfix.mid`，後續處理沿用這份檔案。是否自動調整第一拍依處理步驟的勾選執行，不另外判斷手動修改紀錄。
 
 閾值用 `--set 名稱=值` 覆蓋（可重複），`--list-parameters` 列出全部可調的閾值和預設值；有改的值會記在報告的步驟清單裡。可彈性清理的每手音數和跨度也在這裡（`playable.max_notes`、`playable.max_span`）。
 

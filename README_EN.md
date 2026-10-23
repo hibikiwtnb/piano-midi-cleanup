@@ -94,7 +94,7 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 
 - Playable reduction needs two hands and overlap trimming needs the hand split; other combinations do not run.
 - Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
-- The main panel piano roll saves a hand-set first beat to `song_bpmfix.mid`. If an older report records a first beat set by hand on `song_bpmfix_cleaned.mid`, rebuilding would lose it, so the runner stops; pass `--discard-cleaned-edits` to rebuild anyway.
+- The main panel piano roll saves a hand-set first beat to `song_bpmfix.mid`, which subsequent processing reuses. Automatic first-beat alignment follows the selected processing steps; the runner does not inspect manual-edit history.
 
 Thresholds are overridden with `--set name=value` (repeatable), and `--list-parameters` lists every threshold with its default; changed values are recorded in the step list of the report. The playable reduction's notes and span per hand are set here too (`playable.max_notes`, `playable.max_span`).
 

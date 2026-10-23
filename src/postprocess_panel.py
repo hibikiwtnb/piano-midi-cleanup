@@ -35,7 +35,6 @@ SWITCHES = (
     ('playable', 'Playable reduction (one player, 2 hands)', False),
     ('split', 'Hand split', True),
     ('trim', 'Overlap trim', True),
-    ('discard_cleaned_edits', 'Rebuild even if the first beat was set by hand on the cleaned MIDI', False),
 )
 
 
@@ -442,8 +441,7 @@ class Panel:
                            ('clean', '--no-clean'), ('split', '--no-split'), ('trim', '--no-trim')):
             if not switches[name]:
                 args.append(flag)
-        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable'),
-                           ('discard_cleaned_edits', '--discard-cleaned-edits')):
+        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable')):
             if switches[name]:
                 args.append(flag)
         args += ['--hands', str(preset['hands'])]
