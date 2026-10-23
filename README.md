@@ -91,6 +91,8 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 
 - 可彈性清理只能配兩隻手，截斷重疊必須在分手之後；組合不成立時不會執行。
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
+
+報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。取消第一拍視窗不改報告。
 - 手動調第一拍請在工作台開 `song_bpmfix.mid`。如果第一拍是在 `song_bpmfix_cleaned.mid` 上手動調的，重建會讓它消失，執行器會停下來；確定要重建時加 `--discard-cleaned-edits`。
 
 閾值用 `--set 名稱=值` 覆蓋（可重複），`--list-parameters` 列出全部可調的閾值和預設值；有改的值會記在報告的步驟清單裡。可彈性清理的每手音數和跨度也在這裡（`playable.max_notes`、`playable.max_span`）。
@@ -138,7 +140,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 
 工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`。也可以用 `--midi-port <名稱>` 改用名稱包含該文字的既有輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
-寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會追加到 `*_stats.txt`。
+寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會更新至 `*_stats.txt`。
 
 `transcribe.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號、不開工作台。
 
@@ -151,7 +153,7 @@ BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
 4. 取離 0 秒最近的小節線，已對齊的 MIDI 再跑一次幾乎不動
 ```
 
-結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）追加到 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在工作台用 ±1 拍修正。
+結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）更新至 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在工作台用 ±1 拍修正。
 
 agent 或腳本可非交互執行（有 `input_midi` 時不開任何對話框，預設也不開工作台）：
 
@@ -213,7 +215,7 @@ Max polyphony
 2. 輸出 `*_cleaned.mid`。
 3. 輸出 `*_clean_report.txt`。
 
-注意：獨立執行 `clean_midi_rules.command` 時會輸出 `*_clean_report.txt`；`transcribe.command` pipeline 中，清理報告會追加寫入原本的 `song_stats.txt`。
+注意：獨立執行 `clean_midi_rules.command` 時會輸出 `*_clean_report.txt`；`transcribe.command` pipeline 中，清理報告會更新至原本的 `song_stats.txt`。
 
 清理規則只刪除高度疑似 artifact 的 note，不做音樂語義判斷、不分手、不量化、不判斷和弦/調性/旋律。
 
@@ -297,7 +299,7 @@ python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 一組最多刪 3 個；還彈不到的組不動，列在報告裡
 ```
 
-只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。分三手、四手的曲子不適用。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），追加到來源轉錄的 `*_stats.txt`。
+只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。分三手、四手的曲子不適用。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），更新至來源轉錄的 `*_stats.txt`。
 
 非交互執行：
 
@@ -317,7 +319,7 @@ python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 
 按不住：還在響的音加上新的音超過 5 個，或跨度超過 14 半音時，還在響的音在此結束
 ```
 
-各規則的裁短數，以及每隻手同時發聲數的前後最大值，追加到來源轉錄的 `*_stats.txt`。
+各規則的裁短數，以及每隻手「最多同時按鍵數」的處理前後值，更新至來源轉錄的 `*_stats.txt`。這些規則整理的是 MIDI 譜面上的按鍵需求，不限制踏板延續的實際發聲數。
 
 非交互執行：
 
@@ -337,7 +339,7 @@ python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right se
 1. 選擇 MIDI（通常是 `*_bpmfix.mid` 或 `*_bpmfix_cleaned.mid`）。
 2. 在工作台調整後按「寫入 MIDI」，直接覆寫所選檔案；按「取消」則不修改。
 
-結果會追加到來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。第一拍有移動時會重新寫入調號（`--no-key-signature` 關閉）。
+結果會更新至來源轉錄的 stats 檔（例如 `song_bpmfix_cleaned.mid` 寫入 `song_stats.txt`），並在終端和完成視窗顯示。第一拍有移動時會重新寫入調號（`--no-key-signature` 關閉）。
 
 非交互執行（agent 用）：只自動對齊、不開工作台並直接覆寫：
 
@@ -359,7 +361,7 @@ python src/midi_workbench.py song_bpmfix_cleaned.mid --auto-first-beat --no-work
 5. 6 / 7 個升降號的同音異名調用 F# 和 Db
 ```
 
-原有的 key signature event 會全部替換；每段的調號、臨時記號數追加到來源轉錄的 `*_stats.txt`。固定假設 4/4。
+原有的 key signature event 會全部替換；每段的調號、臨時記號數更新至來源轉錄的 `*_stats.txt`。固定假設 4/4。
 
 非交互執行：
 

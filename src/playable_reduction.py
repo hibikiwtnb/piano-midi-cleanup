@@ -11,6 +11,7 @@ import mido
 from clean_midi_rules import rebuild_track_without_messages
 from hand_split_channels import collect_notes, group_notes
 from midi_stats import source_stats_path_for
+from report_utils import update_report
 
 
 # One player: the notes of an onset group must split into a low part for the left hand and a high part for
@@ -134,10 +135,9 @@ def apply_playable_reduction(midi_path, report_path=None, max_notes=DEFAULT_MAX_
     stats = reduce_in_place(midi_path, max_notes=max_notes, max_span=max_span)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_reduction_stats(stats)
-    with open(report_path, 'a', encoding='utf-8') as file:
-        file.write('\n\n' + report + '\n')
+    update_report(report_path, report)
     print(report)
-    print('Appending playable reduction report: {}'.format(report_path))
+    print('Updating playable reduction report: {}'.format(report_path))
     return stats
 
 

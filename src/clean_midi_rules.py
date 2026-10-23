@@ -7,6 +7,7 @@ from collections import defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
+from report_utils import update_report
 
 
 MIN_NOTE_DURATION_SECONDS = 0.03
@@ -314,19 +315,10 @@ def write_clean_report(input_path, stats, report_path=None, append=False):
     if report_path is None:
         report_path = clean_report_path_for(input_path)
     report = format_clean_stats(stats)
-    mode = 'a' if append else 'w'
-
-    with open(report_path, mode, encoding='utf-8') as file:
-        if append:
-            file.write('\n\n')
-        file.write(report)
-        file.write('\n')
+    update_report(report_path, report)
 
     print(report)
-    if append:
-        print('Appending clean report: {}'.format(report_path))
-    else:
-        print('Writing clean report: {}'.format(report_path))
+    print('Updating clean report: {}'.format(report_path))
     return report_path
 
 

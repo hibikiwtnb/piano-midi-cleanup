@@ -8,6 +8,7 @@ from pathlib import Path
 import mido
 
 from node_utils import node_executable
+from report_utils import update_report
 
 
 DEFAULT_BPM_ENV = Path.home() / '.local' / 'share' / 'piano-midi-cleanup-env'
@@ -292,18 +293,10 @@ def write_bpmfix_report(audio_path, midi_path, output_path, bpm_info, report_pat
         report_path = bpmfix_report_path_for(midi_path)
 
     report = format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info)
-    mode = 'a' if append else 'w'
-    with open(report_path, mode, encoding='utf-8') as file:
-        if append:
-            file.write('\n\n')
-        file.write(report)
-        file.write('\n')
+    update_report(report_path, report)
 
     print(report)
-    if append:
-        print('Appending BPMFix report: {}'.format(report_path))
-    else:
-        print('Writing BPMFix report: {}'.format(report_path))
+    print('Updating BPMFix report: {}'.format(report_path))
     return report_path
 
 

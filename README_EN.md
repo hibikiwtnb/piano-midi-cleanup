@@ -139,7 +139,7 @@ Usage:
 
 `first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `midi_playback.py` sends the MIDI to a MIDI output: on macOS / Linux it opens a virtual port named `piano-midi-cleanup` that any synth can connect to, and on Windows it uses `Microsoft GS Wavetable Synth`. Use `--midi-port <name>` to open an existing output whose name contains that text instead. If no output can be opened, the workbench still opens without sound.
 
-Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is appended to `*_stats.txt`.
+Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is updated in `*_stats.txt`.
 
 The `transcribe.command` pipeline only runs the BPM fix: it does not align the first beat, write key signatures, or open the workbench.
 
@@ -152,7 +152,7 @@ Automatic first beat alignment uses only the BPM-fixed MIDI (no audio) and assum
 4. The bar line nearest to 0 s is used, so running it again on an aligned MIDI barely moves it
 ```
 
-The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) is appended to `*_stats.txt`. Beat 1 may be wrong with heavily syncopated bass, intros without bass, or 3/4; fix it with +-1 beat in the workbench.
+The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) is updated in `*_stats.txt`. Beat 1 may be wrong with heavily syncopated bass, intros without bass, or 3/4; fix it with +-1 beat in the workbench.
 
 Agents and scripts can run it non-interactively (with `input_midi` no dialog opens, and the workbench is off by default):
 
@@ -214,7 +214,7 @@ Usage:
 2. The tool writes `*_cleaned.mid`.
 3. The tool writes `*_clean_report.txt`.
 
-When run standalone, `clean_midi_rules.command` writes `*_clean_report.txt`. In the full `transcribe.command` pipeline, the cleanup report is appended to the original `song_stats.txt`.
+When run standalone, `clean_midi_rules.command` writes `*_clean_report.txt`. In the full `transcribe.command` pipeline, the cleanup report is updated in the original `song_stats.txt`.
 
 The cleanup step removes only highly likely artifacts. It does not perform musical semantic judgment, hand splitting, quantization, chord analysis, key analysis, or melody analysis.
 
@@ -298,7 +298,7 @@ What goes: the fewest notes, then the cheapest; a note doubled in another octave
 At most 3 notes per group; groups still unplayable are left as they are and listed in the report
 ```
 
-Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. Not meant for songs split into three or four hands. The removal count and every removal (bar, beat, removed notes and the group) are appended to the source transcription `*_stats.txt`.
+Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. Not meant for songs split into three or four hands. The removal count and every removal (bar, beat, removed notes and the group) are updated in the source transcription `*_stats.txt`.
 
 Non-interactive:
 
@@ -318,7 +318,7 @@ Chord change: when a hand plays a new chord or octave (2 or more notes), notes o
 Out of reach: when the sounding notes plus the new ones exceed 5 notes or span more than 14 semitones, the sounding notes end there
 ```
 
-The trim counts per rule and each hand's most notes sounding at once, before and after, are appended to the source transcription `*_stats.txt`.
+The trim counts per rule and each hand's maximum simultaneous keys, before and after, are updated in the source transcription `*_stats.txt`. These rules estimate key-holding requirements from MIDI note intervals; they do not limit how many notes may keep sounding under the pedal. CC64 sustain tails are not added to the count. If the transcription has already extended note lengths for the pedal, the estimate can exceed the actual number of held keys.
 
 Non-interactive:
 
@@ -338,7 +338,7 @@ Usage:
 1. Choose a MIDI file (usually `*_bpmfix.mid` or `*_bpmfix_cleaned.mid`).
 2. Adjust it in the workbench and press "寫入 MIDI" to overwrite the chosen file in place. "取消" leaves it unchanged.
 
-The result is appended to the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog. When the first beat moves, key signatures are written again (`--no-key-signature` skips it).
+The result is updated in the source transcription stats file (for example `song_bpmfix_cleaned.mid` goes to `song_stats.txt`) and shown in the terminal and the completion dialog. When the first beat moves, key signatures are written again (`--no-key-signature` skips it).
 
 Non-interactive use (for agents): auto-align only, without the workbench, overwriting in place:
 
@@ -360,7 +360,7 @@ Method:
 5. F# and Db are used for the 6- and 7-accidental enharmonic pairs
 ```
 
-Existing key signature events are replaced. Each segment's key and accidental count is appended to the source transcription `*_stats.txt`. 4/4 is assumed.
+Existing key signature events are replaced. Each segment's key and accidental count is updated in the source transcription `*_stats.txt`. 4/4 is assumed.
 
 Non-interactive use:
 

@@ -11,13 +11,14 @@ import playable_reduction
 import trim_overlaps
 from bpmfix_utils import apply_bpm_fix, bpmfix_path_for
 from clean_midi_rules import apply_rule_cleaning, cleaned_path_for
-from first_beat_ui import auto_align_first_beat
+from first_beat import auto_align_first_beat
 from hand_split_channels import CHANNELS, apply_hand_split
 from key_signature import apply_key_signatures
 from midi_stats import stats_path_for, write_midi_stats
 from pianoroll_snapshot import write_snapshots
 from playable_reduction import apply_playable_reduction
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS, apply_overlap_trim
+from report_utils import report_blocks, update_report
 
 
 # Report sections that belong to song_bpmfix.mid; they are kept when it is reused, everything after is rebuilt.
@@ -104,8 +105,9 @@ def cleaned_first_beat_edits(stats_path):
     if not os.path.exists(stats_path):
         return False
     with open(stats_path, encoding='utf-8') as file:
-        sections = [section.strip('\n').splitlines() for section in file.read().split('\n\n\n') if section.strip()]
-    return any(lines[0] == 'MIDI first beat stats' and '_cleaned.mid' in lines[1] for lines in sections if len(lines) > 1)
+        sections = report_blocks(file.read())
+    return any(line.startswith('MIDI: ') and '_cleaned.mid' in line
+               for line in sections.get('MIDI first beat stats', []))
 
 
 def keep_bpmfix_sections(stats_path):
@@ -113,13 +115,13 @@ def keep_bpmfix_sections(stats_path):
     if not os.path.exists(stats_path):
         return
     with open(stats_path, encoding='utf-8') as file:
-        sections = [section.strip('\n') for section in file.read().split('\n\n\n') if section.strip()]
+        sections = report_blocks(file.read())
     kept = [
-        section for section in sections
-        if section.splitlines()[0] in BPMFIX_SECTIONS and '_cleaned.mid' not in section.splitlines()[1]
+        '\n'.join([title] + lines) for title, lines in sections.items()
+        if title in BPMFIX_SECTIONS
+        and not any(line.startswith('MIDI: ') and '_cleaned.mid' in line for line in lines)
     ]
-    with open(stats_path, 'w', encoding='utf-8') as file:
-        file.write('\n\n\n'.join(kept) + '\n')
+    update_report(stats_path, '\n\n\n'.join(kept), replace=True)
 
 
 def plan_steps(args):
@@ -162,7 +164,7 @@ def run_postprocess(args):
     if 'bpmfix' in names:
         if not os.path.isfile(source_path):
             raise ValueError('Source MIDI does not exist: {}'.format(source_path))
-        write_midi_stats(source_path)
+        write_midi_stats(source_path, reset_report=True)
     else:
         if not os.path.isfile(bpmfix_path):
             raise ValueError('No BPM-fixed MIDI to reuse; give --bpm or --audio: {}'.format(bpmfix_path))
@@ -198,8 +200,7 @@ def run_postprocess(args):
     summary = '\n'.join(['MIDI post-processing run', 'Output: {}'.format(cleaned_path)]
                         + ['{}. {}'.format(index, label) for index, (_, label) in enumerate(steps, 1)]
                         + ['Setting {} = {}'.format(key, value) for key, value in sorted(overrides.items())])
-    with open(stats_path, 'a', encoding='utf-8') as file:
-        file.write('\n\n' + summary + '\n')
+    update_report(stats_path, summary)
     print(summary)
     return cleaned_path, steps
 

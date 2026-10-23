@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 
 import mido
+from report_utils import update_report
 
 
 SHORT_NOTE_SECONDS = 0.05
@@ -137,14 +138,12 @@ def format_stats(stats):
     ])
 
 
-def write_midi_stats(midi_path):
+def write_midi_stats(midi_path, reset_report=False):
     stats = analyze_midi(midi_path)
     report = format_stats(stats)
     output_path = stats_path_for(midi_path)
 
-    with open(output_path, 'w', encoding='utf-8') as file:
-        file.write(report)
-        file.write('\n')
+    update_report(output_path, report, replace=reset_report)
 
     print(report)
     print('Writing MIDI stats: {}'.format(output_path))

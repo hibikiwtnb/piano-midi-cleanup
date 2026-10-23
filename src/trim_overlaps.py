@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import mido
+from report_utils import update_report
 
 from hand_split_channels import (
     CHANNELS, HARD_SPAN, MAX_FINGERS, collect_notes, group_notes,
@@ -187,10 +188,9 @@ def apply_overlap_trim(midi_path, report_path=None, fast_figure_hands=DEFAULT_FA
     stats = trim_overlaps_in_place(midi_path, fast_figure_hands=fast_figure_hands)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_trim_stats(stats)
-    with open(report_path, 'a', encoding='utf-8') as file:
-        file.write('\n\n' + report + '\n')
+    update_report(report_path, report)
     print(report)
-    print('Appending overlap trim report: {}'.format(report_path))
+    print('Updating overlap trim report: {}'.format(report_path))
     return stats
 
 

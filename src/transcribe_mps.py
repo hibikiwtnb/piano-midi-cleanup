@@ -75,7 +75,7 @@ def transcribe_file(audio_path, transcriptor):
     audio, _ = librosa.load(audio_path, sr=sample_rate, mono=True)
     print('Writing {}'.format(midi_path))
     transcriptor.transcribe(audio, midi_path)
-    write_midi_stats(midi_path)
+    write_midi_stats(midi_path, reset_report=True)
     bpmfix_path, _ = apply_bpm_fix(
         audio_path,
         midi_path,

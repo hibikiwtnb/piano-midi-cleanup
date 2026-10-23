@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 import mido
 
 from midi_stats import source_stats_path_for
+from report_utils import update_report
 
 
 BEATS_PER_BAR = 4
@@ -199,10 +200,9 @@ def apply_key_signatures(midi_path, report_path=None):
     write_key_signatures(midi_path, segments)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_key_stats(midi_path, segments)
-    with open(report_path, 'a', encoding='utf-8') as file:
-        file.write('\n\n' + report + '\n')
+    update_report(report_path, report)
     print(report)
-    print('Appending key signature report: {}'.format(report_path))
+    print('Updating key signature report: {}'.format(report_path))
     return segments
 
 

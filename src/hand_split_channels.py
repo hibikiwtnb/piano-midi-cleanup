@@ -8,6 +8,7 @@ from collections import defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
+from report_utils import update_report
 
 
 GROUP_START_WINDOW_SECONDS = 0.05
@@ -452,19 +453,11 @@ def format_split_stats(stats):
 def write_split_report(stats, report_path=None, append=False):
     report = format_split_stats(stats)
     if report_path:
-        mode = 'a' if append else 'w'
-        with open(report_path, mode, encoding='utf-8') as file:
-            if append:
-                file.write('\n\n')
-            file.write(report)
-            file.write('\n')
+        update_report(report_path, report)
 
     print(report)
     if report_path:
-        if append:
-            print('Appending hand split report: {}'.format(report_path))
-        else:
-            print('Writing hand split report: {}'.format(report_path))
+        print('Updating hand split report: {}'.format(report_path))
 
 
 def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2):
@@ -489,7 +482,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Mark provisional piano hand split by MIDI channel.')
     parser.add_argument('input_midi', nargs='?', help='Input MIDI file to modify in place.')
     parser.add_argument('--report', help='Optional report path.')
-    parser.add_argument('--append-report', action='store_true', help='Append to report instead of overwriting.')
+    parser.add_argument('--append-report', action='store_true',
+                        help='Update this report block while retaining other blocks (also the default).')
     parser.add_argument('--hands', type=int, choices=sorted(HANDS), default=2,
                         help='Number of hands: 3 adds a second right hand on channel 2, 4 also a second left hand on channel 4 '
                              '(default: 2).')
