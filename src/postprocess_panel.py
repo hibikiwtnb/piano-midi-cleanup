@@ -251,8 +251,9 @@ class Panel:
                       foreground='gray').grid(row=row, column=2, sticky='w')
 
     def build_run(self, frame):
+        frame.rowconfigure(len(SWITCHES) + 1, weight=1)
         self.run_button = ttk.Button(frame, text=tr('Run'), command=self.run)
-        self.run_button.grid(row=len(SWITCHES) + 1, column=0, columnspan=2, sticky='w', pady=(12, 0))
+        self.run_button.grid(row=len(SWITCHES) + 1, column=0, columnspan=2, sticky='se', pady=(12, 0))
         if self.running:
             self.run_button.configure(state='disabled')
         status_bar = tk.Frame(self.root, background='SystemButtonFace',
