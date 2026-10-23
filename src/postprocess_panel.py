@@ -17,7 +17,7 @@ import postprocess
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
-from app_info import APP_NAME, VERSION, PROJECT_URL, ISSUES_URL, BUNDLED_COMPONENTS
+from app_info import APP_NAME, VERSION, LICENSE_ID, PROJECT_URL, ISSUES_URL, BUNDLED_COMPONENTS
 
 
 # Last choices and saved presets, per user.
@@ -190,8 +190,10 @@ class Panel:
                 row=row, column=2, sticky='w', pady=6)
         ttk.Separator(content).grid(row=9, column=0, columnspan=3, sticky='ew', pady=16)
         ttk.Label(content, text=tr('Project license')).grid(row=10, column=0, columnspan=3, sticky='w')
-        ttk.Label(content, text=tr('The project license has not been specified. Third-party licenses remain applicable.')).grid(
-            row=11, column=0, columnspan=3, sticky='w', pady=(4, 16))
+        ttk.Button(content, text=LICENSE_ID, command=lambda: self.show_license(APP_NAME, 'LICENSE')).grid(
+            row=11, column=0, sticky='w', pady=(4, 16))
+        ttk.Label(content, text=tr('Third-party components retain their respective licenses.')).grid(
+            row=11, column=1, columnspan=2, sticky='w', pady=(4, 16))
         ttk.Label(content, text=tr('This interface processes MIDI. Audio transcription is performed by upstream models.')).grid(
             row=12, column=0, columnspan=3, sticky='w')
 

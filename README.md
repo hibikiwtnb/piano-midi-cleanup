@@ -1,6 +1,16 @@
 # Piano MIDI Cleanup
 [English README](README_EN.md)
 
+## 授權
+
+Copyright (c) 2026 hibikiwtnb and contributors.
+
+本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發受此授權涵蓋的程式時，須依條款提供相應原始碼。修改版透過網路與使用者互動時，須依第 13 條向這些使用者提供取得相應原始碼的方式。軟體不附任何保證。
+
+第三方元件、上游模型及權重保留各自的授權，不因本專案授權而變更；隨附元件說明見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt` 及 `vendor/ESSENTIA_LICENSE.txt`。
+
+## 功能
+
 把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（主面板鋼琴捲簾即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
 
 也附轉錄入口（`src/transcribe.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。

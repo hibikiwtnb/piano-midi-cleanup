@@ -92,8 +92,7 @@ _TEXT = {
         'Built-in piano sound': '內建鋼琴音源', 'Chord analysis': '和弦分析',
         'Automatic tempo detection on Windows': 'Windows 自動 BPM 偵測',
         'Project license': '本專案授權',
-        'The project license has not been specified. Third-party licenses remain applicable.':
-            '本專案尚未指定授權；第三方元件仍適用各自的授權條款。',
+        'Third-party components retain their respective licenses.': '第三方元件保留各自原有的授權條款。',
         'This interface processes MIDI. Audio transcription is performed by upstream models.':
             '本介面用於 MIDI 後處理；音訊轉譜由上游模型完成。',
         'Deletion reason:': '刪除理由：', 'Trimming reason:': '截短理由：',
@@ -249,8 +248,7 @@ _TEXT = {
         'Built-in piano sound': '内置钢琴音源', 'Chord analysis': '和弦分析',
         'Automatic tempo detection on Windows': 'Windows 自动 BPM 检测',
         'Project license': '本项目许可',
-        'The project license has not been specified. Third-party licenses remain applicable.':
-            '本项目尚未指定许可；第三方组件仍适用各自的许可条款。',
+        'Third-party components retain their respective licenses.': '第三方组件保留各自原有的许可条款。',
         'This interface processes MIDI. Audio transcription is performed by upstream models.':
             '本界面用于 MIDI 后处理；音频转谱由上游模型完成。',
         'Deletion reason:': '删除理由：', 'Trimming reason:': '截短理由：',

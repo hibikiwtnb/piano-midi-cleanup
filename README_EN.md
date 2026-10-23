@@ -2,6 +2,16 @@
 
 [Chinese README](README.md)
 
+## License
+
+Copyright (c) 2026 hibikiwtnb and contributors.
+
+Original project code is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`); see [LICENSE](LICENSE). Commercial use is permitted. Distribution of covered software requires providing its Corresponding Source under the license terms. Modified versions that interact with users over a network must offer those users access to their Corresponding Source as required by section 13. The software comes without warranty.
+
+Third-party components, upstream models and weights retain their respective licenses. See [sound_sources/README.md](sound_sources/README.md), `vendor/TONAL_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt` for the bundled components.
+
+## Features
+
 Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (main panel piano roll with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
 
 A transcription entrypoint is included (`src/transcribe.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
