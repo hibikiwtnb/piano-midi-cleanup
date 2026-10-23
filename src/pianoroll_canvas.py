@@ -141,8 +141,8 @@ class PianoRollView(ttk.Frame):
 
         play = ttk.Frame(self, padding=(0, 0, 0, 4))
         play.pack(fill='x')
-        ttk.Button(play, text=tr('Play'), command=self.play).pack(side='left', padx=(0, 2))
-        ttk.Button(play, text=tr('Pause'), command=self.stop).pack(side='left', padx=2)
+        self.play_button = ttk.Button(play, text=tr('Play'), command=self.toggle_playback)
+        self.play_button.pack(side='left', padx=(0, 2))
         ttk.Label(play, text=tr('MIDI Output')).pack(side='left', padx=(12, 4))
         outputs = output_names()
         if self.output_var.get() not in outputs:
@@ -422,15 +422,23 @@ class PianoRollView(ttk.Frame):
         self.output = None
         self.playback = None
 
+    def toggle_playback(self):
+        if self.play_started is not None or self.play_after_id is not None:
+            self.stop()
+        else:
+            self.play()
+
     def play(self):
         if self.play_after_id is not None:
             self.after_cancel(self.play_after_id)
         self.play_after_id = None
+        self.play_button.configure(text=tr('Play'))
         if not self.path:
             return
         if not self.ensure_playback():
             if self.output is not None and not getattr(self.output, 'error', None):
                 self.play_after_id = self.after(100, self.play)
+                self.play_button.configure(text=tr('Pause'))
             return
         self.status.set(tr('Playback output: {}').format(self.output_var.get()))
         position = self.position_seconds()
@@ -438,6 +446,7 @@ class PianoRollView(ttk.Frame):
         self.apply_mix()
         self.play_started = time.monotonic()
         self.play_start_seconds = position
+        self.play_button.configure(text=tr('Pause'))
 
     def apply_mix(self):
         if self.playback is not None:
@@ -451,6 +460,7 @@ class PianoRollView(ttk.Frame):
             self.playback.stop()
         self.play_start_seconds = self.position_seconds()
         self.play_started = None
+        self.play_button.configure(text=tr('Play'))
 
     def shutdown(self):
         if self.after_id is not None:
