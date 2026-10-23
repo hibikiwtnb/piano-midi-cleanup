@@ -228,6 +228,16 @@ MuScriptor 與字節、Transkun 的配對起音差中位數分別為 16.406 ms�
 
 三方原始數據保存在本地 `three-model-comparison.json`，未配對逐音明細為 `bytedance_vs_muscriptor-unmatched.csv`、`transkun_vs_muscriptor-unmatched.csv`。相同尺度圖及 135 BPM 對齊副本保存在 `three-model-bars/`，檔名為 `bar-035-three-models.png`、`bar-036-three-models.png`、`bar-056-three-models.png`。
 
+### 字節音尾截斷後的三方圖
+
+另以字節 135 BPM、第一拍已對齊的副本，先執行現有兩手分配，再執行現有 `trim_overlaps_in_place()`，沿用右手快速音群截斷與 100 ms 踏板延音容差。未執行刪音、可彈性減音或逐音量化；Transkun 與 MuScriptor 保持原有對齊版本。
+
+全曲 2,872 個音符中有 1,491 個音尾縮短；373 個截斷候選因估計延音結束會提前超過容差而保留，無不確定事件保留項。已核對音符數、起音 tick、音高與力度完全不變，原始 MIDI 雜湊亦未改變。分手會重新配置左右手 channel 並路由踏板，因此此副本不只改變 note-off 所在位置，但沒有改寫踏板時間或數值。
+
+第 35、36、56 小節起音的音符中，分別有 14、14、7 個音尾縮短；新的三方對照圖保存在本地 `trimmed-three-model-bars/bar-035-trimmed-three-models.png`、`bar-036-trimmed-three-models.png`、`bar-056-trimmed-three-models.png`。該目錄亦保留輸出 MIDI、截斷報告與 `trimmed-comparison.json`。圖片色彩仍按原始起音配對，起音吻合統計不受這次截斷影響。
+
+部分長音仍因踏板保護、規則未命中或原本已足夠短而保留。這是現有保守截斷的輸出，不代表已還原真實放鍵時間，也沒有證明聽感完全不變。
+
 ## 本地證據與閱讀資料
 
 本地工作目錄為 repo 下的 `testdata/transkun-lala-20261023/`，依 repo 規則不提交音訊、MIDI、圖片及原始比較輸出。報告將關鍵數字與判斷保存在版本控制中；以下檔案僅在本機存在：
