@@ -111,6 +111,7 @@ class PianoRollView(ttk.Frame):
         self.changes = None
         self.changes_mtime = None
         self.change_items = {}
+        self.note_items = {}
         self.label_images = {}
         self.change_tooltip = None
         self.tooltip_item = None
@@ -355,6 +356,12 @@ class PianoRollView(ttk.Frame):
 
     def show_change_hint(self, event):
         current = self.canvas.find_withtag('current')
+        note = self.note_items.get(current[0]) if current else None
+        if note is not None:
+            self.hide_change_tooltip()
+            pitch, velocity = note
+            self.status.set(tr('{} | Velocity {}').format(note_name(pitch), velocity))
+            return
         change = self.change_items.get(current[0]) if current else None
         if change is None:
             self.reset_change_hint()
@@ -405,6 +412,7 @@ class PianoRollView(ttk.Frame):
 
         pps = self.pixels_per_second
         self.change_items.clear()
+        self.note_items.clear()
         self.reset_change_hint()
         mode = self.change_modes[self.change_mode.get()]
         for change in self.changes or []:
@@ -423,8 +431,9 @@ class PianoRollView(ttk.Frame):
             if self.shading.get():
                 color = shade(color, velocity)
             y = (PITCHES - 1 - pitch) * ROW_HEIGHT + 1
-            self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
-                                         fill=color, outline='', tags='note')
+            item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
+                                                fill=color, outline='', tags='note')
+            self.note_items[item] = (pitch, velocity)
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
             y = row * PEDAL_ROW_HEIGHT
