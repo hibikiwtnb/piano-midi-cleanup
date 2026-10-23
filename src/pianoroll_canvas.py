@@ -26,6 +26,7 @@ ROW_HEIGHT = 9
 PEDAL_ROW_HEIGHT = 12
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
+HORIZONTAL_SCROLL_INCREMENT = 24
 HAND_ORDER = ('right', 'second_right', 'second_left', 'left')
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
@@ -158,14 +159,16 @@ class PianoRollView(ttk.Frame):
 
         roll = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
-        self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background='#eef1f5', highlightthickness=0)
+        self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background='#eef1f5', highlightthickness=0,
+                               xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
         self.keys = tk.Canvas(roll, width=KEYS_WIDTH, background='white', highlightthickness=0,
                               yscrollincrement=ROW_HEIGHT)
         self.canvas = tk.Canvas(roll, width=800, height=360, background='#fbfcfe', highlightthickness=0,
-                                xscrollincrement=24, yscrollincrement=ROW_HEIGHT)
+                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT, yscrollincrement=ROW_HEIGHT)
         self.pedal_labels = tk.Canvas(roll, width=KEYS_WIDTH, height=PEDAL_ROW_HEIGHT, background='white',
                                       highlightthickness=0)
-        self.pedal = tk.Canvas(roll, height=PEDAL_ROW_HEIGHT, background='#f6f7f9', highlightthickness=0)
+        self.pedal = tk.Canvas(roll, height=PEDAL_ROW_HEIGHT, background='#f6f7f9', highlightthickness=0,
+                               xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
         vertical = ttk.Scrollbar(roll, orient='vertical', command=self.yview)
         horizontal = ttk.Scrollbar(roll, orient='horizontal', command=self.xview)
         self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
