@@ -19,3 +19,6 @@ testdata/
 /sound_sources/*.pkg
 /sound_sources/windows/
 /sound_sources/mda-piano-macos/
+
+# Third-party paper full texts kept locally; not redistributable.
+docs/paper-*.md
