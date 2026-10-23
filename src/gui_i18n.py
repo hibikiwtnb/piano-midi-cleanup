@@ -11,6 +11,14 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'Change overlay': 'Change overlay',
+        'Hide changes': 'Hide changes', 'Deleted notes': 'Deleted notes',
+        'Shortened tails': 'Shortened tails', 'All changes': 'All changes',
+        'Red: deleted notes   Orange: shortened tails': 'Red: deleted notes   Orange: shortened tails',
+        'No matching change record. Run processing to record changes.':
+            'No matching change record. Run processing to record changes.',
+        'No notes were deleted or shortened.': 'No notes were deleted or shortened.',
+        '{} | {} | Velocity {}': '{} | {} | Velocity {}',
         'Protect pedal sustain': 'Limit trimming based on pedal state',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             'Keep the original note ending if trimming could make the sound end earlier. Fewer notes will be shortened when enabled.',
@@ -76,6 +84,14 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'Change overlay': '修改痕跡',
+        'Hide changes': '不顯示', 'Deleted notes': '被刪除的音符',
+        'Shortened tails': '被截短的音尾', 'All changes': '全部顯示',
+        'Red: deleted notes   Orange: shortened tails': '淡紅＝已刪除　淡橙＝已截短',
+        'No matching change record. Run processing to record changes.':
+            '尚無對應的修改紀錄，重新處理後即可顯示。',
+        'No notes were deleted or shortened.': '沒有被刪除或截短的音符。',
+        '{} | {} | Velocity {}': '{}｜{}｜力度 {}',
         'Protect pedal sustain': '依踏板狀態限制截斷',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             '若截短音符可能使聲音提早結束，就保留原音尾。開啟後，截短的音符會較少。',
@@ -213,6 +229,14 @@ _TEXT = {
             '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
     },
     'zh_CN': {
+        'Change overlay': '修改痕迹',
+        'Hide changes': '不显示', 'Deleted notes': '被删除的音符',
+        'Shortened tails': '被截短的音尾', 'All changes': '全部显示',
+        'Red: deleted notes   Orange: shortened tails': '淡红＝已删除　淡橙＝已截短',
+        'No matching change record. Run processing to record changes.':
+            '尚无对应的修改记录，重新处理后即可显示。',
+        'No notes were deleted or shortened.': '没有被删除或截短的音符。',
+        '{} | {} | Velocity {}': '{}｜{}｜力度 {}',
         'Protect pedal sustain': '依踏板状态限制截断',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             '若截短音符可能使声音提早结束，就保留原音尾。开启后，截短的音符会较少。',
