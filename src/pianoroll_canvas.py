@@ -103,6 +103,7 @@ class PianoRollView(ttk.Frame):
         self.play_start_seconds = 0.0
         self.after_id = None
         self.play_after_id = None
+        self.center_pending = False
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
@@ -168,6 +169,7 @@ class PianoRollView(ttk.Frame):
         vertical = ttk.Scrollbar(roll, orient='vertical', command=self.yview)
         horizontal = ttk.Scrollbar(roll, orient='horizontal', command=self.xview)
         self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+        self.canvas.bind('<Configure>', self.center_initial_pitch)
         self.ruler.grid(row=0, column=1, sticky='ew')
         self.keys.grid(row=1, column=0, sticky='ns')
         self.canvas.grid(row=1, column=1, sticky='nsew')
@@ -193,6 +195,26 @@ class PianoRollView(ttk.Frame):
         for widget in (self.canvas, self.keys):
             widget.yview(*args)
 
+    def center_initial_pitch(self, _event=None):
+        """Center a newly loaded song once the viewport has its actual dimensions."""
+        if not self.center_pending or not self.canvas.winfo_ismapped():
+            return
+        height = self.canvas.winfo_height()
+        width = self.canvas.winfo_width()
+        if height <= 1 or width <= 1:
+            return
+        left = self.canvas.canvasx(0) / self.pixels_per_second
+        right = self.canvas.canvasx(width) / self.pixels_per_second
+        pitches = [pitch for start, end, pitch, _, _ in self.notes if start < right and end > left]
+        if not pitches:
+            pitches = [pitch for _, _, pitch, _, _ in self.notes] or [60]
+        middle_pitch = (min(pitches) + max(pitches)) / 2
+        center = (PITCHES - 1 - middle_pitch + 0.5) * ROW_HEIGHT
+        total_height = PITCHES * ROW_HEIGHT
+        top = max(0, min(max(0, total_height - height), center - height / 2))
+        self.yview('moveto', top / total_height)
+        self.center_pending = False
+
     def wheel(self, event):
         step = -1 if event.delta > 0 else 1
         if event.state & 0x0004 or event.state & 0x20000:
@@ -217,6 +239,7 @@ class PianoRollView(ttk.Frame):
         """Load midi_path unless the same file version is already shown."""
         if not midi_path or not os.path.isfile(midi_path):
             self.stop()
+            self.center_pending = False
             self.path = None
             self.notes, self.pedal_rows, self.duration = [], [], 0.0
             self.set_editable(False)
@@ -248,8 +271,9 @@ class PianoRollView(ttk.Frame):
             self.xview('moveto', view[0])
             self.yview('moveto', view[1])
         else:
-            pitches = [pitch for _, _, pitch, _, _ in self.notes] or [60]
-            self.yview('moveto', max(0, PITCHES - 1 - max(pitches) - 4) / PITCHES)
+            self.xview('moveto', 0)
+            self.center_pending = True
+            self.after_idle(self.center_initial_pitch)
         self.status.set(tr('Loaded: {}').format(os.path.basename(midi_path)))
 
     def set_editable(self, editable):
