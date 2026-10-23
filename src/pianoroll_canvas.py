@@ -485,8 +485,7 @@ class PianoRollView(ttk.Frame):
                     if key_index >= 0:
                         key = self.key_signatures[key_index][1]
                         tonic = key[:-1] if key.endswith('m') else key
-                        tonic = tonic.replace('#', '♯').replace('b', '♭')
-                        label += ' ' + tr('{} minor' if key.endswith('m') else '{} major').format(tonic)
+                        label += ' ' + tonic + (' minor' if key.endswith('m') else ' Major')
                     self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=label, anchor='w',
                                            fill='#435365')
             elif index % 4 == 0:

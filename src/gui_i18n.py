@@ -11,7 +11,6 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
-        '{} major': '{} major', '{} minor': '{} minor',
         'Deletion reason:': 'Deletion reason:', 'Trimming reason:': 'Trimming reason:',
         '{} | Velocity {}': '{} | Velocity {}',
         'Change overlay': 'Change overlay',
@@ -85,7 +84,6 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
-        '{} major': '{}大調', '{} minor': '{}小調',
         'Deletion reason:': '刪除理由：', 'Trimming reason:': '截短理由：',
         '{} | Velocity {}': '{}｜力度 {}',
         'Change overlay': '修改痕跡',
@@ -231,7 +229,6 @@ _TEXT = {
             '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
     },
     'zh_CN': {
-        '{} major': '{}大调', '{} minor': '{}小调',
         'Deletion reason:': '删除理由：', 'Trimming reason:': '截短理由：',
         '{} | Velocity {}': '{}｜力度 {}',
         'Change overlay': '修改痕迹',
