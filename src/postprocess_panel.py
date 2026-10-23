@@ -195,6 +195,7 @@ class Panel:
 
     def build_steps(self, frame):
         frame.pack(side='left', fill='y', padx=(0, 8))
+        frame.columnconfigure(1, pad=40)
         self.step_checks = {}
         for row, (name, label, _) in enumerate(SWITCHES):
             check = ttk.Checkbutton(frame, text=tr(label), variable=self.switches[name])
