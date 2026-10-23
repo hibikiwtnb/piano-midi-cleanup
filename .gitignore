@@ -9,6 +9,7 @@ piano_transcription_inference_data/
 *.aiff
 *.mp3
 *.flac
+*.changes.json
 *_pianoroll/
 testdata/
 /*.lnk

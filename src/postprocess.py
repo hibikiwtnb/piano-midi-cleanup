@@ -19,6 +19,7 @@ from pianoroll_snapshot import write_snapshots
 from playable_reduction import apply_playable_reduction
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS, apply_overlap_trim
 from report_utils import report_blocks, update_report
+from note_changes import note_snapshot, save_changes, stage_changes
 
 
 # Report sections that belong to song_bpmfix.mid; they are kept when it is reused, everything after is rebuilt.
@@ -174,7 +175,11 @@ def run_postprocess(args):
                 'the BPM-fixed MIDI in the workbench, or pass --discard-cleaned-edits.'.format(cleaned_path, bpmfix_path))
         keep_bpmfix_sections(stats_path)
 
+    changes = []
     for name in names:
+        before = None
+        if name in ('clean', 'playable', 'trim'):
+            before = note_snapshot(bpmfix_path if name == 'clean' else cleaned_path)
         if name == 'bpmfix':
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm)
         elif name == 'first_beat':
@@ -197,6 +202,11 @@ def run_postprocess(args):
                                protect_pedal=not args.no_pedal_protection)
         elif name == 'snapshot':
             write_snapshots(cleaned_path, layouts=SNAPSHOT_LAYOUTS[args.snapshot])
+
+        if before is not None:
+            changes.extend(stage_changes(before, note_snapshot(cleaned_path), name))
+
+    save_changes(cleaned_path, changes)
 
     summary = '\n'.join(['MIDI post-processing run', 'Output: {}'.format(cleaned_path)]
                         + ['{}. {}'.format(index, label) for index, (_, label) in enumerate(steps, 1)]
