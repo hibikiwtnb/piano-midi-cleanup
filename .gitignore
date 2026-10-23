@@ -15,3 +15,7 @@ testdata/
 /docs/gui-preview.log
 /docs/gui-preview.png
 /docs/gui-report*.png
+/sound_sources/*.zip
+/sound_sources/*.pkg
+/sound_sources/windows/
+/sound_sources/mda-piano-macos/
