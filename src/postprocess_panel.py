@@ -139,7 +139,7 @@ class Panel:
         self.build_parameters(ttk.LabelFrame(body, text=tr('Thresholds'), padding=8))
         self.build_report(report)
         self.main_tabs.select(selected_tab)
-        self.build_run(ttk.Frame(self.root, padding=8))
+        self.build_run(ttk.Frame(processing, padding=8))
         self.show_preset(self.settings.get('last') or default_preset())
         self.update_source()
 
