@@ -2,7 +2,7 @@
 
 [Chinese README](README.md)
 
-Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (browser workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
+Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (Tk Canvas workbench with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
 
 A transcription entrypoint is included (`src/transcribe.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
 
@@ -104,9 +104,13 @@ python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --
 python src/postprocess.py --list-parameters
 ```
 
-### `postprocess_panel.command`
+### GUI launchers
 
-A tkinter panel for the runner: choose the MIDI, the BPM source (reuse `song_bpmfix.mid`, a known BPM, or detection from audio), each step's switch, the number of hands, the fast figure hands and snapshots, plus every threshold on tabs next to its default. Run shows the report below.
+On this Windows machine, the local `Piano MIDI Cleanup.lnk` shortcut in the repository root opens the panel without a console window. Machine-specific shortcuts are not distributed with the repository; other environments can run `python src/postprocess_panel.py`. On macOS, use `macos/postprocess_panel.command`.
+
+The tkinter panel lets you choose the MIDI, tempo source and processing steps, with settings grouped by topic. The Detailed report tab loads the existing TXT at startup and when the MIDI changes, displaying items and values in two columns. The bottom status bar shows the latest status.
+
+Reports update items line by line within each block: identical lines stay, changed values update, new items are added and removed items disappear. Other blocks stay intact, repeated blocks retain their latest result, and identical content causes no file write. Cancelling first-beat editing leaves the report unchanged.
 
 - Switches and thresholds can be saved as presets, such as one player or three hands; Defaults restores the defaults.
 - The last choices and the presets are kept in `~/.piano-midi-cleanup-panel.json`.
@@ -126,18 +130,18 @@ On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CP
 
 ### `bpmfix.command`
 
-BPM fixing, then BPM and first beat adjustment in a browser workbench.
+BPM fixing, then BPM and first beat adjustment in a Tk workbench.
 
 Usage:
 
 1. If you already know the BPM, enter it in the terminal; otherwise press Return and choose the source audio so Essentia can detect a fixed BPM.
 2. Choose the MIDI file to fix. The tool writes `*_bpmfix.mid`.
 3. The first beat is moved to a bar line with the algorithm below and written to `*_bpmfix.mid` (no question; use `--no-auto-first-beat` on the CLI to skip it).
-4. The MIDI workbench opens in the browser (the vsti-webui-wes7-pcm interface): piano roll, BPM / first beat / visual delay inputs, follow, left/right hand solo and mute (the second right hand counts as right, the second left as left), and the 88-key Pianometer. Playback sends the MIDI to a MIDI output port in realtime.
-5. After setting BPM and the first beat, press "寫入 MIDI" to overwrite `*_bpmfix.mid` in place. "取消" leaves it unchanged.
+4. The Tk MIDI workbench shows a piano roll and beat lines, with BPM and first-beat offset controls, beat stepping, playback, pause, click-to-seek, zoom, and scrolling. Playback sends MIDI to an output port in realtime.
+5. After setting BPM and the first beat, press Apply to overwrite `*_bpmfix.mid` in place. Cancel leaves it unchanged.
 6. Key signatures are written last with the `key_signature.command` method (`--no-key-signature` on the CLI skips it).
 
-`first_beat_ui.py` serves the workbench from a temporary local HTTP server on `127.0.0.1` that stops after save or cancel, so no extra MIDI file is created. For playback, `midi_playback.py` sends the MIDI to a MIDI output: on macOS / Linux it opens a virtual port named `piano-midi-cleanup` that any synth can connect to, and on Windows it uses `Microsoft GS Wavetable Synth`. Use `--midi-port <name>` to open an existing output whose name contains that text instead. If no output can be opened, the workbench still opens without sound.
+`pianoroll_canvas.py` draws the workbench and calls Python MIDI and playback functions directly; it does not use a local HTTP server or browser. For playback, `midi_playback.py` sends MIDI to an output port: on macOS / Linux it opens a virtual port named `piano-midi-cleanup` that any synth can connect to, and on Windows it defaults to `Microsoft GS Wavetable Synth`; the piano roll also lets you select any installed MIDI output, such as `VST MIDI Synth (port A)`. Use `--midi-port <name>` to select an output from the command line. If no output can be opened, the workbench still opens without sound.
 
 Saving uses the original workbench fix: ticks are rescaled to the page BPM, then the first beat is moved to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is updated in `*_stats.txt`.
 
@@ -199,7 +203,7 @@ Lowest note
 Highest note
 Pitch span
 Average velocity
-Max polyphony
+Max simultaneous keys
 ```
 
 Pitch values include both MIDI note number and English pitch name, for example `24 (C1)`.
@@ -313,9 +317,9 @@ Run after the hand split: shortens notes that the sustain pedal left overlapping
 
 ```text
 Fast figure (right and second right hand by default): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next onset group of the same hand
-Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, sounding notes of the hand whose pitch class is not among them end there (like a pedal change)
-Chord change: when a hand plays a new chord or octave (2 or more notes), notes of its previous chord still sounding end there
-Out of reach: when the sounding notes plus the new ones exceed 5 notes or span more than 14 semitones, the sounding notes end there
+Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, held MIDI notes of the hand whose pitch class is not among them end there
+Chord change: when a hand plays a new chord or octave (2 or more notes), held MIDI notes of its previous chord end there
+Out of reach: when held MIDI notes plus the new ones exceed 5 notes or span more than 14 semitones, the held notes end there
 ```
 
 The trim counts per rule and each hand's maximum simultaneous keys, before and after, are updated in the source transcription `*_stats.txt`. These rules estimate key-holding requirements from MIDI note intervals; they do not limit how many notes may keep sounding under the pedal. CC64 sustain tails are not added to the count. If the transcription has already extended note lengths for the pedal, the estimate can exceed the actual number of held keys.
@@ -331,7 +335,7 @@ python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right se
 
 ### `midi_workbench.command`
 
-Opens any MIDI in the browser workbench to set BPM and the first beat, without running the BPM fix. The interface, realtime MIDI output playback and saving are the same as the `bpmfix.command` workbench.
+Opens any MIDI in the Tk workbench to set BPM and the first beat, without running the BPM fix. Realtime MIDI output playback and saving are the same as the `bpmfix.command` workbench.
 
 Usage:
 
@@ -441,6 +445,9 @@ src/transcribe.py
 src/transcribe_mps.py
 postprocess.py
 postprocess_panel.py
+first_beat.py
+pianoroll_canvas.py
+first_beat_ui.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
@@ -460,8 +467,6 @@ Shared helpers:
 bpmfix_utils.py
 first_beat_ui.py
 midi_playback.py
-web/result.js
-web/result.css
 midi_stats.py
 detect_chords_tonal.js
 vendor/tonal.min.js
@@ -495,7 +500,7 @@ ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime workbench playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `piano-midi-cleanup` virtual MIDI output port, which any synth can connect to; on Windows it uses `Microsoft GS Wavetable Synth`. If no output can be opened, the workbench still opens without sound.
+Realtime workbench playback needs `python-rtmidi` (included in the install command). On macOS / Linux it creates the `piano-midi-cleanup` virtual MIDI output port, which any synth can connect to; on Windows it defaults to `Microsoft GS Wavetable Synth`, and the piano roll can select any installed MIDI output. If no output can be opened, the workbench still opens without sound.
 
 Vendored JS:
 

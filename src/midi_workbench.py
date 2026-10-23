@@ -4,7 +4,8 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from first_beat_ui import append_first_beat_stats, auto_align_first_beat, run_first_beat_ui
+from first_beat import append_first_beat_stats, auto_align_first_beat
+from first_beat_ui import run_first_beat_ui
 from key_signature import apply_key_signatures
 
 
@@ -26,7 +27,7 @@ def parse_args(argv):
     )
     parser.add_argument('input_midi', nargs='?', help='MIDI to modify in place.')
     parser.add_argument('--auto-first-beat', action='store_true', help='Align the first beat from the MIDI first.')
-    parser.add_argument('--no-workbench', action='store_true', help='Do not open the browser workbench.')
+    parser.add_argument('--no-workbench', action='store_true', help='Do not open the Tk workbench.')
     parser.add_argument('--midi-port', help='Name of the MIDI output port to play on instead of the default.')
     parser.add_argument('--no-key-signature', action='store_true',
                         help='Do not rewrite key signatures after the first beat moves.')
@@ -53,7 +54,7 @@ def main(argv=None):
 
     print('--------------------------------------------------------------------------------')
     print('MIDI workbench')
-    print('Choose a MIDI file. Saving in the browser overwrites that file in place.')
+    print('Choose a MIDI file. Applying changes in the workbench overwrites that file in place.')
     print('--------------------------------------------------------------------------------')
 
     midi_path = choose_midi()
@@ -73,7 +74,8 @@ def main(argv=None):
         messagebox.showerror('MIDI Workbench failed', str(error))
         raise
 
-    messagebox.showinfo('MIDI Workbench complete', report)
+    if report:
+        messagebox.showinfo('MIDI Workbench complete', report)
     return 0
 
 

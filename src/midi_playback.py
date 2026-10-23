@@ -9,6 +9,7 @@ output is replaced by the MIDI output below.
 """
 
 import os
+import time
 from dataclasses import dataclass
 from threading import Event, Lock, Thread, current_thread
 
@@ -38,18 +39,29 @@ def open_output(port_name=None):
     except Exception as error:
         print('Cannot list MIDI outputs ({}); the workbench opens without sound.'.format(error))
         return None, wanted
-    for name in names:
-        if wanted in name:
-            try:
-                output = mido.open_output(name)
-            except Exception as error:
-                print('Cannot open {} ({}); the workbench opens without sound.'.format(name, error))
-                return None, wanted
-            print('Playback output: {}'.format(name))
-            return output, name
+    name = next((candidate for candidate in names if candidate == wanted), None)
+    if name is None:
+        name = next((candidate for candidate in names if wanted in candidate), None)
+    if name is not None:
+        try:
+            output = mido.open_output(name)
+        except Exception as error:
+            print('Cannot open {} ({}); the workbench opens without sound.'.format(name, error))
+            return None, wanted
+        print('Playback output: {}'.format(name))
+        return output, name
     print('{} not found; the workbench opens without sound.'.format(wanted))
     print('Available MIDI outputs: {}'.format(', '.join(names) if names else '(none)'))
     return None, wanted
+
+
+def output_names():
+    """Return available MIDI output names, or an empty list if the backend is unavailable."""
+    try:
+        return mido.get_output_names()
+    except Exception as error:
+        print('Cannot list MIDI outputs ({}).'.format(error))
+        return []
 
 
 @dataclass(frozen=True)

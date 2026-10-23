@@ -175,7 +175,7 @@ def format_trim_stats(stats):
     for channel in sorted(stats['notes']):
         counts = stats['counts'][channel]
         lines.append('- Channel {} / {}: {} notes, fast figure {}, harmony change {}, chord change {}, '
-                     'outer line {}, out of reach {}, most notes sounding {} -> {}'.format(
+                     'outer line {}, out of reach {}, most keys held {} -> {}'.format(
                          channel + 1, HAND_NAMES.get(channel, 'unsplit'), stats['notes'][channel],
                          counts.get('fast_figure', 0), counts.get('harmony_change', 0),
                          counts.get('chord_change', 0), counts.get('outer_line', 0),

@@ -1,7 +1,7 @@
 # Piano MIDI Cleanup
 [English README](README_EN.md)
 
-把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（瀏覽器工作台即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
+把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（Tk Canvas 工作台即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
 
 也附轉錄入口（`src/transcribe.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
 
@@ -105,9 +105,11 @@ python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --
 python src/postprocess.py --list-parameters
 ```
 
-### `postprocess_panel.command`
+### GUI 啟動入口
 
-統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用 `song_bpmfix.mid`、已知 BPM、從音訊偵測）、每一步的開關、手數、套用快速音型的手、截圖，以及分頁列出的全部閾值（旁邊標著預設值）。按 Run 後在下方顯示報告。
+本機 Windows 使用 repo 根目錄已建立的 `Piano MIDI Cleanup.lnk` 快捷方式開啟面板，不會顯示命令列視窗。快捷方式屬本機設定，不隨 repo 分發；其他環境可執行 `python src/postprocess_panel.py`。macOS 使用 `macos/postprocess_panel.command`。
+
+統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用已修正速度、手動指定、從音訊偵測）、每一步的開關，以及按主題排列的設定分頁。「詳細報告」以項目／值兩欄顯示已生成的 TXT，開啟面板或切換 MIDI 時讀入；底部狀態欄顯示最新狀態。
 
 - 開關和閾值可以存成預設組合（Preset），例如「一人彈」「三手」；Defaults 回到預設值。
 - 上次的選擇和預設組合存在 `~/.piano-midi-cleanup-panel.json`。
@@ -127,18 +129,18 @@ MPS -> CUDA -> CPU
 
 ### `bpmfix.command`
 
-BPM 修正，再在瀏覽器工作台調整 BPM 和第一拍。
+BPM 修正，再在 Tk 工作台調整 BPM 和第一拍。
 
 使用方式：
 
 1. 如果已知 BPM，在終端輸入 BPM；不知道就直接按 Return，再選擇原音訊檔讓 Essentia 偵測固定 BPM。
 2. 選擇要修正的 MIDI，輸出 `*_bpmfix.mid`。
 3. 自動用下方的演算法把第一拍移到小節線並寫入 `*_bpmfix.mid`（不詢問；CLI 用 `--no-auto-first-beat` 關閉）。
-4. 瀏覽器自動打開 MIDI 工作台（沿用 vsti-webui-wes7-pcm 的介面）：鋼琴捲簾、BPM / 第一拍 / 畫面延遲輸入、跟隨、左右手獨奏與靜音（第二右手併入右手、第二左手併入左手）、88 鍵 Pianometer。播放時 MIDI 即時送到 MIDI 輸出埠發聲。
-5. 調好 BPM 和第一拍後按「寫入 MIDI」，直接覆寫 `*_bpmfix.mid`；按「取消」則不修改。
+4. Tk MIDI 工作台顯示鋼琴捲簾和拍線，可設定 BPM / 第一拍 offset、按拍移動、播放、暫停、點擊定位，並縮放與捲動。播放時 MIDI 即時送到 MIDI 輸出埠。
+5. 調好 BPM 和第一拍後按 Apply，直接覆寫 `*_bpmfix.mid`；按 Cancel 則不修改。
 6. 最後依 `key_signature.command` 的方法寫入調號（CLI 用 `--no-key-signature` 關閉）。
 
-工作台由 `first_beat_ui.py` 在 `127.0.0.1` 開一個暫時的本機 HTTP server，寫入或取消後自動結束，不會產生額外的 MIDI 檔。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`。也可以用 `--midi-port <名稱>` 改用名稱包含該文字的既有輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
+工作台由 `pianoroll_canvas.py` 繪製，直接呼叫 Python MIDI 與播放函式，沒有本機 HTTP server 或瀏覽器。播放由 `midi_playback.py` 送到 MIDI 輸出埠：macOS / Linux 預設建立名為 `piano-midi-cleanup` 的虛擬埠，把任何合成器連到這個埠即可發聲；Windows 預設送到 `Microsoft GS Wavetable Synth`；鋼琴卷軸也可直接選擇本機 MIDI 輸出埠（例如已安裝 VST MIDI System Synth 後選 `VST MIDI Synth (port A)`）。命令列可用 `--midi-port <名稱>` 指定輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
 寫入沿用原 workbench 的修正：依頁面上的 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會更新至 `*_stats.txt`。
 
@@ -200,10 +202,12 @@ Lowest note
 Highest note
 Pitch span
 Average velocity
-Max polyphony
+Max simultaneous keys
 ```
 
 音高會同時輸出 MIDI note number 和英文音名，例如 `24 (C1)`。
+
+「最多同時按鍵數」依 MIDI 音符的按下至放開區間估計，不額外計入延音踏板（CC64）留下的聲音。若來源轉錄把踏板延音直接寫入音長，此值會高估實際按鍵數，不能單憑它判定手指不夠。
 
 ### `clean_midi_rules.command`
 
@@ -314,9 +318,9 @@ python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 
 
 ```text
 快速音型（預設右手和第二右手）：連續 3 組以上、每組間隔 0.5 拍以內的起音；音型內每個音最晚在同一隻手下一組起音結束
-換和聲：某個起音時刻所有手合起來有 3 個以上不同音名時，這隻手還在響、音名不在其中的音在此結束（相當於換踏板）
-換和弦：一隻手彈新的和弦或八度（2 個音以上）時，上一個和弦還在響的音在此結束
-按不住：還在響的音加上新的音超過 5 個，或跨度超過 14 半音時，還在響的音在此結束
+換和聲：某個起音時刻所有手合起來有 3 個以上不同音名時，這隻手在 MIDI 中尚未放開、音名不在其中的音在此結束
+換和弦：一隻手彈新的和弦或八度（2 個音以上）時，上一個和弦在 MIDI 中尚未放開的音在此結束
+按鍵需求過大：按 MIDI 音長估計，前音加新音超過 5 個或跨度超過 14 半音時，前音在此結束
 ```
 
 各規則的裁短數，以及每隻手「最多同時按鍵數」的處理前後值，更新至來源轉錄的 `*_stats.txt`。這些規則整理的是 MIDI 譜面上的按鍵需求，不限制踏板延續的實際發聲數。
@@ -442,6 +446,9 @@ src/transcribe.py
 src/transcribe_mps.py
 postprocess.py
 postprocess_panel.py
+first_beat.py
+pianoroll_canvas.py
+first_beat_ui.py
 bpmfix.py
 midi_stats_command.py
 clean_midi_rules.py
@@ -461,8 +468,6 @@ pianoroll_snapshot.py
 bpmfix_utils.py
 first_beat_ui.py
 midi_playback.py
-web/result.js
-web/result.css
 midi_stats.py
 detect_chords_tonal.js
 vendor/tonal.min.js
@@ -503,7 +508,7 @@ ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `piano-midi-cleanup` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 使用 `Microsoft GS Wavetable Synth`。找不到輸出埠時工作台仍會開啟，但沒有聲音。
+工作台的即時播放需要 `python-rtmidi`（已列在安裝指令中）。macOS / Linux 會建立 `piano-midi-cleanup` 虛擬 MIDI 輸出埠，讓任何合成器連接；Windows 預設使用 `Microsoft GS Wavetable Synth`，鋼琴卷軸可選擇其他已安裝 MIDI 輸出埠。找不到輸出埠時工作台仍會開啟，但沒有聲音。
 
 Vendored JS:
 

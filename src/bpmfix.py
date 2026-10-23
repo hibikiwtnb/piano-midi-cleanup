@@ -5,7 +5,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from bpmfix_utils import apply_bpm_fix, bpmfix_report_path_for
-from first_beat_ui import append_first_beat_stats, auto_align_first_beat, run_first_beat_ui
+from first_beat import append_first_beat_stats, auto_align_first_beat
+from first_beat_ui import run_first_beat_ui
 from key_signature import apply_key_signatures
 
 
@@ -59,7 +60,7 @@ def parse_args(argv):
     source.add_argument('--bpm', type=float, help='Known BPM.')
     source.add_argument('--audio', help='Source audio for Essentia BPM detection.')
     parser.add_argument('--no-auto-first-beat', action='store_true', help='Skip the automatic first beat alignment.')
-    parser.add_argument('--workbench', action='store_true', help='Open the browser workbench after fixing.')
+    parser.add_argument('--workbench', action='store_true', help='Open the Tk MIDI workbench after fixing.')
     parser.add_argument('--midi-port', help='Name of the MIDI output port to play on instead of the default.')
     parser.add_argument('--no-key-signature', action='store_true', help='Skip key signature detection.')
     return parser.parse_args(argv)
@@ -95,7 +96,7 @@ def main(argv=None):
         return run_non_interactive(args)
 
     print('--------------------------------------------------------------------------------')
-    print('MIDI BPMFix using Essentia BPM detection, then BPM and first beat in the browser')
+    print('MIDI BPMFix using Essentia BPM detection, then BPM and first beat in the Tk workbench')
     print('Enter a known BPM first. If unknown, press Return and choose audio for detection.')
     print('--------------------------------------------------------------------------------')
 

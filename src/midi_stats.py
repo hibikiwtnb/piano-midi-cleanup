@@ -51,16 +51,17 @@ def _iter_timed_messages(midi_file):
 
 
 def analyze_midi(midi_path):
+    """Count held MIDI note intervals; CC64 pedal tails are not added."""
     midi_file = mido.MidiFile(midi_path)
     active_notes = defaultdict(list)
     notes = []
-    polyphony_events = []
+    key_events = []
 
     for time_seconds, message in _iter_timed_messages(midi_file):
         if message.type == 'note_on' and message.velocity > 0:
             key = (message.channel, message.note)
             active_notes[key].append((time_seconds, message.velocity))
-            polyphony_events.append((time_seconds, 1))
+            key_events.append((time_seconds, 1))
         elif message.type in ('note_off', 'note_on'):
             key = (message.channel, message.note)
             if active_notes[key]:
@@ -70,7 +71,7 @@ def analyze_midi(midi_path):
                     'velocity': velocity,
                     'duration': max(0.0, time_seconds - start_seconds),
                 })
-                polyphony_events.append((time_seconds, -1))
+                key_events.append((time_seconds, -1))
 
     total_notes = len(notes)
     if not notes:
@@ -85,7 +86,7 @@ def analyze_midi(midi_path):
             'highest_note': None,
             'pitch_span': 0,
             'average_velocity': 0.0,
-            'max_polyphony': 0,
+            'max_simultaneous_keys': 0,
         }
 
     short_notes = sum(1 for note in notes if note['duration'] < SHORT_NOTE_SECONDS)
@@ -94,11 +95,11 @@ def analyze_midi(midi_path):
     highest_note = max(note['note'] for note in notes)
     average_velocity = sum(note['velocity'] for note in notes) / total_notes
 
-    current_polyphony = 0
-    max_polyphony = 0
-    for _, delta in sorted(polyphony_events, key=lambda item: (item[0], item[1])):
-        current_polyphony += delta
-        max_polyphony = max(max_polyphony, current_polyphony)
+    held_keys = 0
+    max_simultaneous_keys = 0
+    for _, delta in sorted(key_events, key=lambda item: (item[0], item[1])):
+        held_keys += delta
+        max_simultaneous_keys = max(max_simultaneous_keys, held_keys)
 
     return {
         'midi_path': midi_path,
@@ -111,7 +112,7 @@ def analyze_midi(midi_path):
         'highest_note': highest_note,
         'pitch_span': highest_note - lowest_note,
         'average_velocity': average_velocity,
-        'max_polyphony': max_polyphony,
+        'max_simultaneous_keys': max_simultaneous_keys,
     }
 
 
@@ -134,7 +135,7 @@ def format_stats(stats):
         'Highest note: {}'.format(format_note(stats['highest_note'])),
         'Pitch span: {} semitone(s)'.format(stats['pitch_span']),
         'Average velocity: {:.2f}'.format(stats['average_velocity']),
-        'Max polyphony: {}'.format(stats['max_polyphony']),
+        'Max simultaneous keys: {}'.format(stats['max_simultaneous_keys']),
     ])
 
 

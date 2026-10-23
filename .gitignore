@@ -11,3 +11,7 @@ piano_transcription_inference_data/
 *.flac
 *_pianoroll/
 testdata/
+/*.lnk
+/docs/gui-preview.log
+/docs/gui-preview.png
+/docs/gui-report*.png

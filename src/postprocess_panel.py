@@ -2,26 +2,31 @@ import contextlib
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from tkinter.scrolledtext import ScrolledText
+from tkinter import font as tkfont
 
+from gui_i18n import LANGUAGES, get_language, set_language, tr, tr_report
 import postprocess
+from first_beat import append_first_beat_stats
+from midi_stats import source_stats_path_for
+from pianoroll_canvas import PianoRollWorkbench
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
 
 
 # Last choices and saved presets, per user.
 SETTINGS_PATH = os.path.join(os.path.expanduser('~'), '.piano-midi-cleanup-panel.json')
 PARAMETER_TABS = (
-    ('key', 'Key signatures'),
     ('clean', 'Rule cleaning'),
-    ('playable', 'Playable'),
     ('split', 'Hand split'),
     ('trim', 'Overlap trim'),
+    ('key', 'Key signatures'),
+    ('playable', 'Playable'),
 )
-HAND_ORDER = ('right', 'second_right', 'second_left', 'left')
+HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 # Step switches and their defaults; presets store these and the thresholds, not the files.
 SWITCHES = (
     ('first_beat', 'Auto first beat (after BPMFix)', True),
@@ -73,9 +78,9 @@ class Panel:
     def __init__(self, root):
         self.root = root
         self.settings = load_settings()
+        set_language(self.settings.get('language', '繁體中文'))
         self.lines = queue.Queue()
         self.running = False
-        root.title('Piano MIDI Cleanup')
 
         self.midi = tk.StringVar(value=self.settings.get('midi', ''))
         self.source = tk.StringVar(value=self.settings.get('source', 'reuse'))
@@ -87,55 +92,101 @@ class Panel:
         self.snapshot = tk.StringVar()
         self.parameters = {parameter.key: tk.StringVar() for parameter in postprocess.PARAMETERS}
         self.preset_name = tk.StringVar()
+        self.status = tk.StringVar(value=tr('Ready'))
+        self.status_fragment = ''
+        self.report_text = ''
+        self.build_ui()
+        self.load_existing_report()
+        root.after(100, self.drain)
 
-        self.build_files(ttk.Frame(root, padding=8))
-        body = ttk.Frame(root, padding=(8, 0))
+    def build_ui(self):
+        selected_tab = self.main_tabs.index('current') if hasattr(self, 'main_tabs') else 0
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.root.title(tr('Piano MIDI Cleanup'))
+        language_bar = ttk.Frame(self.root, padding=(8, 8, 8, 0))
+        language_bar.pack(fill='x')
+        ttk.Label(language_bar, text=tr('Language')).pack(side='left')
+        self.language = tk.StringVar(value=get_language())
+        language_box = ttk.Combobox(language_bar, textvariable=self.language,
+                                    values=tuple(LANGUAGES), width=12, state='readonly')
+        language_box.pack(side='left', padx=6)
+        language_box.bind('<<ComboboxSelected>>', self.change_language)
+        self.main_tabs = ttk.Notebook(self.root)
+        self.main_tabs.pack(fill='both', expand=True, padx=8, pady=(8, 0))
+        processing = ttk.Frame(self.main_tabs)
+        report = ttk.Frame(self.main_tabs, padding=8)
+        self.main_tabs.add(processing, text=tr('Processing'))
+        self.main_tabs.add(report, text=tr('Detailed report'))
+        self.build_files(ttk.Frame(processing, padding=8))
+        body = ttk.Frame(processing, padding=(8, 0, 8, 8))
         body.pack(fill='both', expand=False)
-        self.build_steps(ttk.LabelFrame(body, text='Steps', padding=8))
-        self.build_parameters(ttk.LabelFrame(body, text='Thresholds', padding=8))
-        self.build_run(ttk.Frame(root, padding=8))
+        self.build_steps(ttk.LabelFrame(body, text=tr('Steps'), padding=8))
+        self.build_parameters(ttk.LabelFrame(body, text=tr('Thresholds'), padding=8))
+        self.build_report(report)
+        self.main_tabs.select(selected_tab)
+        self.build_run(ttk.Frame(self.root, padding=8))
         self.show_preset(self.settings.get('last') or default_preset())
         self.update_source()
-        root.after(100, self.drain)
+
+    def change_language(self, _event=None):
+        self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
+                             audio=self.audio.get(), last=self.current_preset(), language=self.language.get())
+        save_settings(self.settings)
+        set_language(self.language.get())
+        self.build_ui()
 
     def build_files(self, frame):
         frame.pack(fill='x')
-        ttk.Label(frame, text='MIDI').grid(row=0, column=0, sticky='w')
-        ttk.Entry(frame, textvariable=self.midi, width=70).grid(row=0, column=1, columnspan=3, sticky='we')
-        ttk.Button(frame, text='Choose...', command=self.choose_midi).grid(row=0, column=4)
-        ttk.Radiobutton(frame, text='Reuse song_bpmfix.mid', variable=self.source, value='reuse',
+        ttk.Label(frame, text=tr('MIDI')).grid(row=0, column=0, sticky='w')
+        midi_entry = ttk.Entry(frame, textvariable=self.midi, width=70)
+        midi_entry.grid(row=0, column=1, columnspan=3, sticky='we')
+        midi_entry.bind('<FocusOut>', self.load_existing_report)
+        midi_entry.bind('<Return>', self.load_existing_report)
+        ttk.Button(frame, text=tr('Choose...'), command=self.choose_midi).grid(row=0, column=4)
+        ttk.Button(frame, text=tr('Piano Roll / First Beat'), command=self.open_first_beat).grid(row=0, column=5, padx=(6, 0))
+        ttk.Radiobutton(frame, text=tr('Reuse song_bpmfix.mid'), variable=self.source, value='reuse',
                         command=self.update_source).grid(row=1, column=1, sticky='w')
-        ttk.Radiobutton(frame, text='Known BPM', variable=self.source, value='bpm',
+        ttk.Radiobutton(frame, text=tr('Known BPM'), variable=self.source, value='bpm',
                         command=self.update_source).grid(row=2, column=1, sticky='w')
         self.bpm_entry = ttk.Entry(frame, textvariable=self.bpm, width=10)
         self.bpm_entry.grid(row=2, column=2, sticky='w')
-        ttk.Radiobutton(frame, text='Detect from audio', variable=self.source, value='audio',
+        ttk.Radiobutton(frame, text=tr('Detect from audio'), variable=self.source, value='audio',
                         command=self.update_source).grid(row=3, column=1, sticky='w')
         self.audio_entry = ttk.Entry(frame, textvariable=self.audio, width=50)
         self.audio_entry.grid(row=3, column=2, columnspan=2, sticky='we')
-        self.audio_button = ttk.Button(frame, text='Choose...', command=self.choose_audio)
+        self.audio_button = ttk.Button(frame, text=tr('Choose...'), command=self.choose_audio)
         self.audio_button.grid(row=3, column=4)
         frame.columnconfigure(3, weight=1)
+
+    def open_first_beat(self):
+        midi_path = self.midi.get().strip()
+        if not os.path.isfile(midi_path):
+            messagebox.showerror(tr('Piano MIDI Cleanup'), tr('Choose a MIDI file first.'))
+            return
+        window = tk.Toplevel(self.root)
+
+        def completed(result):
+            if result is None:
+                return
+            append_first_beat_stats(midi_path, result)
+            self.load_existing_report()
+
+        PianoRollWorkbench(window, midi_path, on_complete=completed)
 
     def build_steps(self, frame):
         frame.pack(side='left', fill='y', padx=(0, 8))
         self.step_checks = {}
         for row, (name, label, _) in enumerate(SWITCHES):
-            check = ttk.Checkbutton(frame, text=label, variable=self.switches[name])
+            check = ttk.Checkbutton(frame, text=tr(label), variable=self.switches[name])
             check.grid(row=row, column=0, columnspan=2, sticky='w')
             self.step_checks[name] = check
         row = len(SWITCHES)
-        ttk.Label(frame, text='Hands').grid(row=row, column=0, sticky='w', pady=(8, 0))
-        ttk.Combobox(frame, textvariable=self.hands, values=('2', '3', '4'), width=4,
+        ttk.Label(frame, text=tr('Snapshots')).grid(row=row, column=0, sticky='w', pady=(8, 0))
+        snapshot_values = ('', 'landscape', 'portrait', 'both')
+        self.snapshot_values = {tr(value) if value else tr('No image'): value for value in snapshot_values}
+        ttk.Combobox(frame, textvariable=self.snapshot, values=tuple(self.snapshot_values), width=10,
                      state='readonly').grid(row=row, column=1, sticky='w', pady=(8, 0))
-        ttk.Label(frame, text='Fast figure hands').grid(row=row + 1, column=0, sticky='nw')
-        hands = ttk.Frame(frame)
-        hands.grid(row=row + 1, column=1, sticky='w')
-        for hand in HAND_ORDER:
-            ttk.Checkbutton(hands, text=hand.replace('_', ' '), variable=self.fast_figure[hand]).pack(anchor='w')
-        ttk.Label(frame, text='Snapshots').grid(row=row + 2, column=0, sticky='w')
-        ttk.Combobox(frame, textvariable=self.snapshot, values=('', 'landscape', 'portrait', 'both'), width=10,
-                     state='readonly').grid(row=row + 2, column=1, sticky='w')
 
     def build_parameters(self, frame):
         frame.pack(side='left', fill='both', expand=True)
@@ -143,44 +194,163 @@ class Panel:
         tabs.pack(fill='both', expand=True)
         for prefix, title in PARAMETER_TABS:
             tab = ttk.Frame(tabs, padding=8)
-            tabs.add(tab, text=title)
-            row = 0
-            for parameter in postprocess.PARAMETERS:
-                if not parameter.key.startswith(prefix + '.'):
-                    continue
-                ttk.Label(tab, text=parameter.label).grid(row=row, column=0, sticky='w')
-                ttk.Entry(tab, textvariable=self.parameters[parameter.key], width=8).grid(row=row, column=1, padx=4)
-                ttk.Label(tab, text='default {}'.format(postprocess.PARAMETER_DEFAULTS[parameter.key]),
-                          foreground='gray').grid(row=row, column=2, sticky='w')
-                row += 1
+            tabs.add(tab, text=tr(title))
+            parameter_frame = tab
+            if prefix == 'split':
+                ttk.Label(tab, text=tr('Hands')).grid(row=0, column=0, sticky='w')
+                ttk.Combobox(tab, textvariable=self.hands, values=('2', '3', '4'), width=4,
+                             state='readonly').grid(row=0, column=1, sticky='w')
+                parameter_frame = ttk.Frame(tab)
+                parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
+            elif prefix == 'trim':
+                ttk.Label(tab, text=tr('Fast figure hands')).grid(row=0, column=0, sticky='nw')
+                hands = ttk.Frame(tab)
+                hands.grid(row=0, column=1, sticky='w')
+                for index, hand in enumerate(HAND_ORDER):
+                    ttk.Checkbutton(hands, text=tr(hand.replace('_', ' ')),
+                                    variable=self.fast_figure[hand]).grid(
+                        row=index // 2, column=index % 2, sticky='w', padx=(0, 12))
+                parameter_frame = ttk.Frame(tab)
+                parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
+            self.add_parameter_rows(parameter_frame, [
+                parameter for parameter in postprocess.PARAMETERS
+                if parameter.key.startswith(prefix + '.')
+            ])
         presets = ttk.Frame(frame)
         presets.pack(fill='x', pady=(8, 0))
-        ttk.Label(presets, text='Preset').pack(side='left')
+        ttk.Label(presets, text=tr('Preset')).pack(side='left')
         self.preset_box = ttk.Combobox(presets, textvariable=self.preset_name, width=16, state='readonly')
         self.preset_box.pack(side='left', padx=4)
         self.preset_box.bind('<<ComboboxSelected>>', lambda _: self.load_preset())
-        ttk.Button(presets, text='Save as...', command=self.save_preset).pack(side='left')
-        ttk.Button(presets, text='Delete', command=self.delete_preset).pack(side='left')
-        ttk.Button(presets, text='Defaults', command=lambda: self.show_preset(default_preset())).pack(side='right')
+        ttk.Button(presets, text=tr('Save as...'), command=self.save_preset).pack(side='left')
+        ttk.Button(presets, text=tr('Delete'), command=self.delete_preset).pack(side='left')
+        ttk.Button(presets, text=tr('Defaults'), command=lambda: self.show_preset(default_preset())).pack(side='right')
         self.refresh_presets()
 
+    def add_parameter_rows(self, frame, parameters):
+        for row, parameter in enumerate(parameters):
+            ttk.Label(frame, text=tr(parameter.label)).grid(row=row, column=0, sticky='w')
+            ttk.Entry(frame, textvariable=self.parameters[parameter.key], width=8).grid(row=row, column=1, padx=4)
+            ttk.Label(frame, text=tr('default {}').format(postprocess.PARAMETER_DEFAULTS[parameter.key]),
+                      foreground='gray').grid(row=row, column=2, sticky='w')
+
     def build_run(self, frame):
-        frame.pack(fill='both', expand=True)
-        self.run_button = ttk.Button(frame, text='Run', command=self.run)
-        self.run_button.pack(anchor='w')
-        self.log = ScrolledText(frame, height=18, width=110)
-        self.log.pack(fill='both', expand=True, pady=(8, 0))
+        frame.pack(fill='x')
+        self.run_button = ttk.Button(frame, text=tr('Run'), command=self.run)
+        self.run_button.pack(side='left')
+        if self.running:
+            self.run_button.configure(state='disabled')
+        status_bar = tk.Frame(self.root, background='SystemButtonFace',
+                              relief='raised', borderwidth=1)
+        status_bar.pack(side='bottom', fill='x')
+        ttk.Sizegrip(status_bar).pack(side='right', anchor='se', padx=2, pady=2)
+        tk.Label(status_bar, textvariable=self.status, width=1, anchor='w',
+                 background='white', relief='sunken', borderwidth=1,
+                 padx=4, pady=1).pack(side='left', fill='x', expand=True, padx=2, pady=2)
+
+    def build_report(self, frame):
+        frame.grid_propagate(False)
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        self.report_tree = ttk.Treeview(frame, columns=('value',), show='tree headings')
+        self.report_tree.heading('#0', text=tr('Item'), anchor='w')
+        self.report_tree.heading('value', text=tr('Value'), anchor='w')
+        self.report_tree.column('#0', width=280, minwidth=160, stretch=False)
+        self.report_tree.column('value', width=450, minwidth=200)
+        self.report_tree.tag_configure('section', background='#e8e8e8')
+        vertical = ttk.Scrollbar(frame, orient='vertical', command=self.report_tree.yview)
+        horizontal = ttk.Scrollbar(frame, orient='horizontal', command=self.report_tree.xview)
+        self.report_tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.report_tree.grid(row=0, column=0, sticky='nsew')
+        vertical.grid(row=0, column=1, sticky='ns')
+        horizontal.grid(row=1, column=0, sticky='ew')
+        self.render_report()
+
+    def render_report(self):
+        self.report_tree.delete(*self.report_tree.get_children())
+        section = subgroup = ''
+        longest_value = 0
+        font = tkfont.nametofont('TkDefaultFont')
+
+        def add(parent, label, value='', section_row=False):
+            nonlocal longest_value
+            longest_value = max(longest_value, font.measure(value))
+            return self.report_tree.insert(
+                parent, 'end', text=label, values=(value,), open=True,
+                tags=('section',) if section_row else (),
+            )
+
+        for raw_line in self.report_text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith('MIDI ') and line.endswith((' stats', ' run')):
+                section = add('', tr_report(line), section_row=True)
+                subgroup = ''
+                continue
+            bullet = line.startswith('- ')
+            key, separator, value = (line[2:] if bullet else line).partition(':')
+            value = value.strip()
+            if not separator:
+                add(section, tr('Details'), tr_report(line))
+                continue
+            if not value:
+                subgroup = add(section, tr_report(key), section_row=True)
+                continue
+            parent = subgroup if bullet and subgroup else section
+            if not bullet:
+                subgroup = ''
+            channel = re.fullmatch(r'(\d+) notes, (.+)', value)
+            if key.startswith('Channel ') and channel:
+                channel_row = add(parent, tr_report(key), tr_report(channel[1] + ' notes'), True)
+                for metric in channel[2].split(', '):
+                    match = re.fullmatch(r'(.+?) (\d+(?: -> \d+)?)', metric)
+                    if match:
+                        add(channel_row, tr_report(match[1]), match[2].replace(' -> ', ' → '))
+                    else:
+                        add(channel_row, tr('Details'), metric)
+            else:
+                file_field = key in ('MIDI', 'Audio', 'Input', 'Output', 'Input MIDI', 'Output MIDI')
+                display_value = value if file_field and value != 'N/A' else tr_report(value)
+                add(parent, tr_report(key), display_value)
+        self.report_tree.column('value', width=max(450, longest_value + 20))
 
     def choose_midi(self):
-        path = filedialog.askopenfilename(title='Choose song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid',
-                                          filetypes=[('MIDI files', '*.mid *.midi'), ('All files', '*.*')])
+        path = filedialog.askopenfilename(title=tr('Choose song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid'),
+                                          filetypes=[(tr('MIDI files'), '*.mid *.midi'), (tr('All files'), '*.*')])
         if path:
             self.midi.set(path)
+            self.load_existing_report()
+
+    def load_existing_report(self, event=None, update_status=True):
+        if self.running:
+            return
+        midi_path = self.midi.get().strip()
+        if not midi_path:
+            content = tr('Choose a MIDI file to view its report.')
+            message = tr('Ready')
+        else:
+            report_path = source_stats_path_for(midi_path)
+            try:
+                with open(report_path, encoding='utf-8-sig') as report:
+                    content = report.read()
+                message = tr('Report loaded: {}').format(os.path.basename(report_path))
+            except FileNotFoundError:
+                content = tr('No existing report found: {}').format(report_path)
+                message = tr('No existing report.')
+            except (OSError, UnicodeError) as error:
+                content = tr('Could not read report: {}').format(error)
+                message = content
+        self.report_text = content
+        self.render_report()
+        self.report_tree.yview_moveto(0)
+        if update_status:
+            self.status.set(message)
 
     def choose_audio(self):
-        path = filedialog.askopenfilename(title='Choose source audio for BPM detection',
-                                          filetypes=[('Audio files', '*.flac *.mp3 *.wav *.m4a *.aif *.aiff'),
-                                                     ('All files', '*.*')])
+        path = filedialog.askopenfilename(title=tr('Choose source audio for BPM detection'),
+                                          filetypes=[(tr('Audio files'), '*.flac *.mp3 *.wav *.m4a *.aif *.aiff'),
+                                                     (tr('All files'), '*.*')])
         if path:
             self.audio.set(path)
             self.source.set('audio')
@@ -199,7 +369,7 @@ class Panel:
             'switches': {name: variable.get() for name, variable in self.switches.items()},
             'hands': int(self.hands.get()),
             'fast_figure_hands': [hand for hand in HAND_ORDER if self.fast_figure[hand].get()],
-            'snapshot': self.snapshot.get(),
+            'snapshot': self.snapshot_values.get(self.snapshot.get(), self.snapshot.get()),
             'parameters': {key: variable.get().strip() for key, variable in self.parameters.items()},
         }
 
@@ -210,7 +380,7 @@ class Panel:
         self.hands.set(str(preset['hands']))
         for hand, variable in self.fast_figure.items():
             variable.set(hand in preset['fast_figure_hands'])
-        self.snapshot.set(preset['snapshot'])
+        self.snapshot.set(tr(preset['snapshot']) if preset['snapshot'] else tr('No image'))
         defaults = default_preset()['parameters']
         for key, variable in self.parameters.items():
             variable.set(preset['parameters'].get(key, defaults[key]))
@@ -224,7 +394,7 @@ class Panel:
             self.show_preset(preset)
 
     def save_preset(self):
-        name = simpledialog.askstring('Save preset', 'Preset name', initialvalue=self.preset_name.get(), parent=self.root)
+        name = simpledialog.askstring(tr('Save preset'), tr('Preset name'), initialvalue=self.preset_name.get(), parent=self.root)
         if not name:
             return
         self.settings.setdefault('presets', {})[name] = self.current_preset()
@@ -234,7 +404,7 @@ class Panel:
 
     def delete_preset(self):
         name = self.preset_name.get()
-        if name in self.settings.get('presets', {}) and messagebox.askyesno('Delete preset', 'Delete "{}"?'.format(name)):
+        if name in self.settings.get('presets', {}) and messagebox.askyesno(tr('Delete'), tr('Delete "{}"?').format(name)):
             del self.settings['presets'][name]
             save_settings(self.settings)
             self.refresh_presets()
@@ -260,7 +430,7 @@ class Panel:
         args += ['--hands', str(preset['hands'])]
         if switches['trim']:
             if not preset['fast_figure_hands']:
-                raise ValueError('Choose at least one fast figure hand, or turn overlap trim off.')
+                raise ValueError(tr('Choose at least one fast figure hand, or turn overlap trim off.'))
             args += ['--fast-figure-hands'] + preset['fast_figure_hands']
         if preset['snapshot']:
             args += ['--snapshot', preset['snapshot']]
@@ -269,7 +439,7 @@ class Panel:
             try:
                 value = parameter.kind(text)
             except ValueError:
-                raise ValueError('{} is not a number: {}'.format(parameter.label, text))
+                raise ValueError(tr('{} is not a number: {}').format(tr(parameter.label), text))
             if value != postprocess.PARAMETER_DEFAULTS[parameter.key]:
                 args += ['--set', '{}={}'.format(parameter.key, value)]
         return args
@@ -278,21 +448,23 @@ class Panel:
         if self.running:
             return
         if not os.path.isfile(self.midi.get().strip()):
-            messagebox.showerror('Piano MIDI Cleanup', 'Choose a MIDI file first.')
+            messagebox.showerror(tr('Piano MIDI Cleanup'), tr('Choose a MIDI file first.'))
             return
         preset = self.current_preset()
         try:
             argv = self.argv(preset)
         except ValueError as error:
-            messagebox.showerror('Piano MIDI Cleanup', str(error))
+            messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
                              audio=self.audio.get(), last=preset)
         save_settings(self.settings)
         self.running = True
         self.run_button.configure(state='disabled')
-        self.log.delete('1.0', 'end')
-        self.lines.put('postprocess.py {}\n\n'.format(' '.join('"{}"'.format(arg) if ' ' in arg else arg for arg in argv)))
+        self.status_fragment = ''
+        self.status.set(tr('Processing...'))
+        self.report_text = 'postprocess.py {}\n\n'.format(' '.join('"{}"'.format(arg) if ' ' in arg else arg for arg in argv))
+        self.render_report()
         threading.Thread(target=self.work, args=(argv,), daemon=True).start()
 
     def work(self, argv):
@@ -308,6 +480,7 @@ class Panel:
         self.lines.put(('done', code))
 
     def drain(self):
+        report_changed = False
         while True:
             try:
                 item = self.lines.get_nowait()
@@ -316,10 +489,26 @@ class Panel:
             if isinstance(item, tuple):
                 self.running = False
                 self.run_button.configure(state='normal')
-                self.log.insert('end', '\nFinished.\n' if item[1] == 0 else '\nStopped (exit {}).\n'.format(item[1]))
+                message = tr('Finished.') if item[1] == 0 else tr('Stopped (exit {}).').format(item[1])
+                if item[1] == 0:
+                    self.load_existing_report(update_status=False)
+                    report_changed = False
+                else:
+                    self.report_text += '\n' + message + '\n'
+                    report_changed = True
+                self.status.set(message)
+                self.status_fragment = ''
             else:
-                self.log.insert('end', item)
-            self.log.see('end')
+                self.report_text += item
+                report_changed = True
+                lines = (self.status_fragment + item.replace('\r\n', '\n').replace('\r', '\n')).split('\n')
+                self.status_fragment = lines[-1]
+                latest = next((line.strip() for line in reversed(lines) if line.strip()), None)
+                if latest:
+                    self.status.set(latest)
+        if report_changed:
+            self.render_report()
+            self.report_tree.yview_moveto(1)
         self.root.after(100, self.drain)
 
 
