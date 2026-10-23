@@ -1,6 +1,6 @@
 # 鋼琴捲簾整合進主面板：調查與設計
 
-狀態：設計定案中，未實作。已決定：第一拍編輯固定寫入 `song_bpmfix.mid`；不做對照疊圖。待決定事項見最後一節。
+狀態：設計已定案，未實作。已決定：第一拍編輯固定寫入 `song_bpmfix.mid`；不做對照疊圖；不保留獨立視窗入口，捲簾只在主面板使用。
 
 ## 1. 現狀調查
 
@@ -38,12 +38,7 @@ Windows 預設送到 Microsoft GS Wavetable Synth，也可選其他 MIDI 輸出�
 
 ### 架構
 
-把 `PianoRollWorkbench` 拆成兩層：
-
-| 元件 | 內容 |
-|---|---|
-| `PianoRollView(ttk.Frame)` | 讀檔、繪製、播放、縮放捲動、第一拍編輯；不碰視窗。對外提供 `load(path)`、`stop()`，以及 Apply 完成的回呼 |
-| 視窗包裝 | `first_beat_ui` 建一個視窗放 `PianoRollView`，維持命令列入口的行為與回傳值 |
+把 `PianoRollWorkbench` 改成 `PianoRollView(ttk.Frame)`：讀檔、繪製、播放、縮放捲動、第一拍編輯，不碰視窗。對外提供 `load(path)`、`stop()`，以及 Apply 完成的回呼。
 
 主面板在 `Notebook` 加一頁放 `PianoRollView`，原本另開視窗的按鈕改為切換到這一頁。
 
@@ -83,13 +78,21 @@ Windows 預設送到 Microsoft GS Wavetable Synth，也可選其他 MIDI 輸出�
 
 ## 3. 實作分段
 
-1. 拆出 `PianoRollView`，視窗包裝維持現有命令列行為；修正 offset 預覽。
+1. 拆出 `PianoRollView`，移除獨立視窗入口；修正 offset 預覽。
 2. 主面板加分頁、選檔與執行後自動重新載入。
 3. 四手顏色、音名欄、小節號、踏板列。
 4. 依手靜音／獨奏。
 
 每段完成都可獨立使用。
 
-## 4. 待決定事項
+## 4. 移除的獨立視窗入口
 
-1. 整合後是否保留獨立視窗入口（`bpmfix.py` 互動流程與 `midi_workbench.py`），或全部改走主面板。這與 MIDI 工作台是否整合進主 GUI 的決定相關。
+捲簾只在主面板使用，以下視窗入口移除：
+
+- `src/first_beat_ui.py`
+- `src/bpmfix.py` 開工作台的互動流程（`--workbench` 與無參數的對話框流程）
+- `src/midi_workbench.py` 開工作台的部分
+- 對應的啟動器：`macos/bpmfix.command`、`macos/midi_workbench.command`、`windows/bpmfix.cmd`、`windows/midi_workbench.cmd`
+- README 中這兩個工具的視窗用法
+
+`bpmfix.py --bpm/--audio` 與 `midi_workbench.py --auto-first-beat --no-workbench` 這兩個不開視窗的命令列用法，功能已被統一執行器涵蓋（第 8 章）；實作時連同上列一併處理前，先向使用者確認是否也移除。
