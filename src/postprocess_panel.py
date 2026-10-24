@@ -104,6 +104,7 @@ class Panel:
         self.geometry_after_id = None
         self.restore_window()
         self.build_ui()
+        self.hands.trace_add('write', self.update_hand_options)
         self.load_existing_report()
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.bind('<Configure>', self.track_window, add='+')
@@ -530,6 +531,13 @@ class Panel:
         for name in ('first_beat', 'key_signature'):
             self.step_checks[name].configure(state='disabled' if source == 'reuse' else 'normal')
 
+    def update_hand_options(self, *_):
+        """One-player reduction must not discard notes intended for extra hands."""
+        two_hands = self.hands.get() == '2'
+        if not two_hands:
+            self.switches['playable'].set(False)
+        self.step_checks['playable'].configure(state='normal' if two_hands else 'disabled')
+
     def current_preset(self):
         return {
             'switches': {name: variable.get() for name, variable in self.switches.items()},
@@ -553,6 +561,7 @@ class Panel:
         defaults = default_preset()['parameters']
         for key, variable in self.parameters.items():
             variable.set(preset['parameters'].get(key, defaults[key]))
+        self.update_hand_options()
 
     def refresh_presets(self):
         self.preset_box.configure(values=sorted(self.settings.get('presets', {})))
@@ -620,9 +629,10 @@ class Panel:
         if not os.path.isfile(self.midi.get().strip()):
             messagebox.showerror(tr('Piano MIDI Cleanup'), tr('Choose a MIDI file first.'))
             return
-        preset = self.current_preset()
         try:
+            preset = self.current_preset()
             argv = self.argv(preset)
+            postprocess.plan_steps(postprocess.build_parser().parse_args(argv))
         except ValueError as error:
             messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return
