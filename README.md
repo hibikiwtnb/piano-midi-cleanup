@@ -7,7 +7,7 @@ Copyright (c) 2026 hibikiwtnb and contributors.
 
 本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發受此授權涵蓋的程式時，須依條款提供相應原始碼。修改版透過網路與使用者互動時，須依第 13 條向這些使用者提供取得相應原始碼的方式。軟體不附任何保證。
 
-第三方元件、上游模型及權重保留各自的授權，不因本專案授權而變更；隨附元件說明見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt` 及 `vendor/ESSENTIA_LICENSE.txt`。
+第三方元件、上游模型及權重保留各自的授權，不因本專案授權而變更；隨附元件說明見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 及 `vendor/ESSENTIA_LICENSE.txt`。
 
 ## 功能
 
@@ -137,7 +137,7 @@ python src/postprocess.py --list-parameters
 「鋼琴捲簾」頁顯示目前選的 MIDI，切換到這頁或處理完成時自動重新載入，保留捲動位置與縮放：
 
 - 音條依手上色（右手藍、第二右手橙、第二左手紫、左手綠，與 PNG 截圖一致），深淺表示力度；上方標小節號，左側標音名，底部是延音踏板（CC64）踩下的區間。
-- 小節號下方是和弦軌道：三個以上的音同時起音、或低音換音時切出一段，段內所有發聲中的音依長度加權，由 Tonal.js 命名（`src/chord_analysis.py`）。相同和弦、只是前一個和弦一部分的段落、短於半拍的段落併入前一個。滑鼠移到和弦上顯示其他讀法、低音和組成音；工具列的「和弦」可收起這一列。需要 Node.js，沒有時這一列顯示提示，其他功能照常。
+- 小節號下方是和弦軌道（`src/chord_analysis.py`）：以半拍為一格，每格累計各音名的發聲長度（延音踏板撐住的部分以一半權重計，最多 2 拍；低音區加倍），用移植自 Magenta note-seq 的 HMM 以 Viterbi 同時推斷調性與和弦，分解和弦與琶音因此合成同一個和弦。每格的最低音是和弦根音或和弦音時加分；三個以上的音同時起音、或出現比所有發聲中的音更低的低音時，較容易換和弦。切出的每段再由 Tonal.js 依主要音名命名，保留推斷的根音，低音不是根音時寫成轉位。滑鼠移到和弦上顯示其他讀法、低音和組成音；工具列的「和弦」可收起這一列。需要 Node.js，沒有時這一列顯示提示，其他功能照常。
 - 播放、暫停（焦點在捲簾上時可按空白鍵）、點擊定位；切換分頁後焦點不會自動進入輸入框；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動。可依手關閉聲音。
 - 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號；顯示的是 `song_bpmfix_cleaned.mid` 時它也一起改寫，修改痕跡跟著平移，不必重新處理。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
 - 播放預設使用內建 Coopiano 物理建模鋼琴，直接送到系統預設音訊裝置。輸出選單保留本機 MIDI 埠（Windows 包含可用的 `Microsoft GS Wavetable Synth`），macOS／Linux 亦可選 `piano-midi-cleanup` 虛擬埠。選擇會記住；新增此預設時，舊的 MIDI 專用設定不會覆蓋 Coopiano，之後可自行改選並儲存。首次播放會在背景準備音源，完成後自動開始。錯誤會顯示在捲簾頁，不會靜默換成其他音源。
@@ -528,7 +528,7 @@ vendor/essentia-wasm.umd.js
 vendor/essentia.js-core.umd.js
 ```
 
-Tonal.js 用於和弦偵測；essentia.js（WebAssembly）用於自動 BPM 偵測。授權檔分別是 `vendor/TONAL_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。
+Tonal.js 用於和弦命名；`src/chord_inference.py` 修改自 Magenta note-seq 的和弦推斷（Apache-2.0）；essentia.js（WebAssembly）用於自動 BPM 偵測。授權檔分別是 `vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。
 
 模型權重預設位置：
 

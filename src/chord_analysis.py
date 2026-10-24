@@ -1,7 +1,10 @@
-"""Chord segments for a MIDI file: boundaries at chord onsets and bass changes, names from Tonal.js.
+"""Chord segments for a MIDI file: an HMM over half-beat frames finds the chords, Tonal.js names them.
 
-A segment starts where at least three pitches start together or where a new bass note
-starts; every note sounding inside the segment counts, weighted by how long it sounds.
+Every note counts in each frame it sounds in, held by the sustain pedal and weighted by how
+long it sounds, so broken chords and arpeggios add up to their chord; the Viterbi path keeps
+a chord until the notes clearly fit another. Chord changes are likelier where three or more
+pitches start, or a note below everything still sounding. Each segment is then named by Tonal.js from its strongest pitch classes, keeping
+the inferred root and writing an inversion over the bass.
 """
 
 import argparse
@@ -12,20 +15,36 @@ import subprocess
 import sys
 from bisect import bisect_right
 from collections import defaultdict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import mido
 
+from chord_inference import NO_CHORD, chord_pitch_classes, frame_pitch_vectors, infer_key_chords
 from clean_midi_rules import tick_seconds
 from node_utils import node_executable
 
 
+FRAMES_PER_BEAT = 2
+# Frame vectors are unit length, so this sets how strongly one frame's notes outweigh the chord change cost.
+CHORD_NOTE_CONCENTRATION = 10.0
+# Bass notes count this much more in the frame vectors; the left hand carries the harmony more than the melody.
+BASS_WEIGHT = 2
+# Pedal-held tails fade, so they count less, and for at most PEDAL_TAIL_BEATS.
+PEDAL_TAIL_WEIGHT = 0.5
+PEDAL_TAIL_BEATS = 2
+# Log-likelihood bonus when a frame's bass is the chord root, or another chord tone.
+BASS_ROOT_BONUS = 3.0
+BASS_TONE_BONUS = 1.0
+# Chance of a chord change at a frame start; onsets of chords and bass notes make it likelier.
+CHANGE_PROB = 0.02
+ONSET_CHANGE_PROB = 0.3
 ONSET_WINDOW_SECONDS = 0.05
 CHORD_ONSET_PITCHES = 3
-# A new lowest note below this pitch (C4) counts as a bass change.
+# Notes below this pitch (C4) are in the bass register.
 BASS_LIMIT = 60
-ONSET_WEIGHT = 1.5
+# The bass is the lowest pitch sounding at least this share of its segment.
+BASS_MIN_SHARE = 1 / 8
 # Pitch classes weaker than this share of the strongest are passing notes.
 MIN_WEIGHT_RATIO = 0.2
 MAX_PITCH_CLASSES = 5
@@ -35,15 +54,16 @@ CANDIDATE_COUNT = 3
 # Chord qualities from most to least preferred; Tonal lists exotic readings such as m#5 for plain inversions.
 QUALITY_ORDER = ('', 'm', '7', 'maj7', 'm7', 'sus4', 'sus2', '6', 'm6', 'add9', 'madd9', '9', 'maj9', 'm9',
                  '7sus4', 'dim', 'm7b5', 'dim7', 'aug', '5')
-# Shorter segments are arpeggio or passing figures and join the previous chord.
-MIN_SEGMENT_BEATS = 0.5
 SLASH_PENALTY = 5
 DROPPED_PITCH_PENALTY = 4
-CHORD_NAME = re.compile(r'([A-G][#b]?)(.*?)(?:/([A-G][#b]?))?')
+CHORD_NAME = re.compile(r'([A-G][#b]*)(.*?)(?:/([A-G][#b]*))?')
+KIND_NAMES = {'+': 'aug'}
 
 SHARP_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 FLAT_NAMES = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
-FLAT_KEYS = {'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb', 'Dm', 'Gm', 'Cm', 'Fm', 'Bbm', 'Ebm', 'Abm'}
+# Major keys written with flats: F, Bb, Eb, Ab, Db.
+FLAT_KEYS = {5, 10, 3, 8, 1}
+LETTER_PITCHES = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 
 
 @dataclass(frozen=True)
@@ -51,8 +71,9 @@ class Note:
     start_tick: int
     end_tick: int
     start: float
-    end: float
     pitch: int
+    # Where the sound stops: the note end, or the pedal release while the pedal holds it.
+    sound_end_tick: int
 
 
 @dataclass(frozen=True)
@@ -67,9 +88,36 @@ class ChordSegment:
     pitch_classes: tuple
 
 
+def pedal_intervals(midi_file):
+    """Merged sustain pedal down intervals in ticks, over all channels."""
+    events = []
+    for track in midi_file.tracks:
+        tick = 0
+        for message in track:
+            tick += message.time
+            if message.type == 'control_change' and message.control == 64:
+                events.append((tick, message.channel, message.value >= 64))
+    down_channels = set()
+    intervals = []
+    for tick, channel, down in sorted(events):
+        was_down = bool(down_channels)
+        (down_channels.add if down else down_channels.discard)(channel)
+        if down_channels and not was_down:
+            intervals.append([tick, None])
+        elif was_down and not down_channels:
+            intervals[-1][1] = tick
+    return [(start, end) for start, end in intervals if end is not None]
+
+
 def read_notes(midi_file, seconds):
+    pedals = pedal_intervals(midi_file)
+    pedal_starts = [start for start, _ in pedals]
+
+    def sound_end(tick):
+        index = bisect_right(pedal_starts, tick) - 1
+        return max(tick, pedals[index][1]) if index >= 0 else tick
+
     notes = []
-    key_signatures = []
     for track in midi_file.tracks:
         active = defaultdict(list)
         tick = 0
@@ -82,12 +130,9 @@ def read_notes(midi_file, seconds):
                 if starts:
                     start = starts.pop()
                     if tick > start:
-                        notes.append(Note(start, tick, seconds(start), seconds(tick), message.note))
-            elif message.type == 'key_signature':
-                key_signatures.append((tick, message.key))
+                        notes.append(Note(start, tick, seconds(start), message.note, sound_end(tick)))
     notes.sort(key=lambda note: (note.start_tick, note.pitch))
-    key_signatures.sort()
-    return notes, key_signatures
+    return notes
 
 
 def onset_groups(notes):
@@ -101,35 +146,67 @@ def onset_groups(notes):
     return groups
 
 
-def boundaries(groups):
-    """Groups that start a segment: a chord onset, or a new bass pitch class."""
-    starts = []
-    bass_class = None
-    for group in groups:
-        lowest = min(note.pitch for note in group)
-        chord_onset = len({note.pitch for note in group}) >= CHORD_ONSET_PITCHES
-        bass_change = lowest < BASS_LIMIT and lowest % 12 != bass_class
-        if chord_onset or bass_change or not starts:
-            starts.append(group)
-        if lowest < BASS_LIMIT:
-            bass_class = lowest % 12
-    return starts
+def change_probs(notes, frame_ticks, frame_count):
+    """Chord change probability at the start of each frame after the first.
+
+    A chord onset, or a bass note below every note still sounding, makes a change likelier;
+    the upper notes of a broken chord sound above its held root and do not.
+    """
+    probs = [CHANGE_PROB] * (frame_count - 1)
+    sounding = []
+    for group in onset_groups(notes):
+        start = group[0].start_tick
+        sounding = [note for note in sounding if note.sound_end_tick > start]
+        pitches = {note.pitch for note in group}
+        lowest = min(pitches)
+        new_bass = lowest < BASS_LIMIT and all(lowest < note.pitch for note in sounding)
+        sounding.extend(group)
+        if len(pitches) >= CHORD_ONSET_PITCHES or new_bass:
+            # An onset just before a frame edge belongs to the next frame.
+            frame = round(group[0].start_tick / frame_ticks)
+            if 0 < frame < frame_count:
+                probs[frame - 1] = ONSET_CHANGE_PROB
+    return probs
 
 
-def segment_profile(notes, group, start, end):
-    """Weighted pitch classes and the bass pitch of one segment."""
-    weights = defaultdict(float)
-    bass_notes = list(group)
-    length = end - start
+def frame_notes(notes, ticks_per_beat):
+    """(start, end, pitch, weight) for the frame vectors: the played note, then its pedal-held tail."""
+    weighted = []
     for note in notes:
-        overlap = min(note.end, end) - max(note.start, start)
-        if overlap <= 0:
+        weight = BASS_WEIGHT if note.pitch < BASS_LIMIT else 1
+        weighted.append((note.start_tick, note.end_tick, note.pitch, weight))
+        tail_end = min(note.sound_end_tick, note.end_tick + PEDAL_TAIL_BEATS * ticks_per_beat)
+        if tail_end > note.end_tick:
+            weighted.append((note.end_tick, tail_end, note.pitch, weight * PEDAL_TAIL_WEIGHT))
+    return weighted
+
+
+def frame_basses(notes, frame_ticks, frame_count):
+    """Pitch class of the lowest bass-register note played in each frame, without pedal tails."""
+    lowest = [None] * frame_count
+    for note in notes:
+        if note.pitch >= BASS_LIMIT:
             continue
-        weight = overlap * (ONSET_WEIGHT if note.start >= start - ONSET_WINDOW_SECONDS else 1.0)
-        weights[note.pitch % 12] += weight
-        if overlap >= length / 2:
-            bass_notes.append(note)
-    bass = min(note.pitch for note in bass_notes)
+        first = int(note.start_tick // frame_ticks)
+        last = min(frame_count, math.ceil(note.end_tick / frame_ticks))
+        for frame in range(first, last):
+            if lowest[frame] is None or note.pitch < lowest[frame]:
+                lowest[frame] = note.pitch
+    return [None if pitch is None else pitch % 12 for pitch in lowest]
+
+
+def segment_profile(notes, start_tick, end_tick):
+    """Pitch class weights and the bass pitch of a tick range."""
+    weights = defaultdict(float)
+    pitch_spans = defaultdict(int)
+    for note in notes:
+        overlap = min(note.sound_end_tick, end_tick) - max(note.start_tick, start_tick)
+        if overlap > 0:
+            weights[note.pitch % 12] += overlap
+            pitch_spans[note.pitch] += overlap
+    length = end_tick - start_tick
+    bass = min((pitch for pitch, span in pitch_spans.items() if span >= length * BASS_MIN_SHARE),
+               default=min(pitch_spans, default=None))
     return weights, bass
 
 
@@ -145,10 +222,6 @@ def pitch_class_sets(weights, bass):
     return sets or [[bass % 12]]
 
 
-def note_names_for_key(key):
-    return FLAT_NAMES if key in FLAT_KEYS else SHARP_NAMES
-
-
 def detect_chords(note_groups):
     script_path = Path(__file__).with_name('detect_chords_tonal.js')
     completed = subprocess.run(
@@ -157,6 +230,11 @@ def detect_chords(note_groups):
         text=True, encoding='utf-8', capture_output=True, check=True,
     )
     return json.loads(completed.stdout)
+
+
+def pitch_class(note_name):
+    """Pitch class of a note name, including Tonal spellings such as Fb or E##."""
+    return (LETTER_PITCHES[note_name[0]] + note_name.count('#') - note_name.count('b')) % 12
 
 
 def normalize_chord_name(name):
@@ -168,81 +246,87 @@ def normalize_chord_name(name):
 
 
 def chord_score(name, dropped):
-    root, quality, bass = CHORD_NAME.fullmatch(name).groups()
+    _root, quality, bass = CHORD_NAME.fullmatch(name).groups()
     rank = QUALITY_ORDER.index(quality) if quality in QUALITY_ORDER else 2 * len(QUALITY_ORDER)
     return rank + (SLASH_PENALTY if bass else 0) + DROPPED_PITCH_PENALTY * dropped
 
 
-def choose_chord(results):
-    """Best names over the pitch class sets, largest set first; returns (candidates, set index)."""
+def name_chord(results, chord, names, bass):
+    """Tonal names that keep the inferred root, best first; the inferred chord when none does.
+
+    Returns (candidates, index of the pitch class set the first name came from).
+    """
+    root = chord[0]
     scored = {}
-    for dropped, names in enumerate(results):
-        for name in map(normalize_chord_name, names):
-            if name not in scored or chord_score(name, dropped) < scored[name][0]:
-                scored[name] = (chord_score(name, dropped), dropped)
+    for dropped, found in enumerate(results):
+        for name in map(normalize_chord_name, found):
+            if pitch_class(CHORD_NAME.fullmatch(name).group(1)) != root:
+                continue
+            score = chord_score(name, dropped)
+            if name not in scored or score < scored[name][0]:
+                scored[name] = (score, dropped)
     ranked = sorted(scored, key=lambda name: scored[name][0])
-    return tuple(ranked[:CANDIDATE_COUNT]), (scored[ranked[0]][1] if ranked else 0)
+    if ranked:
+        return tuple(ranked[:CANDIDATE_COUNT]), scored[ranked[0]][1]
+    name = names[root] + KIND_NAMES.get(chord[1], chord[1])
+    if bass % 12 != root:
+        name += '/' + names[bass % 12]
+    return (name,), None
 
 
-def merge_into_previous(segments, joins):
-    merged = []
-    for segment in segments:
-        if merged and joins(merged[-1], segment):
-            merged[-1] = replace(merged[-1], end_tick=segment.end_tick, end=segment.end)
-        elif segment.name or merged:
-            merged.append(segment)
-    return merged
-
-
-def merge_segments(segments, ticks_per_beat):
-    """Join repeats of a chord first, so a short chord start is not absorbed before its continuation."""
-    def same_chord(previous, segment):
-        return (not segment.name or segment.name == previous.name
-                or set(segment.pitch_classes) <= set(previous.pitch_classes))
-
-    def short(_previous, segment):
-        return segment.end_tick - segment.start_tick < ticks_per_beat * MIN_SEGMENT_BEATS
-
-    merged = merge_into_previous(segments, same_chord)
-    merged = merge_into_previous(merged, short)
-    return merge_into_previous(merged, lambda previous, segment: segment.name == previous.name)
+def chord_runs(key_chords):
+    """(first frame, end frame, key, chord) for each run of one chord."""
+    runs = []
+    for frame, (key, chord) in enumerate(key_chords):
+        if runs and runs[-1][3] == chord:
+            runs[-1][1] = frame + 1
+        else:
+            runs.append([frame, frame + 1, key, chord])
+    return runs
 
 
 def analyze_chords(midi_path):
-    """Return merged ChordSegments of a MIDI file, in time order."""
+    """Return ChordSegments of a MIDI file in time order; no-chord stretches are left out."""
     midi_file = mido.MidiFile(midi_path)
     seconds = tick_seconds(midi_file)
-    notes, key_signatures = read_notes(midi_file, seconds)
+    notes = read_notes(midi_file, seconds)
     if not notes:
         return []
-    starts = boundaries(onset_groups(notes))
-    song_end = max(note.end for note in notes)
-    song_end_tick = max(note.end_tick for note in notes)
-    key_ticks = [tick for tick, _ in key_signatures]
+    frame_ticks = midi_file.ticks_per_beat / FRAMES_PER_BEAT
+    song_end_tick = max(note.sound_end_tick for note in notes)
+    frame_count = math.ceil(song_end_tick / frame_ticks)
+    boundaries = [frame * frame_ticks for frame in range(frame_count + 1)]
+    key_chords = infer_key_chords(
+        frame_pitch_vectors(frame_notes(notes, midi_file.ticks_per_beat), boundaries),
+        change_probs(notes, frame_ticks, frame_count), frame_basses(notes, frame_ticks, frame_count),
+        chord_note_concentration=CHORD_NOTE_CONCENTRATION,
+        bass_root_bonus=BASS_ROOT_BONUS, bass_tone_bonus=BASS_TONE_BONUS)
 
-    raw = []
+    runs = []
     queries = []
-    for index, group in enumerate(starts):
-        start = group[0].start
-        end = starts[index + 1][0].start if index + 1 < len(starts) else song_end
-        end_tick = starts[index + 1][0].start_tick if index + 1 < len(starts) else song_end_tick
-        if end <= start:
+    for first, end, key, chord in chord_runs(key_chords):
+        if chord == NO_CHORD:
             continue
-        weights, bass = segment_profile(notes, group, start, end)
-        key_index = bisect_right(key_ticks, group[0].start_tick) - 1
-        names = note_names_for_key(key_signatures[key_index][1] if key_index >= 0 else 'C')
+        # Silent frames before the first note join the first chord; start it at the music.
+        start_tick = max(round(first * frame_ticks), notes[0].start_tick)
+        end_tick = min(round(end * frame_ticks), song_end_tick)
+        weights, bass = segment_profile(notes, start_tick, end_tick)
+        if bass is None:
+            continue
+        names = FLAT_NAMES if key in FLAT_KEYS else SHARP_NAMES
         sets = pitch_class_sets(weights, bass)
         named_sets = [tuple(names[pc] for pc in pitch_classes) for pitch_classes in sets]
-        raw.append((group[0].start_tick, end_tick, start, end, names[bass % 12], named_sets, len(queries)))
+        runs.append((start_tick, end_tick, chord, names, bass, named_sets, len(queries)))
         queries.extend(list(named) for named in named_sets)
 
     results = detect_chords(queries)
     segments = []
-    for start_tick, end_tick, start, end, bass, named_sets, first in raw:
-        candidates, chosen = choose_chord(results[first:first + len(named_sets)])
-        segments.append(ChordSegment(start_tick, end_tick, start, end, candidates[0] if candidates else '',
-                                     candidates, bass, named_sets[chosen]))
-    return merge_segments(segments, midi_file.ticks_per_beat)
+    for start_tick, end_tick, chord, names, bass, named_sets, first in runs:
+        candidates, chosen = name_chord(results[first:first + len(named_sets)], chord, names, bass)
+        tones = named_sets[chosen] if chosen is not None else tuple(names[pc] for pc in chord_pitch_classes(chord))
+        segments.append(ChordSegment(start_tick, end_tick, seconds(start_tick), seconds(end_tick),
+                                     candidates[0], candidates, names[bass % 12], tones))
+    return segments
 
 
 def bar_beat(tick, ticks_per_beat, beats_per_bar=4):

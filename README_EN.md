@@ -8,7 +8,7 @@ Copyright (c) 2026 hibikiwtnb and contributors.
 
 Original project code is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`); see [LICENSE](LICENSE). Commercial use is permitted. Distribution of covered software requires providing its Corresponding Source under the license terms. Modified versions that interact with users over a network must offer those users access to their Corresponding Source as required by section 13. The software comes without warranty.
 
-Third-party components, upstream models and weights retain their respective licenses. See [sound_sources/README.md](sound_sources/README.md), `vendor/TONAL_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt` for the bundled components.
+Third-party components, upstream models and weights retain their respective licenses. See [sound_sources/README.md](sound_sources/README.md), `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt` for the bundled components.
 
 ## Features
 
@@ -138,7 +138,7 @@ Reports update items line by line within each block: identical lines stay, chang
 The Piano roll tab shows the selected MIDI and reloads it when you open the tab or a run finishes, keeping the scroll position and zoom:
 
 - Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
-- A chord track sits below the bar numbers. A segment starts where three or more pitches start together or the bass changes; every note sounding in it is weighted by duration and named with Tonal.js (`src/chord_analysis.py`). Repeats of a chord, segments holding only part of the previous chord and segments shorter than half a beat join the previous one. Hover a chord for other readings, the bass and the chord tones; the Chords toggle hides the row. It needs Node.js; without it the row shows a notice and the rest works as usual.
+- A chord track sits below the bar numbers (`src/chord_analysis.py`). Each half beat is a frame holding how long each pitch class sounds (pedal-held tails count half, for at most 2 beats; bass notes count double), and an HMM ported from Magenta note-seq infers key and chords together by Viterbi, so broken chords and arpeggios add up to one chord. A frame's lowest note scores for chords it is the root or a tone of; chord changes are likelier where three or more pitches start or a note starts below everything sounding. Tonal.js then names each segment from its main pitch classes, keeping the inferred root and writing an inversion when the bass is not the root. Hover a chord for other readings, the bass and the chord tones; the Chords toggle hides the row. It needs Node.js; without it the row shows a notice and the rest works as usual.
 - Play, pause (Space while the roll has focus) and click to seek; switching tabs never focuses an entry; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
 - The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; when `song_bpmfix_cleaned.mid` is shown it is rewritten too and the change marks move with it, so no reprocessing is needed. Editing is off when the shown file has no matching `song_bpmfix.mid`.
 - Playback defaults to the built-in Coopiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new Coopiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
@@ -518,7 +518,7 @@ vendor/essentia-wasm.umd.js
 vendor/essentia.js-core.umd.js
 ```
 
-Tonal.js is used for chord detection; essentia.js (WebAssembly) is used for automatic BPM detection. The licenses are `vendor/TONAL_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`.
+Tonal.js names chords; `src/chord_inference.py` is modified from Magenta note-seq's chord inference (Apache-2.0); essentia.js (WebAssembly) is used for automatic BPM detection. The licenses are `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`.
 
 Default model checkpoint path:
 
