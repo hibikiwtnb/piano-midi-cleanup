@@ -10,6 +10,8 @@ piano_transcription_inference_data/
 *.mp3
 *.flac
 *.changes.json
+*.chords.json
+*.chords.json.tmp
 *_pianoroll/
 testdata/
 /*.lnk

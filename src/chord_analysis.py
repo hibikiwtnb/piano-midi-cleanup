@@ -8,6 +8,8 @@ the inferred root and writing an inversion over the bass.
 """
 
 import argparse
+import hashlib
+import io
 import json
 import math
 import re
@@ -15,7 +17,7 @@ import subprocess
 import sys
 from bisect import bisect_right
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import mido
@@ -26,6 +28,8 @@ from node_utils import node_executable
 
 
 FRAMES_PER_BEAT = 2
+# Bump when inference, naming rules or the saved segment format changes.
+CHORD_CACHE_VERSION = 1
 # The project assumes 4/4 after first beat alignment.
 BEATS_PER_BAR = 4
 # A first note this close before a bar line is an early downbeat, not a pickup.
@@ -304,9 +308,58 @@ def first_bar_tick(notes, ticks_per_beat):
     return math.ceil(first / bar_ticks) * bar_ticks
 
 
+def load_chord_cache(path, midi_sha256):
+    """Return saved segments only when the MIDI and analysis version match."""
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'))
+        if payload['version'] != CHORD_CACHE_VERSION or payload['midi_sha256'] != midi_sha256:
+            return None
+        if not isinstance(payload['segments'], list):
+            return None
+        segments = []
+        for item in payload['segments']:
+            if not (isinstance(item['candidates'], list) and item['candidates']
+                    and isinstance(item['pitch_classes'], list)
+                    and all(isinstance(name, str) for name in
+                            [item['name'], item['bass']] + item['candidates'] + item['pitch_classes'])
+                    and all(type(item[key]) in (int, float) and math.isfinite(item[key])
+                            for key in ('start_tick', 'end_tick', 'start', 'end'))
+                    and 0 <= item['start_tick'] < item['end_tick']
+                    and 0 <= item['start'] < item['end']):
+                return None
+            segments.append(ChordSegment(
+                item['start_tick'], item['end_tick'], item['start'], item['end'],
+                item['name'], tuple(item['candidates']), item['bass'], tuple(item['pitch_classes'])))
+        return segments
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def analyze_chords(midi_path):
-    """Return ChordSegments of a MIDI file in time order; the pickup and no-chord stretches are left out."""
-    midi_file = mido.MidiFile(midi_path)
+    """Reuse saved results for unchanged MIDI files, or analyze and save them."""
+    midi_path = Path(midi_path)
+    midi_bytes = midi_path.read_bytes()
+    midi_sha256 = hashlib.sha256(midi_bytes).hexdigest()
+    cache_path = midi_path.with_suffix('.chords.json')
+    cached = load_chord_cache(cache_path, midi_sha256)
+    if cached is not None:
+        return cached
+    # Analyze the same snapshot that was fingerprinted, even if the file is replaced.
+    segments = _analyze_chords(mido.MidiFile(file=io.BytesIO(midi_bytes)))
+    payload = dict(version=CHORD_CACHE_VERSION, midi_sha256=midi_sha256,
+                   segments=[asdict(segment) for segment in segments])
+    try:
+        temporary = cache_path.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(payload, ensure_ascii=True), encoding='utf-8')
+        temporary.replace(cache_path)
+    except OSError:
+        # A read-only source folder must not prevent chord display.
+        pass
+    return segments
+
+
+def _analyze_chords(midi_file):
+    """Infer ordered segments, excluding the pickup and no-chord stretches."""
     seconds = tick_seconds(midi_file)
     notes = read_notes(midi_file, seconds)
     if not notes:
