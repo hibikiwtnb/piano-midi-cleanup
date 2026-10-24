@@ -13,6 +13,7 @@ piano_transcription_inference_data/
 *_pianoroll/
 testdata/
 /*.lnk
+/*.app/
 /docs/gui-preview.log
 /docs/gui-preview.png
 /docs/gui-report*.png

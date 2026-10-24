@@ -119,7 +119,13 @@ python src/postprocess.py --list-parameters
 
 ### GUI 啟動入口
 
-本機 Windows 使用 repo 根目錄已建立的 `Piano MIDI Cleanup.lnk` 快捷方式開啟面板，不會顯示命令列視窗。快捷方式屬本機設定，不隨 repo 分發；其他環境可執行 `python src/postprocess_panel.py`。macOS 使用 `macos/postprocess_panel.command`。
+本機 Windows 使用 repo 根目錄已建立的 `Piano MIDI Cleanup.lnk` 快捷方式開啟面板，不會顯示命令列視窗。快捷方式屬本機設定，不隨 repo 分發；其他環境可執行 `python src/postprocess_panel.py`。macOS 可在 repo 根目錄建立本機 `Piano MIDI Cleanup.app`（同樣不隨 repo 分發），雙擊即在背景開啟面板、不顯示終端機：
+
+```sh
+osacompile -o "Piano MIDI Cleanup.app" -e 'set d to do shell script "dirname " & quoted form of POSIX path of (path to me)' -e 'do shell script "cd " & quoted form of d & " && nohup ./macos/postprocess_panel.command > /dev/null 2>&1 < /dev/null &"'
+```
+
+需要看終端機輸出時，直接執行 `macos/postprocess_panel.command`。
 
 統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用已修正速度、手動指定、從音訊偵測）、每一步的開關，以及按主題排列的設定分頁。「詳細報告」以項目／值兩欄顯示已生成的 TXT，開啟面板或切換 MIDI 時讀入；底部狀態欄顯示最新狀態。
 
