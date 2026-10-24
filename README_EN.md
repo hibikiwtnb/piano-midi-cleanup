@@ -507,7 +507,7 @@ ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
 
-Realtime piano roll playback uses Coopiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL is included. On macOS / Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
+Realtime piano roll playback uses Coopiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL and a universal macOS dylib (Intel and Apple Silicon) are included. On Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
 
 Vendored JS:
 

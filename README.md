@@ -515,7 +515,7 @@ ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
 
 Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
 
-鋼琴捲簾預設用 Coopiano 直接發聲，音訊輸出使用 `sounddevice`，外部 MIDI 輸出使用 `python-rtmidi`（均列在安裝指令中）。Windows x64 的原生音源 DLL 已隨 repo 提供；macOS／Linux 需先在 `sound_sources/coopiano` 執行 `make playback`。音源、授權與建置方式見 [sound_sources/README.md](sound_sources/README.md)。
+鋼琴捲簾預設用 Coopiano 直接發聲，音訊輸出使用 `sounddevice`，外部 MIDI 輸出使用 `python-rtmidi`（均列在安裝指令中）。Windows x64 的原生音源 DLL 和 macOS 的通用版 dylib（Intel 與 Apple Silicon）已隨 repo 提供；Linux 需先在 `sound_sources/coopiano` 執行 `make playback`。音源、授權與建置方式見 [sound_sources/README.md](sound_sources/README.md)。
 
 Vendored JS:
 
