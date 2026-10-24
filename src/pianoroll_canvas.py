@@ -212,8 +212,11 @@ class PianoRollView(ttk.Frame):
 
         for widget in (self.canvas, self.ruler, self.pedal):
             widget.bind('<Button-1>', self.seek_click)
+        self.keys.bind('<Button-1>', lambda _event: self.focus_roll())
         for widget in (self.canvas, self.keys, self.ruler, self.pedal):
             widget.bind('<MouseWheel>', self.wheel)
+            # Only the roll canvases take Space, so text in the entries is never affected.
+            widget.bind('<space>', self.space_toggle)
         self.set_editable(False)
 
     # Scrolling and zoom keep every canvas on the same time or pitch axis.
@@ -556,6 +559,13 @@ class PianoRollView(ttk.Frame):
         self.output = None
         self.playback = None
 
+    def focus_roll(self):
+        self.canvas.focus_set()
+
+    def space_toggle(self, _event=None):
+        self.toggle_playback()
+        return 'break'
+
     def toggle_playback(self):
         if self.play_started is not None or self.play_after_id is not None:
             self.stop()
@@ -609,6 +619,7 @@ class PianoRollView(ttk.Frame):
         return min(self.duration, self.play_start_seconds + time.monotonic() - self.play_started)
 
     def seek_click(self, event):
+        self.focus_roll()
         seconds = max(0.0, event.widget.canvasx(event.x) / self.pixels_per_second)
         playing = self.play_started is not None
         self.stop()

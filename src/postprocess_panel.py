@@ -137,7 +137,7 @@ class Panel:
         self.main_tabs.add(self.roll, text=tr('Piano roll'))
         self.main_tabs.add(report, text=tr('Detailed report'))
         self.main_tabs.add(about, text=tr('About'))
-        self.main_tabs.bind('<<NotebookTabChanged>>', lambda _event: self.refresh_roll())
+        self.main_tabs.bind('<<NotebookTabChanged>>', self.main_tab_changed)
         self.build_files(ttk.Frame(processing, padding=8))
         body = ttk.Frame(processing, padding=(8, 0, 8, 8))
         body.pack(fill='both', expand=True)
@@ -243,6 +243,17 @@ class Panel:
         self.audio_button.grid(row=3, column=4)
         frame.columnconfigure(3, weight=1)
 
+    @staticmethod
+    def focus_tabs(event):
+        """Leave no entry focused after a tab change; a hidden entry would still receive keys."""
+        event.widget.focus_set()
+
+    def main_tab_changed(self, event):
+        self.focus_tabs(event)
+        self.refresh_roll()
+        if self.main_tabs.select() == str(self.roll):
+            self.roll.focus_roll()
+
     def refresh_roll(self):
         """Preview the processed result when available, otherwise the selected input."""
         if self.main_tabs.select() == str(self.roll) and not self.running:
@@ -280,6 +291,7 @@ class Panel:
         frame.pack(side='left', fill='both', expand=True)
         tabs = ttk.Notebook(frame)
         tabs.pack(fill='both', expand=True)
+        tabs.bind('<<NotebookTabChanged>>', self.focus_tabs)
         for prefix, title in PARAMETER_TABS:
             tab = ttk.Frame(tabs, padding=8)
             tabs.add(tab, text=tr(title))
