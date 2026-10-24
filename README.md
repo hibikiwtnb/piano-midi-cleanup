@@ -67,7 +67,7 @@ song_bpmfix_cleaned.mid
 | 順序 | 工具 / 腳本 | 處理目的 | 備註 |
 |:---:|:---|:---|:---|
 | **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
-| **Step 1** | 主面板「鋼琴捲簾」頁 | 對齊第一拍（手動） | 寫入 `song_bpmfix.mid` 並重寫調號，之後重新執行後處理 |
+| **Step 1** | 主面板「鋼琴捲簾」頁 | 對齊第一拍（手動） | 寫入 `song_bpmfix.mid` 與顯示中的 `song_bpmfix_cleaned.mid`，並重寫調號 |
 | **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
 | 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 做一個人彈的譜時，在分手前執行 |
 | **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
@@ -138,7 +138,7 @@ python src/postprocess.py --list-parameters
 
 - 音條依手上色（右手藍、第二右手橙、第二左手紫、左手綠，與 PNG 截圖一致），深淺表示力度；上方標小節號，左側標音名，底部是延音踏板（CC64）踩下的區間。
 - 播放、暫停、點擊定位；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動。可依手關閉聲音。
-- 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號，之後重新執行後處理即可重建 `song_bpmfix_cleaned.mid`。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
+- 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號；顯示的是 `song_bpmfix_cleaned.mid` 時它也一起改寫，修改痕跡跟著平移，不必重新處理。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
 - 播放預設使用內建 Coopiano 物理建模鋼琴，直接送到系統預設音訊裝置。輸出選單保留本機 MIDI 埠（Windows 包含可用的 `Microsoft GS Wavetable Synth`），macOS／Linux 亦可選 `piano-midi-cleanup` 虛擬埠。選擇會記住；新增此預設時，舊的 MIDI 專用設定不會覆蓋 Coopiano，之後可自行改選並儲存。首次播放會在背景準備音源，完成後自動開始。錯誤會顯示在捲簾頁，不會靜默換成其他音源。
 
 ### `transcribe_mps.command`

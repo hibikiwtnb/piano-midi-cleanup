@@ -68,7 +68,7 @@ After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overw
 | Step | Tool / Script | Purpose | Notes |
 |:---:|:---|:---|:---|
 | **Step 0** | `transcribe.command` | Audio transcription, BPM fix, basic cleaning, preliminary hand split | Outputs `song_bpmfix_cleaned.mid` |
-| **Step 1** | Main panel Piano roll tab | First beat alignment (manual) | Saves to `song_bpmfix.mid` and rewrites key signatures; run the processing again afterwards |
+| **Step 1** | Main panel Piano roll tab | First beat alignment (manual) | Saves to `song_bpmfix.mid` and the shown `song_bpmfix_cleaned.mid`, rewriting key signatures |
 | **Step 2** | `key_signature.command` | Write key signature | Fills in key signatures when the first beat did not move |
 | Optional | `playable_reduction.command` | Reduce to what two hands can play | For a one-player score, before the hand split |
 | **Step 3** | `hand_split_channels.command` | Re-split hands | Use when 3 or 4 hands are needed (e.g., `--hands 3`) |
@@ -139,7 +139,7 @@ The Piano roll tab shows the selected MIDI and reloads it when you open the tab 
 
 - Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
 - Play, pause and click to seek; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
-- The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; run the processing again to rebuild `song_bpmfix_cleaned.mid`. Editing is off when the shown file has no matching `song_bpmfix.mid`.
+- The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; when `song_bpmfix_cleaned.mid` is shown it is rewritten too and the change marks move with it, so no reprocessing is needed. Editing is off when the shown file has no matching `song_bpmfix.mid`.
 - Playback defaults to the built-in Coopiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new Coopiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
 
 ### `transcribe_mps.command`

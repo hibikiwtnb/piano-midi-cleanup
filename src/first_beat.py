@@ -20,7 +20,11 @@ def midi_tempo(midi_file):
     return DEFAULT_MIDI_TEMPO
 
 
-def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay):
+def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay, shift_ticks=None):
+    """Rewrite midi_path at target_bpm with the first beat on a bar line.
+
+    shift_ticks reuses another file's shift so files of one song keep a shared timeline.
+    """
     midi = mido.MidiFile(midi_path)
     source_tempo = midi_tempo(midi)
     target_tempo = int(mido.bpm2tempo(target_bpm))
@@ -42,11 +46,12 @@ def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay):
                 earliest_note_tick = absolute_tick if earliest_note_tick is None else min(earliest_note_tick, absolute_tick)
         scaled_tracks.append(scaled_events)
 
-    shift_ticks = -user_offset_ticks
     padding_bars = 0
-    if earliest_note_tick is not None and earliest_note_tick + shift_ticks < 0:
-        padding_bars = math.ceil(-(earliest_note_tick + shift_ticks) / bar_ticks)
-        shift_ticks += padding_bars * bar_ticks
+    if shift_ticks is None:
+        shift_ticks = -user_offset_ticks
+        if earliest_note_tick is not None and earliest_note_tick + shift_ticks < 0:
+            padding_bars = math.ceil(-(earliest_note_tick + shift_ticks) / bar_ticks)
+            shift_ticks += padding_bars * bar_ticks
 
     output = mido.MidiFile(type=midi.type, ticks_per_beat=midi.ticks_per_beat)
     for track_index, events in enumerate(scaled_tracks):

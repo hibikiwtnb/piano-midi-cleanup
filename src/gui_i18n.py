@@ -236,8 +236,7 @@ _TEXT = {
         'Loaded: {}': '已載入：{}', 'First beat is saved to {}': '第一拍儲存至 {}',
         'First beat editing needs song_bpmfix.mid': '調整第一拍需要 song_bpmfix.mid',
         'No sound: {} is not available': '沒有聲音：無法使用 {}',
-        'Saved the first beat to {}. Run the processing again to rebuild the cleaned MIDI.':
-            '第一拍已儲存至 {}。請重新執行處理，以重建整理後的 MIDI。',
+        'Saved the first beat to {}.': '第一拍已儲存至 {}。',
     },
     'zh_CN': {
         'About': '关于', 'Version: {} (development build)': '版本：{}（开发版）',
@@ -392,8 +391,7 @@ _TEXT = {
         'Loaded: {}': '已载入：{}', 'First beat is saved to {}': '第一拍保存至 {}',
         'First beat editing needs song_bpmfix.mid': '调整第一拍需要 song_bpmfix.mid',
         'No sound: {} is not available': '没有声音：无法使用 {}',
-        'Saved the first beat to {}. Run the processing again to rebuild the cleaned MIDI.':
-            '第一拍已保存至 {}。请重新运行处理，以重建整理后的 MIDI。',
+        'Saved the first beat to {}.': '第一拍已保存至 {}。',
     },
 }
 

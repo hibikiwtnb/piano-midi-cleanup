@@ -77,3 +77,9 @@ def load_changes(midi_path):
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return None
+
+
+def shift_changes(changes, seconds):
+    """Move recorded change times with the MIDI they describe."""
+    return [dict(item, start=max(0.0, item['start'] + seconds), end=max(0.0, item['end'] + seconds))
+            for item in changes]

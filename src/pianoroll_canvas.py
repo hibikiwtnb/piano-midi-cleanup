@@ -15,12 +15,12 @@ from bpmfix_utils import bpmfix_path_for
 from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
-from key_signature import apply_key_signatures
+from key_signature import apply_key_signatures, write_key_signatures
 from midi_playback import MidiPlayback, default_output_name, display_port_name, open_output, output_names
 from midi_stats import note_name
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
-from note_changes import changes_path, load_changes
+from note_changes import changes_path, load_changes, save_changes, shift_changes
 
 
 KEYS_WIDTH = 44
@@ -306,7 +306,7 @@ class PianoRollView(ttk.Frame):
         self.offset.set('0')
         self.target = first_beat_target(midi_path)
         self.set_editable(self.target is not None)
-        self.target_text.set(tr('First beat is saved to {}').format(os.path.basename(self.target)) if self.target
+        self.target_text.set(tr('First beat is saved to {}').format(self.first_beat_files()) if self.target
                              else tr('First beat editing needs song_bpmfix.mid'))
         self.draw()
         if same_file:
@@ -638,6 +638,10 @@ class PianoRollView(ttk.Frame):
         self.after_id = self.after(50, self.update_playhead)
 
     # First beat.
+    def first_beat_files(self):
+        paths = [self.target] + ([self.path] if self.path != self.target else [])
+        return '、'.join(os.path.basename(path) for path in paths)
+
     def apply(self):
         if not self.target:
             return
@@ -650,17 +654,26 @@ class PianoRollView(ttk.Frame):
             self.status.set(tr('輸入錯誤：{}').format(error))
             return
         self.stop()
+        shown = self.path
+        changes = load_changes(shown) if shown != self.target else None
         try:
             result = build_bpm_fixed_midi(self.target, bpm, offset)
             append_first_beat_stats(self.target, result)
             # Shifting moves the old key signature events off the bar lines.
-            apply_key_signatures(self.target)
+            segments = apply_key_signatures(self.target)
+            if shown != self.target:
+                # The shown cleaned MIDI shares the bpmfix timeline, so it takes the same shift.
+                build_bpm_fixed_midi(shown, bpm, offset, shift_ticks=result['shift_ticks'])
+                write_key_signatures(shown, segments)
+                if changes is not None:
+                    shift = result['shift_ticks'] * 60.0 / (bpm * mido.MidiFile(shown).ticks_per_beat)
+                    save_changes(shown, shift_changes(changes, shift))
         except (OSError, ValueError) as error:
             self.status.set(tr('寫入失敗：{}').format(error))
             return
         target = self.target
-        self.show(target)
-        self.status.set(tr('Saved the first beat to {}. Run the processing again to rebuild the cleaned MIDI.')
-                        .format(os.path.basename(target)))
+        saved = self.first_beat_files()
+        self.show(shown)
+        self.status.set(tr('Saved the first beat to {}.').format(saved))
         if self.on_first_beat:
             self.on_first_beat(target)

@@ -47,7 +47,7 @@
 
 ### 手動調整
 
-主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。儲存時一律寫入同一首的 `song_bpmfix.mid`，並重寫調號；之後重新執行後處理，才會重建 `song_bpmfix_cleaned.mid`。顯示的檔案是 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 且找得到對應的 `song_bpmfix.mid` 時才能調整。
+主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。儲存時寫入同一首的 `song_bpmfix.mid` 並重寫調號；顯示的是 `song_bpmfix_cleaned.mid` 時，它也以同一個位移量與調號改寫，修改痕跡紀錄跟著平移，不必重新處理。顯示的檔案是 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 且找得到對應的 `song_bpmfix.mid` 時才能調整。
 
 是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
 
