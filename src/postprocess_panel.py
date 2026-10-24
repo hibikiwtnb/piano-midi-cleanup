@@ -100,13 +100,74 @@ class Panel:
         self.status_fragment = ''
         self.report_text = ''
         self.roll = None
+        self.normal_geometry = None
+        self.geometry_after_id = None
+        self.restore_window()
         self.build_ui()
         self.load_existing_report()
         root.protocol('WM_DELETE_WINDOW', self.close)
+        root.bind('<Configure>', self.track_window, add='+')
         root.after(100, self.drain)
+
+    def window_state(self):
+        if self.root.attributes('-fullscreen'):
+            return 'fullscreen'
+        if self.root.state() == 'zoomed':
+            return 'zoomed'
+        try:
+            if self.root.attributes('-zoomed'):
+                return 'zoomed'
+        except tk.TclError:  # Only X11 has -zoomed.
+            pass
+        return 'normal'
+
+    def track_window(self, event):
+        """Remember the unmaximized geometry, which a zoomed window no longer reports."""
+        if event.widget is not self.root:
+            return
+        if self.geometry_after_id is not None:
+            self.root.after_cancel(self.geometry_after_id)
+        # Wait for the size to settle: zoom animations report intermediate sizes as normal.
+        self.geometry_after_id = self.root.after(500, self.record_geometry)
+
+    def record_geometry(self):
+        self.geometry_after_id = None
+        if self.window_state() == 'normal':
+            self.normal_geometry = self.root.geometry()
+
+    def restore_window(self):
+        geometry = self.settings.get('window_geometry')
+        match = re.fullmatch(r'(\d+)x(\d+)([+-]-?\d+)([+-]-?\d+)', geometry or '')
+        if match:
+            screen_width, screen_height = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+            width, height = min(int(match[1]), screen_width), min(int(match[2]), screen_height)
+            x, y = int(match[3]), int(match[4])
+            # Drop a position left on a display that is no longer connected.
+            if -width < x < screen_width and 0 <= y < screen_height:
+                self.root.geometry('{}x{}{:+d}{:+d}'.format(width, height, x, y))
+            else:
+                self.root.geometry('{}x{}'.format(width, height))
+        # A window manager ignores zoom requests until the window is mapped.
+        self.root.after(100, self.restore_window_state)
+
+    def restore_window_state(self):
+        if self.settings.get('window_state') != 'zoomed':
+            return
+        try:
+            self.root.state('zoomed')
+        except tk.TclError:  # X11 window managers use the -zoomed attribute instead.
+            self.root.attributes('-zoomed', True)
 
     def close(self):
         self.roll.shutdown()
+        state = self.window_state()
+        if state == 'normal':
+            self.normal_geometry = self.root.geometry()
+        # Fullscreen is not restored; reopen at the last normal size instead.
+        self.settings['window_state'] = 'zoomed' if state == 'zoomed' else 'normal'
+        if self.normal_geometry:
+            self.settings['window_geometry'] = self.normal_geometry
+        save_settings(self.settings)
         self.root.destroy()
 
     def build_ui(self):
