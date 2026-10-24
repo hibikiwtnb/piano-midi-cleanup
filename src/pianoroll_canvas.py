@@ -250,10 +250,12 @@ class PianoRollView(ttk.Frame):
 
     # Scrolling and zoom keep every canvas on the same time or pitch axis.
     def xview(self, *args):
+        self.hide_change_tooltip()
         for widget in (self.canvas, self.ruler, self.chords, self.pedal):
             widget.xview(*args)
 
     def yview(self, *args):
+        self.hide_change_tooltip()
         for widget in (self.canvas, self.keys):
             widget.yview(*args)
 
@@ -412,25 +414,34 @@ class PianoRollView(ttk.Frame):
                  'trim': 'Overlap trim'}[change['stage']]
         self.status.set(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
         title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
-        self.place_tooltip(event, (self.canvas, current[0]), title + '\n' + tr(stage))
+        self.place_tooltip(self.canvas, current[0], title + '\n' + tr(stage))
 
-    def place_tooltip(self, event, item, text):
-        """Show text next to the pointer; item identifies the hovered canvas item."""
-        if self.tooltip_item != item:
-            self.hide_change_tooltip()
-            self.tooltip_item = item
-            self.change_tooltip = tk.Toplevel(self)
-            self.change_tooltip.overrideredirect(True)
-            tk.Label(self.change_tooltip, text=text, justify='left',
-                     background='#ffffe1', foreground='#202020', relief='solid', borderwidth=1,
-                     padx=8, pady=6, wraplength=260).pack()
-            self.change_tooltip.update_idletasks()
+    def place_tooltip(self, canvas, item, text, bounds=None):
+        """Anchor once below the hovered item's visible bounds, not to the pointer."""
+        identity = (canvas, item)
+        if self.tooltip_item == identity:
+            return
+        self.hide_change_tooltip()
+        bounds = bounds if bounds is not None else canvas.bbox(item)
+        if bounds is None:
+            return
+        self.tooltip_item = identity
+        self.change_tooltip = tk.Toplevel(self)
+        self.change_tooltip.overrideredirect(True)
+        tk.Label(self.change_tooltip, text=text, justify='left',
+                 background='#ffffe1', foreground='#202020', relief='solid', borderwidth=1,
+                 padx=8, pady=6, wraplength=260).pack()
+        self.change_tooltip.update_idletasks()
         width = self.change_tooltip.winfo_reqwidth()
         height = self.change_tooltip.winfo_reqheight()
-        x = max(0, min(event.x_root + 14, self.winfo_screenwidth() - width))
-        y = event.y_root + 18
+        left = max(bounds[0], canvas.canvasx(0))
+        top = canvas.winfo_rooty() + bounds[1] - canvas.canvasy(0)
+        bottom = canvas.winfo_rooty() + bounds[3] - canvas.canvasy(0)
+        x = canvas.winfo_rootx() + left - canvas.canvasx(0)
+        x = max(0, min(round(x), self.winfo_screenwidth() - width))
+        y = round(bottom + 8)
         if y + height > self.winfo_screenheight():
-            y = max(0, event.y_root - height - 8)
+            y = max(0, round(top - height - 8))
         self.change_tooltip.geometry('+{}+{}'.format(x, y))
 
     def draw(self):
@@ -585,7 +596,9 @@ class PianoRollView(ttk.Frame):
             lines.append(tr('Other readings: {}').format(', '.join(segment.candidates[1:])))
         lines.append(tr('Bass: {}').format(segment.bass))
         lines.append(tr('Chord tones: {}').format(' '.join(segment.pitch_classes)))
-        self.place_tooltip(event, (self.chords, segment.start_tick), '\n'.join(lines))
+        self.place_tooltip(self.chords, segment.start_tick, '\n'.join(lines),
+                           (segment.start * self.pixels_per_second, 2,
+                            segment.end * self.pixels_per_second, CHORD_ROW_HEIGHT - 2))
 
     def draw_grid(self):
         """Bar, beat and 16th lines from the BPM and first beat fields, so edits preview before saving."""
