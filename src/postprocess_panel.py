@@ -133,6 +133,7 @@ class Panel:
         self.running = False
 
         self.midi = tk.StringVar(value=self.settings.get('midi', ''))
+        self.selected_midi = self.midi.get().strip()
         self.source = tk.StringVar(value=self.settings.get('source', 'reuse'))
         self.bpm = tk.StringVar(value=self.settings.get('bpm', ''))
         self.audio = tk.StringVar(value=self.settings.get('audio', ''))
@@ -147,11 +148,14 @@ class Panel:
         self.status_fragment = ''
         self.report_text = ''
         self.roll = None
+        self.preview_path = None
+        self.run_preview = None
         self.normal_geometry = None
         self.geometry_after_id = None
         self.restore_window()
         self.build_ui()
         self.hands.trace_add('write', self.update_hand_options)
+        self.midi.trace_add('write', self.midi_changed)
         self.load_existing_report()
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.bind('<Configure>', self.track_window, add='+')
@@ -364,21 +368,25 @@ class Panel:
             self.roll.focus_roll()
 
     def refresh_roll(self):
-        """Preview the processed result when available, otherwise the selected input."""
+        """Show the selected input until an explicit GUI edit produces a corrected file."""
         if self.main_tabs.select() == str(self.roll) and not self.running:
-            midi_path = self.midi.get().strip()
-            if midi_path:
-                source_path = postprocess.source_midi_path(midi_path)
-                cleaned_path = postprocess.cleaned_path_for(postprocess.bpmfix_path_for(source_path))
-                if os.path.isfile(cleaned_path):
-                    midi_path = cleaned_path
+            midi_path = self.preview_path or self.midi.get().strip()
             self.roll.show(midi_path)
+
+    def midi_changed(self, *_):
+        selected = self.midi.get().strip()
+        if selected == self.selected_midi:
+            return
+        self.selected_midi = selected
+        self.bpm.set('')
+        self.preview_path = None
 
     def save_midi_output(self, name):
         self.settings['playback_output'] = name
         save_settings(self.settings)
 
-    def first_beat_saved(self, _target):
+    def first_beat_saved(self, target):
+        self.preview_path = target
         self.load_existing_report(update_status=False)
 
     def build_steps(self, frame):
@@ -699,6 +707,11 @@ class Panel:
                              audio=self.audio.get(), last=preset)
         save_settings(self.settings)
         self.roll.stop()
+        self.run_preview = None
+        if self.source.get() != 'reuse':
+            selected = self.midi.get().strip()
+            target = postprocess.bpmfix_path_for(postprocess.source_midi_path(selected))
+            self.run_preview = (selected, target)
         self.running = True
         self.run_button.configure(state='disabled')
         self.status_fragment = ''
@@ -731,11 +744,14 @@ class Panel:
                 self.run_button.configure(state='normal')
                 message = tr('Finished.') if item[1] == 0 else tr('Stopped (exit {}).').format(item[1])
                 if item[1] == 0:
+                    if self.run_preview and self.run_preview[0] == self.midi.get().strip():
+                        self.preview_path = self.run_preview[1]
                     self.load_existing_report(update_status=False)
                     report_changed = False
                 else:
                     self.report_text += '\n' + message + '\n'
                     report_changed = True
+                self.run_preview = None
                 self.status.set(message)
                 self.status_fragment = ''
             else:

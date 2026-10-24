@@ -4,6 +4,7 @@ import math
 from bisect import bisect_right
 import os
 import queue
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -44,13 +45,13 @@ HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
 
 def first_beat_target(midi_path):
-    """song_bpmfix.mid of the song when the shown MIDI shares its timeline, else None."""
+    """The corrected output to edit, or create from a selected original MIDI."""
     base = os.path.splitext(midi_path)[0]
     for suffix in ('_bpmfix_cleaned', '_bpmfix'):
         if base.endswith(suffix):
             target = bpmfix_path_for(base[:-len(suffix)] + '.mid')
             return target if os.path.isfile(target) else None
-    return None
+    return bpmfix_path_for(midi_path)
 
 
 def read_roll(midi_path):
@@ -864,7 +865,8 @@ class PianoRollView(ttk.Frame):
 
     # First beat.
     def first_beat_files(self):
-        paths = [self.target] + ([self.path] if self.path != self.target else [])
+        shared = os.path.splitext(self.path)[0].endswith('_bpmfix_cleaned')
+        paths = [self.target] + ([self.path] if shared else [])
         return '、'.join(os.path.basename(path) for path in paths)
 
     def apply(self):
@@ -880,13 +882,17 @@ class PianoRollView(ttk.Frame):
             return
         self.stop()
         shown = self.path
-        changes = load_changes(shown) if shown != self.target else None
+        shared = os.path.splitext(shown)[0].endswith('_bpmfix_cleaned')
+        changes = load_changes(shown) if shared else None
         try:
+            if shown != self.target and not shared:
+                # Explicit edits of an original always start from that original, not an old output.
+                shutil.copyfile(shown, self.target)
             result = build_bpm_fixed_midi(self.target, bpm, offset)
             append_first_beat_stats(self.target, result)
             # Shifting moves the old key signature events off the bar lines.
             segments = apply_key_signatures(self.target)
-            if shown != self.target:
+            if shared:
                 # The shown cleaned MIDI shares the bpmfix timeline, so it takes the same shift.
                 build_bpm_fixed_midi(shown, bpm, offset, shift_ticks=result['shift_ticks'])
                 write_key_signatures(shown, segments)
@@ -898,7 +904,7 @@ class PianoRollView(ttk.Frame):
             return
         target = self.target
         saved = self.first_beat_files()
-        self.show(shown)
+        self.show(target)
         self.set_status(tr('Saved the first beat to {}.').format(saved))
         if self.on_first_beat:
             self.on_first_beat(target)
