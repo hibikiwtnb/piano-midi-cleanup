@@ -129,6 +129,7 @@ class PianoRollView(ttk.Frame):
         self.change_items = {}
         self.note_items = {}
         self.label_images = {}
+        self.keyboard_drawn = False
         self.change_tooltip = None
         self.tooltip_item = None
         self.chord_segments = []
@@ -189,7 +190,7 @@ class PianoRollView(ttk.Frame):
             ttk.Checkbutton(play, text=tr(hand.replace('_', ' ')), variable=self.hand_enabled[hand],
                             command=self.apply_mix).pack(side='left', padx=(8, 0))
         ttk.Checkbutton(play, text=tr('Velocity shading'), variable=self.shading,
-                        command=self.draw).pack(side='left', padx=(12, 0))
+                        command=self.update_shading).pack(side='left', padx=(12, 0))
         ttk.Checkbutton(play, text=tr('Chords'), variable=self.show_chords,
                         command=self.layout_chord_track).pack(side='left', padx=(12, 0))
         ttk.Label(play, text=tr('Change overlay')).pack(side='left', padx=(12, 4))
@@ -199,7 +200,7 @@ class PianoRollView(ttk.Frame):
         selector = ttk.Combobox(play, textvariable=self.change_mode, values=tuple(self.change_modes),
                                 width=14, state='readonly')
         selector.pack(side='left')
-        selector.bind('<<ComboboxSelected>>', lambda _event: self.draw())
+        selector.bind('<<ComboboxSelected>>', lambda _event: self.draw_changes())
 
         roll = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
@@ -314,7 +315,7 @@ class PianoRollView(ttk.Frame):
             self.set_editable(False)
             self.target_text.set('')
             self.draw()
-            self.status.set(tr('Choose a MIDI file first.'))
+            self.set_status(tr('Choose a MIDI file first.'))
             return
         mtime = os.path.getmtime(midi_path)
         record_path = changes_path(midi_path)
@@ -352,7 +353,7 @@ class PianoRollView(ttk.Frame):
             self.xview('moveto', 0)
             self.center_pending = True
             self.after_idle(self.center_initial_pitch)
-        self.status.set(tr('Loaded: {}').format(os.path.basename(midi_path)))
+        self.set_status(tr('Loaded: {}').format(os.path.basename(midi_path)))
 
     def set_editable(self, editable):
         state = 'normal' if editable else 'disabled'
@@ -379,6 +380,10 @@ class PianoRollView(ttk.Frame):
             self.label_images[key] = ImageTk.PhotoImage(image, master=self)
         return canvas.create_image(KEYS_WIDTH - 3, y, image=self.label_images[key], anchor='e')
 
+    def set_status(self, text):
+        if self.status.get() != text:
+            self.status.set(text)
+
     def reset_change_hint(self):
         self.hide_change_tooltip()
         mode = self.change_modes[self.change_mode.get()]
@@ -390,7 +395,7 @@ class PianoRollView(ttk.Frame):
             text = tr('No notes were deleted or shortened.')
         else:
             text = tr('Red: deleted notes   Orange: shortened tails')
-        self.status.set(text)
+        self.set_status(text)
 
     def hide_change_tooltip(self):
         if self.change_tooltip is not None:
@@ -403,8 +408,8 @@ class PianoRollView(ttk.Frame):
         note = self.note_items.get(current[0]) if current else None
         if note is not None:
             self.hide_change_tooltip()
-            pitch, velocity = note
-            self.status.set(tr('{} | Velocity {}').format(note_name(pitch), velocity))
+            pitch, velocity, _ = note
+            self.set_status(tr('{} | Velocity {}').format(note_name(pitch), velocity))
             return
         change = self.change_items.get(current[0]) if current else None
         if change is None:
@@ -412,7 +417,7 @@ class PianoRollView(ttk.Frame):
             return
         stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}[change['stage']]
-        self.status.set(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
+        self.set_status(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
         title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
         self.place_tooltip(self.canvas, current[0], title + '\n' + tr(stage))
 
@@ -448,7 +453,7 @@ class PianoRollView(ttk.Frame):
         width = self.width()
         height = PITCHES * ROW_HEIGHT
         rows = max(1, len(self.pedal_rows))
-        for widget in (self.canvas, self.keys, self.ruler, self.pedal, self.pedal_labels, self.chord_label):
+        for widget in (self.canvas, self.ruler, self.pedal, self.pedal_labels, self.chord_label):
             widget.delete('all')
         self.canvas.configure(scrollregion=(0, 0, width, height))
         self.keys.configure(scrollregion=(0, 0, KEYS_WIDTH, height))
@@ -461,36 +466,27 @@ class PianoRollView(ttk.Frame):
             black = pitch % 12 in (1, 3, 6, 8, 10)
             if black:
                 self.canvas.create_rectangle(0, y, width, y + ROW_HEIGHT, fill='#f1f3f6', outline='', tags='bg')
-            self.keys.create_rectangle(0, y, KEYS_WIDTH, y + ROW_HEIGHT, fill='#3a3f47' if black else 'white',
-                                       outline='#d5dae0')
+            if not self.keyboard_drawn:
+                self.keys.create_rectangle(0, y, KEYS_WIDTH, y + ROW_HEIGHT, fill='#3a3f47' if black else 'white',
+                                           outline='#d5dae0')
             if pitch % 12 == 0:
                 self.canvas.create_line(0, y + ROW_HEIGHT, width, y + ROW_HEIGHT, fill='#dce2e8', tags='bg')
-                self.draw_small_label(self.keys, note_name(pitch), y + ROW_HEIGHT / 2, 9)
+                if not self.keyboard_drawn:
+                    self.draw_small_label(self.keys, note_name(pitch), y + ROW_HEIGHT / 2, 9)
+        self.keyboard_drawn = True
 
         pps = self.pixels_per_second
-        self.change_items.clear()
         self.note_items.clear()
-        self.reset_change_hint()
-        mode = self.change_modes[self.change_mode.get()]
-        for change in self.changes or []:
-            if mode not in ('all', change['kind']):
-                continue
-            deleted = change['kind'] == 'deleted'
-            y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
-            item = self.canvas.create_rectangle(
-                change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3),
-                y + ROW_HEIGHT - 1, fill='#f4b8b8' if deleted else '#f4cf9b',
-                outline='#bd6262' if deleted else '#c28a3c', stipple='gray50',
-                dash=(3, 2) if deleted else (), tags='change')
-            self.change_items[item] = change
+        self.draw_changes()
         for start, end, pitch, channel, velocity in self.notes:
-            color = HAND_COLORS.get(channel, (OTHER_COLOR,))[0]
+            base_color = HAND_COLORS.get(channel, (OTHER_COLOR,))[0]
+            color = base_color
             if self.shading.get():
                 color = shade(color, velocity)
             y = (PITCHES - 1 - pitch) * ROW_HEIGHT + 1
             item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
                                                 fill=color, outline='', tags='note')
-            self.note_items[item] = (pitch, velocity)
+            self.note_items[item] = (pitch, velocity, base_color)
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
             y = row * PEDAL_ROW_HEIGHT
@@ -508,6 +504,31 @@ class PianoRollView(ttk.Frame):
         self.draw_chords()
         self.draw_grid()
         self.move_playhead(self.position_seconds())
+
+    def update_shading(self):
+        for item, (_, velocity, base_color) in self.note_items.items():
+            color = shade(base_color, velocity) if self.shading.get() else base_color
+            self.canvas.itemconfigure(item, fill=color)
+
+    def draw_changes(self):
+        self.canvas.delete('change')
+        pps = self.pixels_per_second
+        self.change_items.clear()
+        self.reset_change_hint()
+        mode = self.change_modes[self.change_mode.get()]
+        for change in self.changes or []:
+            if mode not in ('all', change['kind']):
+                continue
+            deleted = change['kind'] == 'deleted'
+            y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
+            item = self.canvas.create_rectangle(
+                change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3),
+                y + ROW_HEIGHT - 1, fill='#f4b8b8' if deleted else '#f4cf9b',
+                outline='#bd6262' if deleted else '#c28a3c', stipple='gray50',
+                dash=(3, 2) if deleted else (), tags='change')
+            self.change_items[item] = change
+        if self.canvas.find_withtag('note'):
+            self.canvas.tag_lower('change', 'note')
 
     # Chord track.
     def start_chord_analysis(self, midi_path, mtime):
@@ -590,7 +611,7 @@ class PianoRollView(ttk.Frame):
         if segment is None:
             self.reset_change_hint()
             return
-        self.status.set(segment.name)
+        self.set_status(segment.name)
         lines = [segment.name]
         if len(segment.candidates) > 1:
             lines.append(tr('Other readings: {}').format(', '.join(segment.candidates[1:])))
@@ -651,14 +672,14 @@ class PianoRollView(ttk.Frame):
                 return 'break'
             self.bpm.set('{:.2f}'.format(value))
         except ValueError:
-            self.status.set(tr('請輸入有效 BPM 和 offset'))
+            self.set_status(tr('請輸入有效 BPM 和 offset'))
         return 'break'
 
     def step_offset_seconds(self, amount):
         try:
             self.offset.set('{:.4f}'.format(float(self.offset.get()) + amount))
         except ValueError:
-            self.status.set(tr('請輸入有效 BPM 和 offset'))
+            self.set_status(tr('請輸入有效 BPM 和 offset'))
         return 'break'
 
     def step_offset(self, direction):
@@ -666,7 +687,7 @@ class PianoRollView(ttk.Frame):
             beat = 60.0 / float(self.bpm.get())
             self.offset.set('{:.3f}'.format(float(self.offset.get()) + direction * beat))
         except (ValueError, ZeroDivisionError):
-            self.status.set(tr('請輸入有效 BPM 和 offset'))
+            self.set_status(tr('請輸入有效 BPM 和 offset'))
 
     # Playback.
     def ensure_playback(self):
@@ -674,15 +695,15 @@ class PianoRollView(ttk.Frame):
             self.output, name = open_output(self.output_var.get())
             self.playback = MidiPlayback(self.output)
             if self.output is None:
-                self.status.set(tr('No sound: {} is not available').format(name))
+                self.set_status(tr('No sound: {} is not available').format(name))
                 return False
         if self.output is None:
             return False
         if getattr(self.output, 'error', None):
-            self.status.set(tr('Could not start playback: {}').format(self.output.error))
+            self.set_status(tr('Could not start playback: {}').format(self.output.error))
             return False
         if not getattr(self.output, 'ready', True):
-            self.status.set(tr('Preparing Coopiano...'))
+            self.set_status(tr('Preparing Coopiano...'))
             return False
         return True
 
@@ -723,7 +744,7 @@ class PianoRollView(ttk.Frame):
                 self.play_after_id = self.after(100, self.play)
                 self.play_button.configure(text=tr('Pause'))
             return
-        self.status.set(tr('Playback output: {}').format(self.output_var.get()))
+        self.set_status(tr('Playback output: {}').format(self.output_var.get()))
         position = self.position_seconds()
         self.playback.play(self.path, position)
         self.apply_mix()
@@ -778,7 +799,7 @@ class PianoRollView(ttk.Frame):
     def update_playhead(self):
         if self.play_started is not None and getattr(self.output, 'error', None):
             self.stop()
-            self.status.set(tr('Could not start playback: {}').format(self.output.error))
+            self.set_status(tr('Could not start playback: {}').format(self.output.error))
         if self.play_started is not None:
             seconds = self.position_seconds()
             x = self.move_playhead(seconds)
@@ -810,7 +831,7 @@ class PianoRollView(ttk.Frame):
             if bpm <= 0:
                 raise ValueError(tr('BPM 必須大於 0'))
         except ValueError as error:
-            self.status.set(tr('輸入錯誤：{}').format(error))
+            self.set_status(tr('輸入錯誤：{}').format(error))
             return
         self.stop()
         shown = self.path
@@ -828,11 +849,11 @@ class PianoRollView(ttk.Frame):
                     shift = result['shift_ticks'] * 60.0 / (bpm * mido.MidiFile(shown).ticks_per_beat)
                     save_changes(shown, shift_changes(changes, shift))
         except (OSError, ValueError) as error:
-            self.status.set(tr('寫入失敗：{}').format(error))
+            self.set_status(tr('寫入失敗：{}').format(error))
             return
         target = self.target
         saved = self.first_beat_files()
         self.show(shown)
-        self.status.set(tr('Saved the first beat to {}.').format(saved))
+        self.set_status(tr('Saved the first beat to {}.').format(saved))
         if self.on_first_beat:
             self.on_first_beat(target)
