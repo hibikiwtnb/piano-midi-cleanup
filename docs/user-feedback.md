@@ -21,4 +21,6 @@
 - 若調整雙手簡化的取捨，考慮保留後的音群緊湊程度，同時注意 E5 是否具有旋律作用。
 - 本案例的期望是優先保留 B3；不能直接泛化為一律刪除較高或較遠的音符。
 
+2026-10-24 的逐音核對與刪音策略討論見 [可彈性清理：刪音策略的改進建議](playable-removal-strategy.md)。
+
 相關程式：`src/playable_reduction.py`；相關規格：`docs/spec/05-playable-reduction.md`。
