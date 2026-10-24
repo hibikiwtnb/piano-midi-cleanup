@@ -3,15 +3,20 @@
 import math
 from bisect import bisect_right
 import os
+import queue
+import subprocess
+import threading
 import time
 import tkinter as tk
 from collections import defaultdict
+from tkinter import font as tkfont
 from tkinter import ttk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import mido
 
 from bpmfix_utils import bpmfix_path_for
+from chord_analysis import analyze_chords
 from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
@@ -27,6 +32,9 @@ KEYS_WIDTH = 44
 RULER_HEIGHT = 20
 ROW_HEIGHT = 9
 PEDAL_ROW_HEIGHT = 18
+CHORD_ROW_HEIGHT = 22
+CHORD_FILLS = ('#e6edf8', '#dbe5f3')
+CHORD_POLL_MS = 100
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
 HORIZONTAL_SCROLL_INCREMENT = 24
@@ -123,12 +131,19 @@ class PianoRollView(ttk.Frame):
         self.label_images = {}
         self.change_tooltip = None
         self.tooltip_item = None
+        self.chord_segments = []
+        self.chord_message = ''
+        self.chord_items = {}
+        self.chord_cache = {}
+        self.chord_job = None
+        self.chord_results = queue.Queue()
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
         self.output_var = tk.StringVar(
             value=default_output_name() if midi_port in (None, 'CoPiano') else display_port_name(midi_port))
         self.shading = tk.BooleanVar(value=True)
+        self.show_chords = tk.BooleanVar(value=True)
         self.change_mode = tk.StringVar(value=tr('Hide changes'))
         self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}
         self.target_text = tk.StringVar()
@@ -175,6 +190,8 @@ class PianoRollView(ttk.Frame):
                             command=self.apply_mix).pack(side='left', padx=(8, 0))
         ttk.Checkbutton(play, text=tr('Velocity shading'), variable=self.shading,
                         command=self.draw).pack(side='left', padx=(12, 0))
+        ttk.Checkbutton(play, text=tr('Chords'), variable=self.show_chords,
+                        command=self.layout_chord_track).pack(side='left', padx=(12, 0))
         ttk.Label(play, text=tr('Change overlay')).pack(side='left', padx=(12, 4))
         self.change_modes = {tr(label): mode for label, mode in (
             ('Hide changes', 'none'), ('Deleted notes', 'deleted'),
@@ -188,6 +205,12 @@ class PianoRollView(ttk.Frame):
         roll.pack(fill='both', expand=True)
         self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background='#eef1f5', highlightthickness=0,
                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
+        self.chord_label = tk.Canvas(roll, width=KEYS_WIDTH, height=CHORD_ROW_HEIGHT, background='white',
+                                     highlightthickness=0)
+        self.chords = tk.Canvas(roll, height=CHORD_ROW_HEIGHT, background='#f6f8fb', highlightthickness=0,
+                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
+        self.chord_font = tkfont.Font(family=tkfont.nametofont('TkDefaultFont').actual('family'),
+                                      size=10, weight='bold')
         self.keys = tk.Canvas(roll, width=KEYS_WIDTH, background='white', highlightthickness=0,
                               yscrollincrement=ROW_HEIGHT)
         self.canvas = tk.Canvas(roll, width=800, height=360, background='#fbfcfe', highlightthickness=0,
@@ -202,20 +225,24 @@ class PianoRollView(ttk.Frame):
         self.canvas.bind('<Configure>', self.center_initial_pitch)
         self.canvas.bind('<Motion>', self.show_change_hint)
         self.canvas.bind('<Leave>', lambda _event: self.reset_change_hint())
+        self.chords.bind('<Motion>', self.show_chord_hint)
+        self.chords.bind('<Leave>', lambda _event: self.reset_change_hint())
         self.ruler.grid(row=0, column=1, sticky='ew')
-        self.keys.grid(row=1, column=0, sticky='ns')
-        self.canvas.grid(row=1, column=1, sticky='nsew')
-        vertical.grid(row=1, column=2, sticky='ns')
-        self.pedal_labels.grid(row=2, column=0, sticky='ns')
-        self.pedal.grid(row=2, column=1, sticky='ew')
-        horizontal.grid(row=3, column=1, sticky='ew')
-        roll.rowconfigure(1, weight=1)
+        self.chord_label.grid(row=1, column=0, sticky='ns')
+        self.chords.grid(row=1, column=1, sticky='ew')
+        self.keys.grid(row=2, column=0, sticky='ns')
+        self.canvas.grid(row=2, column=1, sticky='nsew')
+        vertical.grid(row=2, column=2, sticky='ns')
+        self.pedal_labels.grid(row=3, column=0, sticky='ns')
+        self.pedal.grid(row=3, column=1, sticky='ew')
+        horizontal.grid(row=4, column=1, sticky='ew')
+        roll.rowconfigure(2, weight=1)
         roll.columnconfigure(1, weight=1)
 
-        for widget in (self.canvas, self.ruler, self.pedal):
+        for widget in (self.canvas, self.ruler, self.chords, self.pedal):
             widget.bind('<Button-1>', self.seek_click)
         self.keys.bind('<Button-1>', lambda _event: self.focus_roll())
-        for widget in (self.canvas, self.keys, self.ruler, self.pedal):
+        for widget in (self.canvas, self.keys, self.ruler, self.chords, self.pedal):
             widget.bind('<MouseWheel>', self.wheel)
             # Only the roll canvases take Space, so text in the entries is never affected.
             widget.bind('<space>', self.space_toggle)
@@ -223,7 +250,7 @@ class PianoRollView(ttk.Frame):
 
     # Scrolling and zoom keep every canvas on the same time or pitch axis.
     def xview(self, *args):
-        for widget in (self.canvas, self.ruler, self.pedal):
+        for widget in (self.canvas, self.ruler, self.chords, self.pedal):
             widget.xview(*args)
 
     def yview(self, *args):
@@ -281,6 +308,7 @@ class PianoRollView(ttk.Frame):
             self.changes_mtime = None
             self.notes, self.pedal_rows, self.duration = [], [], 0.0
             self.key_signatures = []
+            self.chord_segments, self.chord_message, self.chord_job = [], '', None
             self.set_editable(False)
             self.target_text.set('')
             self.draw()
@@ -309,6 +337,7 @@ class PianoRollView(ttk.Frame):
         self.play_start_seconds = 0.0
         self.bpm.set('{:.2f}'.format(bpm))
         self.offset.set('0')
+        self.start_chord_analysis(midi_path, mtime)
         self.target = first_beat_target(midi_path)
         self.set_editable(self.target is not None)
         self.target_text.set(tr('First beat is saved to {}').format(self.first_beat_files()) if self.target
@@ -382,13 +411,17 @@ class PianoRollView(ttk.Frame):
         stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}[change['stage']]
         self.status.set(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
-        if self.tooltip_item != current[0]:
+        title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
+        self.place_tooltip(event, (self.canvas, current[0]), title + '\n' + tr(stage))
+
+    def place_tooltip(self, event, item, text):
+        """Show text next to the pointer; item identifies the hovered canvas item."""
+        if self.tooltip_item != item:
             self.hide_change_tooltip()
-            self.tooltip_item = current[0]
+            self.tooltip_item = item
             self.change_tooltip = tk.Toplevel(self)
             self.change_tooltip.overrideredirect(True)
-            title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
-            tk.Label(self.change_tooltip, text=title + '\n' + tr(stage), justify='left',
+            tk.Label(self.change_tooltip, text=text, justify='left',
                      background='#ffffe1', foreground='#202020', relief='solid', borderwidth=1,
                      padx=8, pady=6, wraplength=260).pack()
             self.change_tooltip.update_idletasks()
@@ -404,7 +437,7 @@ class PianoRollView(ttk.Frame):
         width = self.width()
         height = PITCHES * ROW_HEIGHT
         rows = max(1, len(self.pedal_rows))
-        for widget in (self.canvas, self.keys, self.ruler, self.pedal, self.pedal_labels):
+        for widget in (self.canvas, self.keys, self.ruler, self.pedal, self.pedal_labels, self.chord_label):
             widget.delete('all')
         self.canvas.configure(scrollregion=(0, 0, width, height))
         self.keys.configure(scrollregion=(0, 0, KEYS_WIDTH, height))
@@ -458,10 +491,101 @@ class PianoRollView(ttk.Frame):
             for down, up in intervals:
                 self.pedal.create_rectangle(down * pps, y + 2, max(up * pps, down * pps + 2),
                                             y + PEDAL_ROW_HEIGHT - 2, fill='#8a94a6', outline='')
+        self.draw_small_label(self.chord_label, tr('Chords'), CHORD_ROW_HEIGHT / 2, 12)
         self.playhead = self.canvas.create_line(0, 0, 0, height, fill='#e53935', width=2)
         self.pedal_playhead = self.pedal.create_line(0, 0, 0, rows * PEDAL_ROW_HEIGHT, fill='#e53935', width=2)
+        self.draw_chords()
         self.draw_grid()
         self.move_playhead(self.position_seconds())
+
+    # Chord track.
+    def start_chord_analysis(self, midi_path, mtime):
+        """Analyze chords off the Tk thread; results are cached per file version."""
+        key = (midi_path, mtime)
+        self.chord_job = key
+        if key in self.chord_cache:
+            self.chord_segments, self.chord_message = self.chord_cache[key], ''
+            return
+        self.chord_segments, self.chord_message = [], tr('Analyzing chords...')
+
+        def work():
+            try:
+                result = analyze_chords(midi_path)
+            except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as error:
+                result = error
+            self.chord_results.put((key, result))
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(CHORD_POLL_MS, self.poll_chords)
+
+    def poll_chords(self):
+        try:
+            key, result = self.chord_results.get_nowait()
+        except queue.Empty:
+            self.after(CHORD_POLL_MS, self.poll_chords)
+            return
+        if not isinstance(result, Exception):
+            self.chord_cache[key] = result
+        if key == self.chord_job:
+            if isinstance(result, RuntimeError):  # node_executable() found no Node.js.
+                self.chord_segments, self.chord_message = [], tr('Chord track needs Node.js')
+            elif isinstance(result, Exception):
+                self.chord_segments, self.chord_message = [], tr('Chord analysis failed: {}').format(result)
+            else:
+                self.chord_segments, self.chord_message = result, ''
+            self.draw_chords()
+
+    def layout_chord_track(self):
+        for widget in (self.chord_label, self.chords):
+            if self.show_chords.get():
+                widget.grid()
+            else:
+                widget.grid_remove()
+
+    def fit_chord_name(self, name, width):
+        """Name shortened with an ellipsis to fit width, or '' when nothing fits."""
+        if self.chord_font.measure(name) <= width:
+            return name
+        for end in range(len(name) - 1, 0, -1):
+            text = name[:end] + '…'
+            if self.chord_font.measure(text) <= width:
+                return text
+        return ''
+
+    def draw_chords(self):
+        self.chords.delete('all')
+        self.chord_items.clear()
+        self.chords.configure(scrollregion=(0, 0, self.width(), CHORD_ROW_HEIGHT))
+        pps = self.pixels_per_second
+        if self.chord_message:
+            self.chords.create_text(6, CHORD_ROW_HEIGHT / 2, text=self.chord_message, anchor='w',
+                                    fill='#6b7785')
+        for index, segment in enumerate(self.chord_segments):
+            left, right = segment.start * pps, segment.end * pps
+            item = self.chords.create_rectangle(left + 1, 2, max(left + 2, right - 1), CHORD_ROW_HEIGHT - 2,
+                                                fill=CHORD_FILLS[index % 2], outline='#a9b9d0')
+            self.chord_items[item] = segment
+            text = self.fit_chord_name(segment.name, right - left - 8)
+            if text:
+                label = self.chords.create_text(left + 5, CHORD_ROW_HEIGHT / 2, text=text, anchor='w',
+                                                font=self.chord_font, fill='#24364f')
+                self.chord_items[label] = segment
+        self.chord_playhead = self.chords.create_line(0, 0, 0, CHORD_ROW_HEIGHT, fill='#e53935', width=2)
+        self.move_playhead(self.position_seconds())
+
+    def show_chord_hint(self, event):
+        current = self.chords.find_withtag('current')
+        segment = self.chord_items.get(current[0]) if current else None
+        if segment is None:
+            self.reset_change_hint()
+            return
+        self.status.set(segment.name)
+        lines = [segment.name]
+        if len(segment.candidates) > 1:
+            lines.append(tr('Other readings: {}').format(', '.join(segment.candidates[1:])))
+        lines.append(tr('Bass: {}').format(segment.bass))
+        lines.append(tr('Chord tones: {}').format(' '.join(segment.pitch_classes)))
+        self.place_tooltip(event, (self.chords, segment.start_tick), '\n'.join(lines))
 
     def draw_grid(self):
         """Bar, beat and 16th lines from the BPM and first beat fields, so edits preview before saving."""
@@ -635,6 +759,7 @@ class PianoRollView(ttk.Frame):
         x = seconds * self.pixels_per_second
         self.canvas.coords(self.playhead, x, 0, x, PITCHES * ROW_HEIGHT)
         self.pedal.coords(self.pedal_playhead, x, 0, x, max(1, len(self.pedal_rows)) * PEDAL_ROW_HEIGHT)
+        self.chords.coords(self.chord_playhead, x, 0, x, CHORD_ROW_HEIGHT)
         return x
 
     def update_playhead(self):

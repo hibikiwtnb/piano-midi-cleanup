@@ -237,6 +237,10 @@ _TEXT = {
         'First beat editing needs song_bpmfix.mid': '調整第一拍需要 song_bpmfix.mid',
         'No sound: {} is not available': '沒有聲音：無法使用 {}',
         'Saved the first beat to {}.': '第一拍已儲存至 {}。',
+        'Chords': '和弦', 'Analyzing chords...': '正在分析和弦…',
+        'Chord track needs Node.js': '和弦軌道需要 Node.js',
+        'Chord analysis failed: {}': '和弦分析失敗：{}',
+        'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
         'About': '关于', 'Version: {} (development build)': '版本：{}（开发版）',
@@ -392,6 +396,10 @@ _TEXT = {
         'First beat editing needs song_bpmfix.mid': '调整第一拍需要 song_bpmfix.mid',
         'No sound: {} is not available': '没有声音：无法使用 {}',
         'Saved the first beat to {}.': '第一拍已保存至 {}。',
+        'Chords': '和弦', 'Analyzing chords...': '正在分析和弦…',
+        'Chord track needs Node.js': '和弦轨道需要 Node.js',
+        'Chord analysis failed: {}': '和弦分析失败：{}',
+        'Other readings: {}': '其他读法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '组成音：{}',
     },
 }
 
