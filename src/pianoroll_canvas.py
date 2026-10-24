@@ -30,6 +30,8 @@ PEDAL_ROW_HEIGHT = 18
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
 HORIZONTAL_SCROLL_INCREMENT = 24
+PLAYHEAD_FRAME_MS = 16  # About 60 fps while playing; moving the playhead costs well under 1 ms.
+IDLE_POLL_MS = 50
 HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
 
@@ -134,7 +136,7 @@ class PianoRollView(ttk.Frame):
         self.build()
         self.bpm.trace_add('write', lambda *_: self.draw_grid())
         self.offset.trace_add('write', lambda *_: self.draw_grid())
-        self.after_id = self.after(50, self.update_playhead)
+        self.after_id = self.after(IDLE_POLL_MS, self.update_playhead)
 
     def build(self):
         edit = ttk.Frame(self, padding=(0, 0, 0, 4))
@@ -591,6 +593,7 @@ class PianoRollView(ttk.Frame):
         self.play_started = time.monotonic()
         self.play_start_seconds = position
         self.play_button.configure(text=tr('Pause'))
+        self.restart_playhead_updates()
 
     def apply_mix(self):
         if self.playback is not None:
@@ -646,7 +649,14 @@ class PianoRollView(ttk.Frame):
                 self.xview('moveto', max(0.0, (x - 40) / self.width()))
             if seconds >= self.duration:
                 self.stop()
-        self.after_id = self.after(50, self.update_playhead)
+        delay = PLAYHEAD_FRAME_MS if self.play_started is not None else IDLE_POLL_MS
+        self.after_id = self.after(delay, self.update_playhead)
+
+    def restart_playhead_updates(self):
+        """Draw the first frame now instead of waiting for the idle poll."""
+        if self.after_id is not None:
+            self.after_cancel(self.after_id)
+        self.update_playhead()
 
     # First beat.
     def first_beat_files(self):
