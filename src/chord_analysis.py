@@ -232,6 +232,7 @@ def detect_chords(note_groups):
         [node_executable(), str(script_path)],
         input=json.dumps({'maxCandidates': CANDIDATE_COUNT, 'noteGroups': note_groups}),
         text=True, encoding='utf-8', capture_output=True, check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
     )
     return json.loads(completed.stdout)
 
