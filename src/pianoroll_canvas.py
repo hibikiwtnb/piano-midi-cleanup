@@ -4,7 +4,6 @@ import math
 from bisect import bisect_right
 import os
 import queue
-import subprocess
 import threading
 import time
 import tkinter as tk
@@ -38,7 +37,7 @@ CHORD_POLL_MS = 100
 PITCHES = 128
 DEFAULT_PIXELS_PER_SECOND = 100.0
 HORIZONTAL_SCROLL_INCREMENT = 24
-PLAYHEAD_FRAME_MS = 16  # About 60 fps while playing; moving the playhead costs well under 1 ms.
+PLAYHEAD_FRAME_MS = 16  # About 60 fps while playing in the visible roll.
 IDLE_POLL_MS = 50
 HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
@@ -137,6 +136,10 @@ class PianoRollView(ttk.Frame):
         self.chord_items = {}
         self.chord_cache = {}
         self.chord_job = None
+        self.chord_running = set()
+        self.chord_after_id = None
+        self.chord_refresh_id = None
+        self.chord_playhead = None
         self.chord_results = queue.Queue()
 
         self.bpm = tk.StringVar()
@@ -150,6 +153,8 @@ class PianoRollView(ttk.Frame):
         self.target_text = tk.StringVar()
         self.status = status if status is not None else tk.StringVar(value=tr('Ready'))
         self.build()
+        self.bind('<Map>', self.schedule_visible_chords)
+        self.bind('<Unmap>', lambda _event: self.hide_change_tooltip())
         self.bpm.trace_add('write', lambda *_: self.draw_grid())
         self.offset.trace_add('write', lambda *_: self.draw_grid())
         self.after_id = self.after(IDLE_POLL_MS, self.update_playhead)
@@ -539,23 +544,30 @@ class PianoRollView(ttk.Frame):
             self.chord_segments, self.chord_message = self.chord_cache[key], ''
             return
         self.chord_segments, self.chord_message = [], tr('Analyzing chords...')
+        if not self.show_chords.get() or not self.winfo_ismapped() or self.chord_running:
+            return
+        self.chord_running.add(key)
 
         def work():
             try:
                 result = analyze_chords(midi_path)
-            except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as error:
+            except Exception as error:
                 result = error
             self.chord_results.put((key, result))
 
         threading.Thread(target=work, daemon=True).start()
-        self.after(CHORD_POLL_MS, self.poll_chords)
+        if self.chord_after_id is None:
+            self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
 
     def poll_chords(self):
+        self.chord_after_id = None
         try:
             key, result = self.chord_results.get_nowait()
         except queue.Empty:
-            self.after(CHORD_POLL_MS, self.poll_chords)
+            if self.chord_running:
+                self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
             return
+        self.chord_running.discard(key)
         if not isinstance(result, Exception):
             self.chord_cache[key] = result
         if key == self.chord_job:
@@ -566,13 +578,30 @@ class PianoRollView(ttk.Frame):
             else:
                 self.chord_segments, self.chord_message = result, ''
             self.draw_chords()
+        else:
+            self.schedule_visible_chords()
+        if self.chord_running:
+            self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
+
+    def schedule_visible_chords(self, _event=None):
+        if self.chord_refresh_id is None:
+            self.chord_refresh_id = self.after_idle(self.refresh_visible_chords)
+
+    def refresh_visible_chords(self, _event=None):
+        self.chord_refresh_id = None
+        if self.path and self.show_chords.get() and self.winfo_ismapped():
+            self.start_chord_analysis(self.path, self.loaded_mtime)
+            self.draw_chords()
 
     def layout_chord_track(self):
+        self.hide_change_tooltip()
         for widget in (self.chord_label, self.chords):
             if self.show_chords.get():
                 widget.grid()
             else:
                 widget.grid_remove()
+        if self.show_chords.get():
+            self.schedule_visible_chords()
 
     def fit_chord_name(self, name, width):
         """Name shortened with an ellipsis to fit width, or '' when nothing fits."""
@@ -585,9 +614,11 @@ class PianoRollView(ttk.Frame):
         return ''
 
     def draw_chords(self):
+        self.chords.configure(scrollregion=(0, 0, self.width(), CHORD_ROW_HEIGHT))
+        if not self.show_chords.get() or not self.winfo_ismapped():
+            return
         self.chords.delete('all')
         self.chord_items.clear()
-        self.chords.configure(scrollregion=(0, 0, self.width(), CHORD_ROW_HEIGHT))
         pps = self.pixels_per_second
         if self.chord_message:
             self.chords.create_text(6, CHORD_ROW_HEIGHT / 2, text=self.chord_message, anchor='w',
@@ -603,6 +634,7 @@ class PianoRollView(ttk.Frame):
                                                 font=self.chord_font, fill='#24364f')
                 self.chord_items[label] = segment
         self.chord_playhead = self.chords.create_line(0, 0, 0, CHORD_ROW_HEIGHT, fill='#e53935', width=2)
+        self.chords.xview('moveto', self.canvas.xview()[0])
         self.move_playhead(self.position_seconds())
 
     def show_chord_hint(self, event):
@@ -769,6 +801,12 @@ class PianoRollView(ttk.Frame):
 
     def shutdown(self):
         self.hide_change_tooltip()
+        if self.chord_after_id is not None:
+            self.after_cancel(self.chord_after_id)
+            self.chord_after_id = None
+        if self.chord_refresh_id is not None:
+            self.after_cancel(self.chord_refresh_id)
+            self.chord_refresh_id = None
         if self.after_id is not None:
             self.after_cancel(self.after_id)
             self.after_id = None
@@ -793,23 +831,30 @@ class PianoRollView(ttk.Frame):
         x = seconds * self.pixels_per_second
         self.canvas.coords(self.playhead, x, 0, x, PITCHES * ROW_HEIGHT)
         self.pedal.coords(self.pedal_playhead, x, 0, x, max(1, len(self.pedal_rows)) * PEDAL_ROW_HEIGHT)
-        self.chords.coords(self.chord_playhead, x, 0, x, CHORD_ROW_HEIGHT)
+        if self.show_chords.get() and self.chord_playhead is not None:
+            self.chords.coords(self.chord_playhead, x, 0, x, CHORD_ROW_HEIGHT)
         return x
 
     def update_playhead(self):
+        self.after_id = None
+        if self.play_started is None:
+            return
+        visible = self.winfo_ismapped()
         if self.play_started is not None and getattr(self.output, 'error', None):
             self.stop()
             self.set_status(tr('Could not start playback: {}').format(self.output.error))
         if self.play_started is not None:
             seconds = self.position_seconds()
-            x = self.move_playhead(seconds)
-            right = self.canvas.canvasx(self.canvas.winfo_width())
-            if x > right - 40 or x < self.canvas.canvasx(0):
-                self.xview('moveto', max(0.0, (x - 40) / self.width()))
+            if visible:
+                x = self.move_playhead(seconds)
+                right = self.canvas.canvasx(self.canvas.winfo_width())
+                if x > right - 40 or x < self.canvas.canvasx(0):
+                    self.xview('moveto', max(0.0, (x - 40) / self.width()))
             if seconds >= self.duration:
                 self.stop()
-        delay = PLAYHEAD_FRAME_MS if self.play_started is not None else IDLE_POLL_MS
-        self.after_id = self.after(delay, self.update_playhead)
+        if self.play_started is not None:
+            delay = PLAYHEAD_FRAME_MS if visible else IDLE_POLL_MS
+            self.after_id = self.after(delay, self.update_playhead)
 
     def restart_playhead_updates(self):
         """Draw the first frame now instead of waiting for the idle poll."""
