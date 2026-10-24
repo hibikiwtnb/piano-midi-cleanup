@@ -133,11 +133,17 @@ Reports update items line by line within each block: identical lines stay, chang
 
 - Switches and thresholds can be saved as presets, such as one player or three hands; Defaults restores the defaults.
 - The last choices and the presets are kept in `~/.piano-midi-cleanup-panel.json`.
+- The initial content size is 1280 × 720; subsequent launches restore size, position and maximized state. Processing panels fill the available height, with Run at the bottom right of the steps frame.
+- Pedal-based trimming limits default to off in the panel. The CLI defaults to on; use `--no-pedal-protection` to disable them. See [the trimming specification](docs/spec/07-overlap-trim.md).
 - The panel only turns the choices into a `postprocess.py` command line, which it prints first.
 
-The Piano roll tab shows the selected MIDI and reloads it when you open the tab or a run finishes, keeping the scroll position and zoom:
+About shows the shared version number, project and issue links, and the full project and bundled-component licenses, including note-seq for chord inference. `src/app_info.py` holds version and component metadata.
+
+The Piano roll tab prefers the song's `song_bpmfix_cleaned.mid`, falling back to the selected input when no processed result exists. It reloads changed files when opened, preserving scroll and zoom for the same file and centering a new song on the visible pitch range:
 
 - Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
+- Key labels appear only initially and when the key changes, as `Key=C Major` or `Key=A minor`, regardless of interface language. Hovering any note shows its pitch and velocity in the bottom status bar.
+- Change overlay can show deleted notes in pale red, shortened tails in pale orange, or both; it defaults to hidden. Hover tooltips identify the processing stage responsible. The adjacent `.changes.json` must match the processed MIDI; old files without records are not reconstructed by guesswork. Overlays do not affect playback.
 - A chord track sits below the bar numbers (`src/chord_analysis.py`). Each half beat is a frame holding how long each pitch class sounds (pedal-held tails count half, for at most 2 beats; bass notes count double), and an HMM ported from Magenta note-seq infers key and chords together by Viterbi, so broken chords and arpeggios add up to one chord. A frame's lowest note scores for chords it is the root or a tone of; chord changes are likelier where three or more pitches start or a note starts below everything sounding. Tonal.js then names each segment from its main pitch classes, keeping the inferred root and writing an inversion when the bass is not the root. After first beat alignment, notes before the first bar line after the first note are a pickup and get no chord (a first note within a quarter beat of a bar line counts as the downbeat). Hover a chord for other readings, the bass and the chord tones; the Chords toggle hides the row. It needs Node.js; without it the row shows a notice and the rest works as usual.
 - Play, pause (Space while the roll has focus) and click to seek; switching tabs never focuses an entry; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
 - The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; when `song_bpmfix_cleaned.mid` is shown it is rewritten too and the change marks move with it, so no reprocessing is needed. Editing is off when the shown file has no matching `song_bpmfix.mid`.
@@ -310,7 +316,7 @@ python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 
 ### `playable_reduction.command`
 
-Optional, for a score one person can play. Run before the hand split: removes the fewest notes so two hands can play every onset group, in place. Notes whose onsets are within 50 ms form one group.
+Optional, for the two-hand part assigned to one player. For two-hand songs, run before the hand split: removes the fewest notes so two hands can play every onset group, in place. Three-hand usage is described below. Notes whose onsets are within 50 ms form one group.
 
 ```text
 Playable: the group, sorted by pitch, can be cut into a low part (left hand) and a high part (right hand) with at most 4 notes and 12 semitones per hand
@@ -331,7 +337,7 @@ python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 
 
 Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
 
-Each proposed trim estimates where the note stops sounding from the pedal on the same channel (CC64 = 127 down, 0 up): a note-off while the pedal is down sounds until the next pedal release. The trim is accepted only if the sound ends at most 0.1 s earlier than before (`SUSTAIN_TOLERANCE_SECONDS`) and no same-pitch notes repeat or overlap; a pedal change on the same tick as a note end is counted in its least favourable order. Half-pedal values, other hold controls, and incomplete note pairing preserve the original ends on that channel. This sustain guard does not guarantee identical sound across instruments or removal of every overlap. Hand splitting also maps compatible pedal controls; conflicting source pedal streams stop the split without saving that split.
+When pedal-based trimming limits are enabled, each proposed trim estimates where the note stops sounding from the pedal on the same channel (CC64 = 127 down, 0 up): a note-off while the pedal is down sounds until the next pedal release. The trim is accepted only if the sound ends at most 0.1 s earlier than before (`SUSTAIN_TOLERANCE_SECONDS`) and no same-pitch notes repeat or overlap; a pedal change on the same tick as a note end is counted in its least favourable order. Half-pedal values, other hold controls, and incomplete note pairing preserve the original ends on that channel. The panel defaults to off; the CLI defaults to on, with `--no-pedal-protection` bypassing these rejection checks while retaining the candidate rules. This does not guarantee identical sound across instruments or removal of every overlap. Hand splitting also maps compatible pedal controls; conflicting source pedal streams stop the split without saving that split.
 
 ```text
 Fast figure (right and second right hand by default): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next onset group of the same hand
@@ -558,7 +564,7 @@ For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index 
 
 `ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
 
-Realtime piano roll playback defaults to Coopiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. Coopiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. The native DLL was built, but actual GUI/RDP audition has not been verified for this integration. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+Realtime piano roll playback defaults to Coopiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. The Windows realtime integration and DLL are included. Coopiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. Systematic GUI/RDP playback validation remains outstanding; a successful build is not evidence of listening quality. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
 
 Not available on Windows:
 

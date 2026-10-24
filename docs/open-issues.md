@@ -1,5 +1,11 @@
 # 待解決問題
 
+現況核對：2026-10-24。本文件記錄仍待解決的問題；目前功能與操作以 [設計規格](spec/README.md) 為準。
+
+## 可彈性清理的刪音取捨
+
+`A song for You` 第 21 小節刪除 B3、保留 E5 的案例已逐音核對。刪音仍使用原有的八度重複、外側音及力度加權成本；如何加入離群程度、手位緊湊度與旋律保護尚未定案，尚未修改評分。詳見 [使用者回饋](user-feedback.md) 與 [策略討論](playable-removal-strategy.md)。
+
 ## 短和弦快速重複（長音斷成 16 分音符）
 
 2026-10-22 用戶反饋。
@@ -65,8 +71,15 @@
 - 兩隻手彈不彈得到。
 - 和弦根音是否對上當下的低音。這等於做和弦分析。
 
-## 內建鋼琴音源
+卷簾已有和弦軌（`src/chord_analysis.py`、`src/chord_inference.py`），但分析結果只供檢視，尚未接入半音雙音的刪除判斷；不能把和弦軌完成視為這個問題已解決。
 
-已選定 **物理建模：`peterc/coopiano`**。使用同一份 MIDI 製作試聽片段，使用者確認音色合適。CoPiano 採 MIT 授權，原始碼與授權檔保留在 `sound_sources/coopiano/`。
+## 已實作功能的確認項目
 
-待辦：把 CoPiano 接入 Windows Piano Roll 的即時音訊播放，讓程式直接合成並輸出聲音。上游即時音訊主機目前僅支援 macOS；此環境已確認 Windows 離線 WAV 渲染可用，尚未完成 Windows 即時音訊整合。播放需沿用 Windows 遠端桌面的音訊輸出。
+- **內建音源**：Coopiano 已接入卷簾即時播放，並為預設輸出；仍可選外部 MIDI 埠。Windows x64 DLL、macOS Intel／Apple Silicon 通用庫已隨 repo 提供，Linux 需本機建置。音源透過 sounddevice 使用系統預設輸出，RDP 需有可用的播放裝置。即時整合不再是待開發功能；尚缺系統性的 GUI／RDP 播放驗證紀錄。音源與 MIT 授權見 [sound_sources/README.md](../sound_sources/README.md)。
+- **和弦軌**：半拍 HMM、低音觀測、踏板延音與 Tonal.js 命名已接入卷簾；弱起不標和弦。辨識效果仍需依實際曲例檢查，分析結果不自動刪音或改寫 MIDI。
+- **踏板條件下的截斷**：面板已提供「依踏板狀態限制截斷」，預設關閉；命令列預設開啟。容差式檢查已實作，不能宣稱跨音源聽感完全不變，尚缺系統性聽感驗證。見 [截斷規格](spec/07-overlap-trim.md)。
+
+## 尚未實作的研究方向
+
+- 踏板快速切換的平滑：先判斷短暫踩放是否影響任何延音，再決定能否合併，見 [踏板平滑研究](pedal-smoothing-research.md)。
+- 刪音的音樂資訊損失與聽覺遮蔽：仍是研究方向，沒有接入處理流程，見 [研究索引](research-landscape.md) 第 12、13 節。
