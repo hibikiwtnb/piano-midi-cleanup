@@ -26,6 +26,10 @@ from node_utils import node_executable
 
 
 FRAMES_PER_BEAT = 2
+# The project assumes 4/4 after first beat alignment.
+BEATS_PER_BAR = 4
+# A first note this close before a bar line is an early downbeat, not a pickup.
+PICKUP_TOLERANCE_BEATS = 0.25
 # Frame vectors are unit length, so this sets how strongly one frame's notes outweigh the chord change cost.
 CHORD_NOTE_CONCENTRATION = 10.0
 # Bass notes count this much more in the frame vectors; the left hand carries the harmony more than the melody.
@@ -285,8 +289,22 @@ def chord_runs(key_chords):
     return runs
 
 
+def first_bar_tick(notes, ticks_per_beat):
+    """The first bar line at or after the first note; notes before it are a pickup.
+
+    First beat alignment puts the downbeat on a bar line, so the bar grid already tells
+    the pickup apart from the first full bar.
+    """
+    bar_ticks = BEATS_PER_BAR * ticks_per_beat
+    first = notes[0].start_tick
+    nearest = round(first / bar_ticks) * bar_ticks
+    if abs(first - nearest) <= PICKUP_TOLERANCE_BEATS * ticks_per_beat:
+        return nearest
+    return math.ceil(first / bar_ticks) * bar_ticks
+
+
 def analyze_chords(midi_path):
-    """Return ChordSegments of a MIDI file in time order; no-chord stretches are left out."""
+    """Return ChordSegments of a MIDI file in time order; the pickup and no-chord stretches are left out."""
     midi_file = mido.MidiFile(midi_path)
     seconds = tick_seconds(midi_file)
     notes = read_notes(midi_file, seconds)
@@ -296,19 +314,24 @@ def analyze_chords(midi_path):
     song_end_tick = max(note.sound_end_tick for note in notes)
     frame_count = math.ceil(song_end_tick / frame_ticks)
     boundaries = [frame * frame_ticks for frame in range(frame_count + 1)]
+    # Chords start at the first full bar; the pickup still sounds into it through the pedal.
+    start = round(first_bar_tick(notes, midi_file.ticks_per_beat) / frame_ticks)
+    if start >= frame_count:
+        return []
     key_chords = infer_key_chords(
-        frame_pitch_vectors(frame_notes(notes, midi_file.ticks_per_beat), boundaries),
-        change_probs(notes, frame_ticks, frame_count), frame_basses(notes, frame_ticks, frame_count),
+        frame_pitch_vectors(frame_notes(notes, midi_file.ticks_per_beat), boundaries)[start:],
+        change_probs(notes, frame_ticks, frame_count)[start:],
+        frame_basses(notes, frame_ticks, frame_count)[start:],
         chord_note_concentration=CHORD_NOTE_CONCENTRATION,
         bass_root_bonus=BASS_ROOT_BONUS, bass_tone_bonus=BASS_TONE_BONUS)
 
     runs = []
     queries = []
     for first, end, key, chord in chord_runs(key_chords):
+        first, end = first + start, end + start
         if chord == NO_CHORD:
             continue
-        # Silent frames before the first note join the first chord; start it at the music.
-        start_tick = max(round(first * frame_ticks), notes[0].start_tick)
+        start_tick = round(first * frame_ticks)
         end_tick = min(round(end * frame_ticks), song_end_tick)
         weights, bass = segment_profile(notes, start_tick, end_tick)
         if bass is None:
