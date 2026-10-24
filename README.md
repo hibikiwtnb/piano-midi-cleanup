@@ -69,7 +69,7 @@ song_bpmfix_cleaned.mid
 | **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
 | **Step 1** | 主面板「鋼琴捲簾」頁 | 對齊第一拍（手動） | 寫入 `song_bpmfix.mid` 與顯示中的 `song_bpmfix_cleaned.mid`，並重寫調號 |
 | **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
-| 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 做一個人彈的譜時，在分手前執行 |
+| 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 兩隻手時在分手前執行；三隻手時在分手後只修第一個人的兩隻手 |
 | **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
 | **Step 4** | `trim_overlaps.command` | 裁短踏板造成的重疊 | 消除長音重疊，使五線譜與樂譜更整齊 |
 | **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | 檢查結果 | 輸出捲簾截圖或文字拍位以供確認 |
@@ -101,7 +101,7 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 | 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
 | 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait` |
 
-- 可彈性清理只能配兩隻手，截斷重疊必須在分手之後；組合不成立時不會執行。
+- 可彈性清理：兩隻手時在分手前處理全部的音；三隻手時改在分手後，只處理第一個人的左手和第二右手（低音和中聲部），第二個人的右手（最上面的 right）不動；四隻手不支援。截斷重疊必須在分手之後。組合不成立時不會執行。
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
 
 報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。
@@ -318,7 +318,9 @@ python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
 一組最多刪 3 個；還彈不到的組不動，列在報告裡
 ```
 
-只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。分三手、四手的曲子不適用。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），更新至來源轉錄的 `*_stats.txt`。
+三隻手的曲子（兩個人彈：第一個人彈低音和中聲部，第二個人的右手彈最上面）在分手後加 `--three-hands`：只處理 left 和 second_right 兩個 channel，right 不動；刪完後若這兩隻手的分配仍超出限制，就改用彈得到、換手最少的切法重新分配。四隻手不支援。
+
+只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），更新至來源轉錄的 `*_stats.txt`。
 
 非交互執行：
 

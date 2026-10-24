@@ -532,11 +532,11 @@ class Panel:
             self.step_checks[name].configure(state='disabled' if source == 'reuse' else 'normal')
 
     def update_hand_options(self, *_):
-        """One-player reduction must not discard notes intended for extra hands."""
-        two_hands = self.hands.get() == '2'
-        if not two_hands:
+        """Playable reduction covers two hands, or the first player's two hands of three; not four hands."""
+        supported = self.hands.get() != '4'
+        if not supported:
             self.switches['playable'].set(False)
-        self.step_checks['playable'].configure(state='normal' if two_hands else 'disabled')
+        self.step_checks['playable'].configure(state='normal' if supported else 'disabled')
 
     def current_preset(self):
         return {

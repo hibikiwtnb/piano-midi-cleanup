@@ -70,7 +70,7 @@ After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overw
 | **Step 0** | `transcribe.command` | Audio transcription, BPM fix, basic cleaning, preliminary hand split | Outputs `song_bpmfix_cleaned.mid` |
 | **Step 1** | Main panel Piano roll tab | First beat alignment (manual) | Saves to `song_bpmfix.mid` and the shown `song_bpmfix_cleaned.mid`, rewriting key signatures |
 | **Step 2** | `key_signature.command` | Write key signature | Fills in key signatures when the first beat did not move |
-| Optional | `playable_reduction.command` | Reduce to what two hands can play | For a one-player score, before the hand split |
+| Optional | `playable_reduction.command` | Reduce to what two hands can play | Before the split with two hands; after it, on the first player's two hands, with three |
 | **Step 3** | `hand_split_channels.command` | Re-split hands | Use when 3 or 4 hands are needed (e.g., `--hands 3`) |
 | **Step 4** | `trim_overlaps.command` | Trim sustain pedal overlaps | Removes overlapping notes for cleaner notation/score reading |
 | **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | Verify and review | Inspect piano roll snapshots or text review of notes |
@@ -102,7 +102,7 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 | 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
 | 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait` |
 
-- Playable reduction needs two hands and overlap trimming needs the hand split; other combinations do not run.
+- Playable reduction: with two hands it handles every note before the split; with three hands it runs after the split on the first player's left and second right hand only (bass and middle voice) and leaves the other player's right hand (the top `right`) alone; four hands are not supported. Overlap trimming needs the hand split. Other combinations do not run.
 - Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
 - The main panel piano roll saves a hand-set first beat to `song_bpmfix.mid`, which subsequent processing reuses. Automatic first-beat alignment follows the selected processing steps; the runner does not inspect manual-edit history.
 
@@ -317,7 +317,7 @@ What goes: the fewest notes, then the cheapest; a note doubled in another octave
 At most 3 notes per group; groups still unplayable are left as they are and listed in the report
 ```
 
-Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. Not meant for songs split into three or four hands. The removal count and every removal (bar, beat, removed notes and the group) are updated in the source transcription `*_stats.txt`.
+Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. For a three-hand split (two players: the first plays bass and middle voice, the second player's right hand the top), run it after the split with `--three-hands`: only the left and second_right channels are reduced and right is left alone; when the split of those two hands still does not fit, they are reassigned to the fitting cut that moves the fewest notes. Four hands are not supported. The removal count and every removal (bar, beat, removed notes and the group) are updated in the source transcription `*_stats.txt`.
 
 Non-interactive:
 

@@ -116,8 +116,11 @@ def keep_bpmfix_sections(stats_path):
 
 def plan_steps(args):
     """The steps in order, as (name, description); raises ValueError on a combination that cannot run."""
-    if args.playable and args.hands != 2:
-        raise ValueError('Playable reduction is for one player; it needs --hands 2.')
+    if args.playable and args.hands == 4:
+        raise ValueError('Playable reduction works on two hands, or on the first player\'s two hands with --hands 3; '
+                         'four hands are not supported.')
+    if args.playable and args.hands == 3 and not args.split:
+        raise ValueError('Playable reduction with --hands 3 needs the hand split to find the first player\'s hands.')
     if args.trim and not args.split:
         raise ValueError('Overlap trimming works per hand; it needs the hand split.')
     steps = []
@@ -131,10 +134,13 @@ def plan_steps(args):
         steps.append(('reuse_bpmfix', 'Reuse the existing BPM-fixed MIDI'))
     steps.append(('clean', 'Rule cleaning{}'.format(' with semitone pairs' if args.semitone_pairs else ''))
                  if args.clean else ('copy', 'No cleaning'))
-    if args.playable:
+    if args.playable and args.hands == 2:
         steps.append(('playable', 'Playable reduction'))
     if args.split:
         steps.append(('split', 'Hand split ({} hands)'.format(args.hands)))
+    if args.playable and args.hands == 3:
+        steps.append(('playable', 'Playable reduction ({})'.format(
+            ', '.join(hand.replace('_', ' ') for hand in playable_reduction.THREE_HAND_PLAYER))))
     if args.trim:
         steps.append(('trim', 'Overlap trim (fast figure: {})'.format(', '.join(args.fast_figure_hands))))
     if args.snapshot:
@@ -179,7 +185,8 @@ def run_postprocess(args):
         elif name == 'playable':
             apply_playable_reduction(cleaned_path, report_path=stats_path,
                                      max_notes=playable_reduction.DEFAULT_MAX_NOTES_PER_HAND,
-                                     max_span=playable_reduction.DEFAULT_MAX_SPAN)
+                                     max_span=playable_reduction.DEFAULT_MAX_SPAN,
+                                     hands=playable_reduction.THREE_HAND_PLAYER if args.hands == 3 else None)
         elif name == 'split':
             apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands)
         elif name == 'trim':
@@ -218,7 +225,8 @@ def build_parser():
     parser.add_argument('--semitone-pairs', action='store_true',
                         help='Also remove the softer note of semitone pairs in rule cleaning.')
     parser.add_argument('--playable', action='store_true',
-                        help='Reduce every onset group to what two hands can play (one-player score).')
+                        help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
+                             'player\'s left and second right hand, after the split.')
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')

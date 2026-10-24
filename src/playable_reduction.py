@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 import mido
 
 from clean_midi_rules import rebuild_track_without_messages
-from hand_split_channels import collect_notes, group_notes
+from hand_split_channels import CHANNELS, collect_notes, group_notes
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -18,6 +18,8 @@ from report_utils import update_report
 # the right hand, each with at most this many notes and this span in semitones.
 DEFAULT_MAX_NOTES_PER_HAND = 4
 DEFAULT_MAX_SPAN = 12
+# In a three-hand split the first player's two hands are the lower two slices; the other player's hand is left alone.
+THREE_HAND_PLAYER = ('left', 'second_right')
 # Groups that still cannot be played after removing this many notes are left as they are.
 MAX_REMOVALS_PER_GROUP = 3
 # Removal cost: a note doubled in another octave is cheapest, the top (melody) and bottom (bass) notes dearest.
@@ -28,14 +30,45 @@ BEATS_PER_BAR = 4
 NOTE_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 
 
+def hand_fits(pitches, max_notes, max_span):
+    """pitches sorted low to high."""
+    return len(pitches) <= max_notes and (not pitches or pitches[-1] - pitches[0] <= max_span)
+
+
+def playable_cuts(pitches, max_notes, max_span):
+    """Every cut index into a low and a high part that fits both hands."""
+    pitches = sorted(pitches)
+    return [cut for cut in range(len(pitches) + 1)
+            if hand_fits(pitches[:cut], max_notes, max_span) and hand_fits(pitches[cut:], max_notes, max_span)]
+
+
 def playable(pitches, max_notes, max_span):
     """Whether some cut into a low and a high part fits both hands."""
-    pitches = sorted(pitches)
-    for cut in range(len(pitches) + 1):
-        if all(len(hand) <= max_notes and (not hand or hand[-1] - hand[0] <= max_span)
-               for hand in (pitches[:cut], pitches[cut:])):
-            return True
-    return False
+    return bool(playable_cuts(pitches, max_notes, max_span))
+
+
+def reassign_hands(notes, channels, max_notes, max_span):
+    """When the split's low and high hand do not fit, move notes to the fitting cut that changes the fewest.
+    Returns how many notes changed hand."""
+    notes = sorted(notes, key=lambda note: note['note'])
+    low, high = channels
+    current = [note['start_message'].channel for note in notes]
+    if all(hand_fits([note['note'] for note, channel in zip(notes, current) if channel == hand], max_notes, max_span)
+           for hand in channels):
+        return 0
+    cuts = playable_cuts([note['note'] for note in notes], max_notes, max_span)
+    if not cuts:
+        return 0
+    cut = min(cuts, key=lambda cut: sum(channel != (low if index < cut else high)
+                                        for index, channel in enumerate(current)))
+    moved = 0
+    for index, note in enumerate(notes):
+        channel = low if index < cut else high
+        if note['start_message'].channel != channel:
+            note['start_message'].channel = channel
+            note['end_message'].channel = channel
+            moved += 1
+    return moved
 
 
 def removal_cost(note, notes):
@@ -71,19 +104,26 @@ def note_name(note):
     return '{}{}'.format(NOTE_NAMES[note['note'] % 12], note['note'] // 12 - 1)
 
 
-def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DEFAULT_MAX_SPAN):
+def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DEFAULT_MAX_SPAN, hands=None):
+    """hands: None for an unsplit two-hand MIDI, or the low and high hand names of one player in a split MIDI;
+    only their notes are reduced, and moved between the two when the split does not fit."""
     midi_file = mido.MidiFile(midi_path)
-    notes = collect_notes(midi_file)
+    channels = tuple(CHANNELS[hand] for hand in hands) if hands else None
+    notes = [note for note in collect_notes(midi_file)
+             if channels is None or note['start_message'].channel in channels]
     groups = group_notes(notes)
     removals = defaultdict(set)
     changes = []
     unsolved = []
     outer = 0
+    moved = 0
     for group in groups:
         removed = plan_group(group, max_notes, max_span)
         if removed is None:
             unsolved.append(group)
             continue
+        if channels:
+            moved += reassign_hands([note for note in group if note not in removed], channels, max_notes, max_span)
         if not removed:
             continue
         pitches = [note['note'] for note in group]
@@ -97,6 +137,8 @@ def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DE
     midi_file.save(midi_path)
     return {
         'midi_path': midi_path,
+        'hands': hands,
+        'moved': moved,
         'max_notes': max_notes,
         'max_span': max_span,
         'notes': len(notes),
@@ -114,11 +156,15 @@ def format_reduction_stats(stats):
     lines = [
         'MIDI playable reduction stats',
         'MIDI: {}'.format(stats['midi_path']),
-        'Two hands, at most {} notes and {} semitones per hand'.format(stats['max_notes'], stats['max_span']),
+        'Two hands{}, at most {} notes and {} semitones per hand'.format(
+            ' ({})'.format(', '.join(hand.replace('_', ' ') for hand in stats['hands'])) if stats['hands'] else '',
+            stats['max_notes'], stats['max_span']),
         'Onset groups: {}, reduced {}, unsolved {}'.format(
             stats['groups'], len(stats['changes']), len(stats['unsolved'])),
         'Removed notes: {} of {} (top or bottom note {})'.format(removed, stats['notes'], stats['outer']),
     ]
+    if stats['hands']:
+        lines.append('Notes moved between the two hands: {}'.format(stats['moved']))
     for group, notes in stats['changes']:
         lines.append('- {}: removed {} from {}'.format(
             position(group[0], tpb),
@@ -131,8 +177,8 @@ def format_reduction_stats(stats):
 
 
 def apply_playable_reduction(midi_path, report_path=None, max_notes=DEFAULT_MAX_NOTES_PER_HAND,
-                             max_span=DEFAULT_MAX_SPAN):
-    stats = reduce_in_place(midi_path, max_notes=max_notes, max_span=max_span)
+                             max_span=DEFAULT_MAX_SPAN, hands=None):
+    stats = reduce_in_place(midi_path, max_notes=max_notes, max_span=max_span, hands=hands)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_reduction_stats(stats)
     update_report(report_path, report)
@@ -163,6 +209,9 @@ def main(argv=None):
                         help='Most notes one hand plays at once (default: {}).'.format(DEFAULT_MAX_NOTES_PER_HAND))
     parser.add_argument('--max-span', type=int, default=DEFAULT_MAX_SPAN,
                         help='Widest span of one hand in semitones (default: {}).'.format(DEFAULT_MAX_SPAN))
+    parser.add_argument('--three-hands', action='store_true',
+                        help='The MIDI is split into three hands: reduce only the first player\'s left and second '
+                             'right hand, leaving the other player\'s right hand alone.')
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
@@ -174,7 +223,7 @@ def main(argv=None):
         return 1
 
     stats = apply_playable_reduction(midi_path, report_path=args.report, max_notes=args.max_notes_per_hand,
-                                     max_span=args.max_span)
+                                     max_span=args.max_span, hands=THREE_HAND_PLAYER if args.three_hands else None)
     if not args.input_midi:
         removed = sum(len(notes) for _, notes in stats['changes'])
         messagebox.showinfo('Playable Reduction complete', 'Removed {} notes in {} onset groups; {} unsolved.'.format(
