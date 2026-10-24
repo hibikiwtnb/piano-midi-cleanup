@@ -16,7 +16,7 @@ from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
 from key_signature import apply_key_signatures
-from midi_playback import MidiPlayback, default_output_name, open_output, output_names
+from midi_playback import MidiPlayback, default_output_name, display_port_name, open_output, output_names
 from midi_stats import note_name
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
@@ -124,7 +124,8 @@ class PianoRollView(ttk.Frame):
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
-        self.output_var = tk.StringVar(value=default_output_name() if midi_port in (None, 'CoPiano') else midi_port)
+        self.output_var = tk.StringVar(
+            value=default_output_name() if midi_port in (None, 'CoPiano') else display_port_name(midi_port))
         self.shading = tk.BooleanVar(value=True)
         self.change_mode = tk.StringVar(value=tr('Hide changes'))
         self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}

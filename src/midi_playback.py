@@ -1,6 +1,7 @@
 """Shared MIDI scheduling for built-in Coopiano audio and external MIDI ports."""
 
 import os
+import sys
 import time
 from dataclasses import dataclass
 from threading import Event, Lock, Thread, current_thread
@@ -14,6 +15,24 @@ from coopiano_output import OUTPUT_NAME as PIANO_OUTPUT_NAME, CoopianoOutput
 VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
 WINDOWS_OUTPUT_NAME = 'Microsoft GS Wavetable Synth'
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
+# python-rtmidi decodes port names as Mac Roman (macOS) or Latin-1 (Windows),
+# but RtMidi returns UTF-8, so non-ASCII names such as 'Logic Proの仮想入力' come out garbled.
+RTMIDI_NAME_ENCODING = {'darwin': 'mac_roman', 'win32': 'latin-1'}.get(sys.platform)
+
+
+def display_port_name(name):
+    """Undo python-rtmidi's platform decoding of a UTF-8 port name."""
+    if RTMIDI_NAME_ENCODING:
+        try:
+            return name.encode(RTMIDI_NAME_ENCODING).decode('utf-8')
+        except UnicodeError:
+            pass
+    return name
+
+
+def midi_output_ports():
+    """Map readable MIDI output names to the raw names mido opens."""
+    return {display_port_name(name): name for name in mido.get_output_names()}
 
 
 def default_output_name():
@@ -36,30 +55,31 @@ def open_output(port_name=None):
 
     wanted = port_name or WINDOWS_OUTPUT_NAME
     try:
-        names = mido.get_output_names()
+        ports = midi_output_ports()
     except Exception as error:
         print('Cannot list MIDI outputs ({}); playback has no sound.'.format(error))
         return None, wanted
-    name = next((candidate for candidate in names if candidate == wanted), None)
+    # Also match raw names, which older settings may have saved.
+    name = next((shown for shown, raw in ports.items() if wanted in (shown, raw)), None)
     if name is None:
-        name = next((candidate for candidate in names if wanted in candidate), None)
+        name = next((shown for shown in ports if wanted in shown), None)
     if name is not None:
         try:
-            output = mido.open_output(name)
+            output = mido.open_output(ports[name])
         except Exception as error:
             print('Cannot open {} ({}); playback has no sound.'.format(name, error))
             return None, wanted
         print('Playback output: {}'.format(name))
         return output, name
     print('{} not found; playback has no sound.'.format(wanted))
-    print('Available MIDI outputs: {}'.format(', '.join(names) if names else '(none)'))
+    print('Available MIDI outputs: {}'.format(', '.join(ports) if ports else '(none)'))
     return None, wanted
 
 
 def output_names():
     """List Coopiano first, followed by existing MIDI outputs."""
     try:
-        names = mido.get_output_names()
+        names = list(midi_output_ports())
     except Exception as error:
         print('Cannot list MIDI outputs ({}).'.format(error))
         names = []
