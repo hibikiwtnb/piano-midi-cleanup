@@ -85,8 +85,8 @@
 | `FAST_FIGURE_MIN_ONSETS` | 3 | `trim.fast_figure_onsets` |
 | `HARMONY_MIN_PITCH_CLASSES` | 3 | `trim.harmony_pitch_classes` |
 | `OUTER_STEP_SEMITONES` | 2 | `trim.outer_step` |
-| `MAX_FINGERS` | 5 | `trim.max_fingers` |
-| `HARD_SPAN` | 14 | `trim.max_span` |
+| `MAX_FINGERS`（沿用分手） | 5 | — |
+| `HARD_SPAN`（沿用分手） | 14 | `split.hard_span` |
 | `BEAT_LINE_WINDOW_BEATS` | 0.125 | — |
 | `BEAT_LINE_MIN_LEAD_BEATS` | 0.25 | — |
 | `SUSTAIN_TOLERANCE_SECONDS` | 0.1 | — |

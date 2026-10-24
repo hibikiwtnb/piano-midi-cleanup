@@ -10,9 +10,8 @@ from tkinter import filedialog, messagebox
 import mido
 
 from clean_midi_rules import tick_seconds
-from hand_split_channels import (
-    CHANNELS, HARD_SPAN, MAX_FINGERS, collect_notes, group_notes,
-)
+import hand_split_channels
+from hand_split_channels import CHANNELS, collect_notes, group_notes
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -201,7 +200,9 @@ def trim_chord_changes(groups, counts, outer_sign=1):
                     release(note, onset, 'chord_change', counts)
             held_notes = [note for note in held_notes if note['new_end'] > onset]
         pitches = [note['note'] for note in held_notes + group]
-        if held_notes and (len(set(pitches)) > MAX_FINGERS or max(pitches) - min(pitches) > HARD_SPAN):
+        # Read the hand split's limits at call time, so split.hard_span also applies here.
+        if held_notes and (len(set(pitches)) > hand_split_channels.MAX_FINGERS
+                           or max(pitches) - min(pitches) > hand_split_channels.HARD_SPAN):
             for note in held_notes:
                 release(note, onset, 'out_of_reach', counts)
             held_notes = [note for note in held_notes if note['new_end'] > onset]

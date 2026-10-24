@@ -60,8 +60,6 @@ PARAMETERS = (
     Parameter('trim.harmony_pitch_classes', 'Harmony change: at least pitch classes', int,
               ((trim_overlaps, 'HARMONY_MIN_PITCH_CLASSES'),)),
     Parameter('trim.outer_step', 'Outer line: step up to (semitones)', int, ((trim_overlaps, 'OUTER_STEP_SEMITONES'),)),
-    Parameter('trim.max_fingers', 'Out of reach: more notes than', int, ((trim_overlaps, 'MAX_FINGERS'),)),
-    Parameter('trim.max_span', 'Out of reach: span over (semitones)', int, ((trim_overlaps, 'HARD_SPAN'),)),
 )
 PARAMETER_DEFAULTS = {parameter.key: getattr(*parameter.targets[0]) for parameter in PARAMETERS}
 PARAMETER_BY_KEY = {parameter.key: parameter for parameter in PARAMETERS}
