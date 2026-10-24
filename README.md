@@ -119,13 +119,14 @@ python src/postprocess.py --list-parameters
 
 ### GUI 啟動入口
 
-本機 Windows 使用 repo 根目錄已建立的 `Piano MIDI Cleanup.lnk` 快捷方式開啟面板，不會顯示命令列視窗。快捷方式屬本機設定，不隨 repo 分發；其他環境可執行 `python src/postprocess_panel.py`。macOS 可在 repo 根目錄建立本機 `Piano MIDI Cleanup.app`（同樣不隨 repo 分發），雙擊即在背景開啟面板、不顯示終端機：
+設定好 Python 環境後，執行一次對應平台的產生器，會在 repo 根目錄建立不顯示命令列視窗的面板入口：
 
-```sh
-osacompile -o "Piano MIDI Cleanup.app" -e 'set d to do shell script "dirname " & quoted form of POSIX path of (path to me)' -e 'do shell script "cd " & quoted form of d & " && nohup ./macos/postprocess_panel.command > /dev/null 2>&1 < /dev/null &"'
-```
+| 平台 | 產生器 | 產生的入口 |
+|---|---|---|
+| Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk`（以 `pythonw.exe` 啟動） |
+| macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
 
-需要看終端機輸出時，直接執行 `macos/postprocess_panel.command`。
+入口內存的是本機的絕對路徑，因此不納入 git，由各自的機器產生。可以複製到桌面、開始選單，或拖到 Dock、`/Applications`。搬移 repo 或重建 Python 環境後，重新執行產生器即可。需要看命令列輸出時，改用 `python src/postprocess_panel.py` 或 `macos/postprocess_panel.command`。
 
 統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用已修正速度、手動指定、從音訊偵測）、每一步的開關，以及按主題排列的設定分頁。「詳細報告」以項目／值兩欄顯示已生成的 TXT，開啟面板或切換 MIDI 時讀入；底部狀態欄顯示最新狀態。
 

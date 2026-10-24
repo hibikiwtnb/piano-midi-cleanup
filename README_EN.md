@@ -118,13 +118,14 @@ python src/postprocess.py --list-parameters
 
 ### GUI launchers
 
-On this Windows machine, the local `Piano MIDI Cleanup.lnk` shortcut in the repository root opens the panel without a console window. Machine-specific shortcuts are not distributed with the repository; other environments can run `python src/postprocess_panel.py`. On macOS, you can create a local `Piano MIDI Cleanup.app` in the repository root (also not distributed) that opens the panel in the background without a Terminal window:
+After setting up the Python environment, run the generator for your platform once. It creates a panel launcher in the repository root that opens without a console window:
 
-```sh
-osacompile -o "Piano MIDI Cleanup.app" -e 'set d to do shell script "dirname " & quoted form of POSIX path of (path to me)' -e 'do shell script "cd " & quoted form of d & " && nohup ./macos/postprocess_panel.command > /dev/null 2>&1 < /dev/null &"'
-```
+| Platform | Generator | Launcher |
+|---|---|---|
+| Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk` (runs `pythonw.exe`) |
+| macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
 
-Run `macos/postprocess_panel.command` directly when you need to see terminal output.
+Launchers store absolute paths for the local machine, so they are not tracked in git; each machine generates its own. You can copy them to the Desktop or Start menu, or drag them to the Dock or `/Applications`. Run the generator again after moving the repository or rebuilding the Python environment. To see console output, run `python src/postprocess_panel.py` or `macos/postprocess_panel.command` instead.
 
 The tkinter panel lets you choose the MIDI, tempo source and processing steps, with settings grouped by topic. The Detailed report tab loads the existing TXT at startup and when the MIDI changes, displaying items and values in two columns. The bottom status bar shows the latest status.
 
