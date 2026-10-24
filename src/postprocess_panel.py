@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from tkinter import font as tkfont
 from tkinter.scrolledtext import ScrolledText
 
-from gui_i18n import LANGUAGES, get_language, set_language, tr, tr_report
+from gui_i18n import LANGUAGES, get_language, set_language, setting_help, tr, tr_report
 import postprocess
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
@@ -75,6 +75,53 @@ class QueueWriter:
 
     def flush(self):
         pass
+
+
+class SettingTooltip:
+    """Show short help beside a setting without following the pointer."""
+
+    def __init__(self, widget, key):
+        self.widget = widget
+        self.key = key
+        self.after_id = None
+        self.window = None
+        widget.bind('<Enter>', self.schedule, add='+')
+        for event in ('<Leave>', '<ButtonPress>', '<KeyPress>', '<Unmap>', '<Destroy>'):
+            widget.bind(event, self.hide, add='+')
+
+    def schedule(self, _event=None):
+        self.hide()
+        self.after_id = self.widget.after(500, self.show)
+
+    def show(self):
+        self.after_id = None
+        if not self.widget.winfo_viewable():
+            return
+        self.window = tk.Toplevel(self.widget)
+        self.window.withdraw()
+        self.window.overrideredirect(True)
+        tk.Label(self.window, text=setting_help(self.key), justify='left',
+                 font='TkDefaultFont', wraplength=560, background='#ffffe1',
+                 foreground='#202020', relief='solid', borderwidth=1,
+                 padx=8, pady=6).pack()
+        self.window.update_idletasks()
+        width = self.window.winfo_reqwidth()
+        height = self.window.winfo_reqheight()
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        x = max(0, min(x, self.widget.winfo_screenwidth() - width))
+        if y + height > self.widget.winfo_screenheight():
+            y = max(0, self.widget.winfo_rooty() - height - 4)
+        self.window.geometry('+{}+{}'.format(x, y))
+        self.window.deiconify()
+
+    def hide(self, _event=None):
+        if self.after_id is not None:
+            self.widget.after_cancel(self.after_id)
+            self.after_id = None
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
 
 
 class Panel:
@@ -359,23 +406,31 @@ class Panel:
             tabs.add(tab, text=tr(title))
             parameter_frame = tab
             if prefix == 'split':
-                ttk.Label(tab, text=tr('Hands')).grid(row=0, column=0, sticky='w')
-                ttk.Combobox(tab, textvariable=self.hands, values=('2', '3', '4'), width=4,
-                             state='readonly').grid(row=0, column=1, sticky='w')
+                label = ttk.Label(tab, text=tr('Hands'))
+                label.grid(row=0, column=0, sticky='w')
+                entry = ttk.Combobox(tab, textvariable=self.hands, values=('2', '3', '4'), width=4,
+                                     state='readonly')
+                entry.grid(row=0, column=1, sticky='w')
+                SettingTooltip(label, 'hands')
+                SettingTooltip(entry, 'hands')
                 parameter_frame = ttk.Frame(tab)
                 parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
             elif prefix == 'trim':
-                ttk.Checkbutton(tab, text=tr('Protect pedal sustain'), variable=self.protect_pedal).grid(
-                    row=0, column=0, columnspan=2, sticky='w')
+                pedal = ttk.Checkbutton(tab, text=tr('Protect pedal sustain'), variable=self.protect_pedal)
+                pedal.grid(row=0, column=0, columnspan=2, sticky='w')
+                SettingTooltip(pedal, 'protect_pedal')
                 ttk.Label(tab, text=tr('Keep note tails that trimming could silence earlier; fewer notes may be shortened.'),
                           wraplength=340).grid(row=1, column=0, columnspan=2, sticky='w', pady=(0, 8))
-                ttk.Label(tab, text=tr('Fast figure hands')).grid(row=2, column=0, sticky='nw')
+                label = ttk.Label(tab, text=tr('Fast figure hands'))
+                label.grid(row=2, column=0, sticky='nw')
+                SettingTooltip(label, 'fast_figure_hands')
                 hands = ttk.Frame(tab)
                 hands.grid(row=2, column=1, sticky='w')
                 for index, hand in enumerate(HAND_ORDER):
-                    ttk.Checkbutton(hands, text=tr(hand.replace('_', ' ')),
-                                    variable=self.fast_figure[hand]).grid(
-                        row=index // 2, column=index % 2, sticky='w', padx=(0, 12))
+                    button = ttk.Checkbutton(hands, text=tr(hand.replace('_', ' ')),
+                                             variable=self.fast_figure[hand])
+                    button.grid(row=index // 2, column=index % 2, sticky='w', padx=(0, 12))
+                    SettingTooltip(button, 'fast_figure_hands')
                 parameter_frame = ttk.Frame(tab)
                 parameter_frame.grid(row=3, column=0, columnspan=2, sticky='w', pady=(12, 0))
             self.add_parameter_rows(parameter_frame, [
@@ -395,8 +450,12 @@ class Panel:
 
     def add_parameter_rows(self, frame, parameters):
         for row, parameter in enumerate(parameters):
-            ttk.Label(frame, text=tr(parameter.label)).grid(row=row, column=0, sticky='w', pady=4)
-            ttk.Entry(frame, textvariable=self.parameters[parameter.key], width=8).grid(row=row, column=1, padx=4)
+            label = ttk.Label(frame, text=tr(parameter.label))
+            label.grid(row=row, column=0, sticky='w', pady=4)
+            entry = ttk.Entry(frame, textvariable=self.parameters[parameter.key], width=8)
+            entry.grid(row=row, column=1, padx=4)
+            SettingTooltip(label, parameter.key)
+            SettingTooltip(entry, parameter.key)
             ttk.Label(frame, text=tr('default {}').format(postprocess.PARAMETER_DEFAULTS[parameter.key]),
                       foreground='gray').grid(row=row, column=2, sticky='w')
 

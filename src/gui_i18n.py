@@ -398,6 +398,94 @@ _TEXT = {
 }
 
 
+_HELP = {
+    'clean.min_seconds': (
+        'Remove notes shorter than this duration, regardless of velocity.\nHigher values remove more short notes, including ornaments and rapid notes.',
+        '刪除短於此長度的音符，不考慮力度。\n調大會刪除更多短音，也可能刪到裝飾音或快速彈奏。',
+        '删除短于此长度的音符，不考虑力度。\n调大会删除更多短音，也可能删到装饰音或快速弹奏。'),
+    'clean.min_velocity': (
+        'Remove notes below this velocity, regardless of duration.\nHigher values remove more quiet notes and may affect soft accompaniment.',
+        '刪除力度低於此值的音符，不考慮長度。\n調大會刪除更多弱音，可能影響輕柔伴奏。',
+        '删除力度低于此值的音符，不考虑长度。\n调大会删除更多弱音，可能影响轻柔伴奏。'),
+    'clean.soft_velocity': (
+        'Remove a note only when both the velocity and duration conditions apply.\nHigher values classify more notes as quiet.',
+        '與下一項長度限制共同判斷，兩個條件都符合才刪除。\n調大會將更多音符納入弱音範圍。',
+        '与下一项长度限制共同判断，两个条件都符合才删除。\n调大会将更多音符纳入弱音范围。'),
+    'clean.soft_beats': (
+        'Remove quiet notes only when their duration is at or below this limit.\nOne beat is a quarter note; higher values remove more quiet notes.',
+        '只刪除同時符合弱音門檻、且長度不超過此值的音符。\n一拍指四分音符；調大會刪除更多弱音。',
+        '只删除同时符合弱音门槛、且长度不超过此值的音符。\n一拍指四分音符；调大会删除更多弱音。'),
+    'clean.semitone_window': (
+        'For semitone pairs starting within this interval, remove the quieter note;\nif equally loud, remove the shorter one. Requires semitone cleaning.',
+        '相差半音且起音時間差在此範圍內時，刪除較弱者；\n力度相同則刪較短者。僅在啟用相鄰半音清理時生效。',
+        '相差半音且起音时间差在此范围内时，删除较弱者；\n力度相同则删较短者。仅在启用相邻半音清理时生效。'),
+    'hands': (
+        'Choose how many hands share the notes. In three-hand mode, one player\nhandles the lower parts and another player uses their right hand for the top part.',
+        '指定將音符分配給幾隻手。三手模式中，一人負責低音\n與中聲部，另一人的右手負責最高聲部。',
+        '指定将音符分配给几只手。三手模式中，一人负责低音\n与中声部，另一人的右手负责最高声部。'),
+    'split.group_window': (
+        'Group notes whose starts fall within this interval of the first note.\nHigher values merge more starts. Shared by hand split, reduction and trimming.',
+        '與同組第一個音的起音時間差不超過此值，就視為同時彈奏。\n調大會合併更多起音；分手、可彈性與重疊清理共用此設定。',
+        '与同组第一个音的起音时间差不超过此值，就视为同时弹奏。\n调大会合并更多起音；分手、可弹性与重叠清理共用此设置。'),
+    'split.comfort_span': (
+        'Prefer other hand assignments when a hand exceeds this span.\nLower values encourage narrower groups; this setting does not delete notes.',
+        '單手跨度超過此值時，程式會傾向改用其他分配。\n調小會更積極拆開寬音群，不會因此刪音。',
+        '单手跨度超过此值时，程序会倾向改用其他分配。\n调小会更积极拆开宽音群，不会因此删音。'),
+    'split.hard_span': (
+        'Strongly discourage wider hand assignments, without forbidding them.\nOverlap trimming also uses this limit to shorten old notes when out of reach.',
+        '分手時盡量避免超過此跨度，但並非絕對禁止。\n重疊清理也沿用此限制，跨度超限時嘗試截短前音。',
+        '分手时尽量避免超过此跨度，但并非绝对禁止。\n重叠清理也沿用此限制，跨度超限时尝试截短前音。'),
+    'protect_pedal': (
+        'Keep the original ending if estimated sound ends over 0.1 s earlier,\nor pedal events are uncertain. Fewer notes are trimmed; sound may still change.',
+        '依踏板推算截短後是否提早止音；提前超過 0.1 秒\n或事件不明時保留音尾。截短較少，但不保證聽感完全不變。',
+        '依踏板推算截短后是否提早止音；提前超过 0.1 秒\n或事件不明时保留音尾。截短较少，但不保证听感完全不变。'),
+    'fast_figure_hands': (
+        'Choose which hands receive rapid-note trimming; other trimming rules still apply.\nEnabling it for a left hand may also shorten bass notes under broken chords.',
+        '指定哪些手套用快速音群截斷，其他重疊規則仍照常執行。\n左手啟用後，也可能截短分解和弦下持續的低音。',
+        '指定哪些手套用快速音群截断，其他重叠规则仍照常执行。\n左手启用后，也可能截短分解和弦下持续的低音。'),
+    'trim.fast_figure_beats': (
+        'Consecutive starts must be no farther apart than this to form a rapid figure.\nHigher values include slower passages and may cause more trimming.',
+        '連續起音的間隔不超過此值，才可能判為快速音群。\n調大會將較疏的彈奏納入，增加截短機會。',
+        '连续起音的间隔不超过此值，才可能判为快速音群。\n调大会将较疏的弹奏纳入，增加截短机会。'),
+    'trim.fast_figure_onsets': (
+        'Require at least this many consecutive onset groups for rapid-note trimming.\nHigher values are more conservative; lower values trigger trimming more easily.',
+        '至少連續出現這麼多組起音，才套用快速音群截斷。\n調大較保守，調小則更容易觸發。',
+        '至少连续出现这么多组起音，才套用快速音群截断。\n调大较保守，调小则更容易触发。'),
+    'trim.harmony_pitch_classes': (
+        'At this many distinct pitch classes, try trimming old notes outside the new group.\nOctave duplicates count once. This is a heuristic for harmony changes.',
+        '同時起音的不同音名達此數量時，嘗試截短音名不在新音群的前音。\n不同八度的相同音名只算一種；這只是和聲變化的推測。',
+        '同时起音的不同音名达此数量时，尝试截短音名不在新音群的前音。\n不同八度的相同音名只算一种；这只是和声变化的推测。'),
+    'trim.outer_step': (
+        'Try ending the previous right-hand top or left-hand bottom note at the new start\nwhen the interval is within this limit. Higher values include larger leaps.',
+        '右手高音或左手低音的前後距離不超過此值時，\n嘗試讓前音在新起音處結束。調大會涵蓋更大的音程跳動。',
+        '右手高音或左手低音的前后距离不超过此值时，\n尝试让前音在新起音处结束。调大会涵盖更大的音程跳动。'),
+    'key.change_cost': (
+        'Set the cost of changing key, measured in out-of-key note counts.\nHigher values favor stable keys; lower values allow more key changes.',
+        '設定更換調號的成本，以調外音數量衡量。\n調大會減少轉調、保持調號穩定；調小則較容易轉調。',
+        '设置更换调号的成本，以调外音数量衡量。\n调大会减少转调、保持调号稳定；调小则较容易转调。'),
+    'key.crowded_ratio': (
+        'After choosing keys in four-bar groups, check crowded groups bar by bar.\nThis is an out-of-key note ratio from 0 to 1; lower values trigger more checks.',
+        '先按四小節選定調號；調外音比例超過此值時，再逐小節細查。\n輸入 0 到 1 的比例值，調小會更容易觸發細查。',
+        '先按四小节选定调号；调外音比例超过此值时，再逐小节细查。\n输入 0 到 1 的比例值，调小会更容易触发细查。'),
+    'playable.max_notes': (
+        'Limit the notes assigned to each hand in one onset group.\nIf reassignment cannot fit them, try removing notes. Pedal sustain is not counted.',
+        '限制同一組起音分配給每隻手的音符數。\n超限且無法重新分配時嘗試刪音；不計踏板延音或前組持續音。',
+        '限制同一组起音分配给每只手的音符数。\n超限且无法重新分配时尝试删音；不计踏板延音或前组持续音。'),
+    'playable.max_span': (
+        'Limit the distance between the highest and lowest notes per hand in one group.\nLower values require more reduction. Movement between groups is not considered.',
+        '限制同一組起音分配給每隻手的最高、最低音距離。\n調小會增加精簡機會；不考慮前後音群之間的手位移動。',
+        '限制同一组起音分配给每只手的最高、最低音距离。\n调小会增加精简机会；不考虑前后音群之间的手位移动。'),
+    'playable.max_removals': (
+        'Try removing no more than this many notes per group, preferring fewer removals.\nIf the group still cannot fit, keep the whole group instead of deleting more.',
+        '每組最多嘗試刪除此數量的音符，優先選擇刪音最少的方案。\n若刪到上限仍不符合限制，就保留整組，不繼續刪除。',
+        '每组最多尝试删除此数量的音符，优先选择删音最少的方案。\n若删到上限仍不符合限制，就保留整组，不继续删除。'),
+}
+
+
+def setting_help(key):
+    return _HELP[key][{'en': 0, 'zh_TW': 1, 'zh_CN': 2}[_language]]
+
+
 def set_language(language):
     global _language
     _language = LANGUAGES.get(language, language if language in _TEXT else 'zh_TW')
