@@ -1,3 +1,4 @@
+import argparse
 import contextlib
 import json
 import os
@@ -75,6 +76,11 @@ class QueueWriter:
 
     def flush(self):
         pass
+
+
+class PanelArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
 
 
 class SettingTooltip:
@@ -699,7 +705,7 @@ class Panel:
         try:
             preset = self.current_preset()
             argv = self.argv(preset)
-            postprocess.plan_steps(postprocess.build_parser().parse_args(argv))
+            postprocess.plan_steps(postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(argv))
         except ValueError as error:
             messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return

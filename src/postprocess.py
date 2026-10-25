@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import shutil
 import sys
@@ -114,6 +115,9 @@ def keep_bpmfix_sections(stats_path):
 
 def plan_steps(args):
     """The steps in order, as (name, description); raises ValueError on a combination that cannot run."""
+    if args.bpm is not None:
+        if not math.isfinite(args.bpm) or not 60000000 / 0xffffff <= args.bpm <= 60000000:
+            raise ValueError('BPM must be positive, finite, and representable as a MIDI tempo.')
     if args.playable and args.hands == 4:
         raise ValueError('Playable reduction works on two hands, or on the first player\'s two hands with --hands 3; '
                          'four hands are not supported.')
@@ -206,8 +210,8 @@ def run_postprocess(args):
     return cleaned_path, steps
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(
+def build_parser(parser_class=argparse.ArgumentParser):
+    parser = parser_class(
         description='Run the post-processing steps on a transcribed MIDI in order, each one switchable. '
                     'song_bpmfix_cleaned.mid is rebuilt from song_bpmfix.mid on every run, so no MIDI is added.',
     )
