@@ -1,595 +1,212 @@
 # Piano MIDI Cleanup
+
 [English README](README_EN.md)
 
-## 授權
+目前版本 **1.0.1**。Piano MIDI Cleanup 把 AI 鋼琴轉譜的 MIDI 整理成更容易看譜、編輯和練習的版本。你可以在桌面介面中校正速度與小節線、清理疑似雜音、分配左右手，再用內建鋼琴試聽結果。
 
-Copyright (c) 2026 hibikiwtnb and contributors.
+專案目前以**原始碼**發布，沒有安裝程式，也沒有預先打包的 Windows 或 macOS 執行檔。
 
-本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發受此授權涵蓋的程式時，須依條款提供相應原始碼。修改版透過網路與使用者互動時，須依第 13 條向這些使用者提供取得相應原始碼的方式。軟體不附任何保證。
+## 它做什麼
 
-第三方元件、上游模型及權重保留各自的授權，不因本專案授權而變更；隨附元件說明見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 及 `vendor/ESSENTIA_LICENSE.txt`。
+- 修正全曲 BPM，並把第一拍對齊到小節線。
+- 寫入調號，讓樂譜在轉調處換調。
+- 用保守規則刪除明顯的短音、弱音等轉譜雜訊。
+- 依音高與動作把音符分成 2 到 4 隻手，並用 MIDI channel 標記。
+- 裁短同一隻手內因踏板延音造成的重疊，讓譜面比較乾淨。
+- 提供鋼琴捲簾、文字音符清單、捲簾 PNG 等檢查工具。
+- 附一個鋼琴音訊轉譜入口，使用 ByteDance 的 `piano_transcription_inference` 模型。
 
-## 功能
+本工具**不含來源分離**。如果輸入是歌曲混音，請先自行把鋼琴聲部分離出來；否則其他樂器的聲音也會被當成鋼琴轉錄。
 
-把鋼琴 AI 轉錄出來的 MIDI 整理成能直接看譜、編輯的 MIDI：BPM 修正、第一拍對齊（主面板鋼琴捲簾即時播放）、調號、保守規則清理、分手（兩到四隻手，以 MIDI channel 標記）、踏板重疊裁短，和文字、捲簾截圖等檢查工具。這些步驟都以 MIDI 為輸入，不限定轉錄模型。
+## 開始使用
 
-也附轉錄入口（`src/transcribe.py`，含 Apple GPU / MPS 版），使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0；Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"）。本專案是個人專案，與 ByteDance 無關。
+第一次使用需要先準備 Python 環境；完成後即可從桌面入口開啟：
 
-macOS 的 `macos/*.command` 和 Windows 的 `windows/*.cmd` 都可以直接雙擊執行；每個工具也都有不開對話框的命令列用法，方便 agent 執行。
+1. 開啟專案頁面：<https://github.com/hibikiwtnb/piano-midi-cleanup>。
+2. 按 **Code → Download ZIP**，解壓縮到一個固定資料夾。解壓後應該看到 `README.md`、`src/`、`windows/`、`macos/` 等項目。
+3. 依你的平台建立 Python 3.11 環境（見下方）。
+4. 執行一次對應平台的啟動器產生器，建立 GUI 入口。
 
-固定假設 4/4：第一拍對齊、調號、文字 review、捲簾截圖都以 4 拍一小節計算。
+之後如果搬移資料夾或重建 Python 環境，重新執行一次產生器即可。專案內的 `.cmd` / `.command` 檔會自行切換到專案資料夾，不需要先 `cd`。
 
-各步驟的規則、門檻依據與已知限制見[設計規格](docs/spec/README.md)。
+## 系統需求
 
-## Main Pipeline
+- **Python 3.11**，且必須有 **tkinter**。Windows 請從 [Python 官方下載頁](https://www.python.org/downloads/windows/)選擇 64-bit Python 3.11；macOS 可用 python.org 版本，或 Homebrew 的 `python@3.11` 加 `python-tk@3.11`。
+- Python 套件：`torch`、`numpy`、`mido`、`librosa`、`piano_transcription_inference`、`python-rtmidi`、`pillow`、`sounddevice`。macOS 安裝另含 `numba`、`llvmlite`、`essentia`。
+- **[ffmpeg](https://ffmpeg.org/download.html)** 需在 `PATH` 上，讀取 m4a、mp3 等壓縮格式時會用到。
+- **[Node.js](https://nodejs.org/en/download)**：Windows 的自動 BPM 偵測與和弦顯示需要；macOS 只有和弦顯示需要 Node.js。
+- 轉譜可用 CPU；有 NVIDIA GPU 時可改用 CUDA 版 PyTorch。Linux 不在本 README 的圖形介面支援範圍內。
 
-### `transcribe.command`
+## Windows x64 安裝
 
-完整轉錄流程入口。雙擊後直接選擇一個或多個音訊檔；MIDI 會寫在各音訊檔旁邊。
+安裝 Python 後，從開始選單開啟「命令提示字元」（**cmd.exe**），貼上下列指令。這個區塊使用 cmd 語法，請保留路徑外層的引號：
 
-設備選擇順序：
-
-```text
-CUDA -> CPU
+```bat
+py -3.11 -m venv "%USERPROFILE%\.local\share\piano-midi-cleanup-env"
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install --upgrade pip
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
 ```
 
-流程：
+需要 NVIDIA GPU 時，把第三行換成 PyTorch 官網目前的 CUDA wheel index，例如 `--index-url https://download.pytorch.org/whl/cu126`。
 
-```text
-Pianotrans inference
--> write original MIDI
--> write MIDI stats
--> detect BPM from source audio
--> write BPM-fixed MIDI
--> rule-based conservative cleanup
--> provisional hand split by MIDI channel
-```
+Windows 沒有 Essentia wheel，所以不安裝 `essentia`；自動 BPM 改用專案內附的 essentia.js，因此需要 Node.js。也請安裝 ffmpeg 並把它的 `bin` 資料夾加入 `PATH`。
 
-輸出檔案：
+## macOS 安裝
 
-```text
-song.mid
-song_stats.txt
-song_bpmfix.mid
-song_bpmfix_cleaned.mid
-```
+macOS 的 `.command` 預設會找 `~/.local/share/piano-midi-cleanup-env`。以下指令都在專案資料夾中執行。
 
-`song_stats.txt` 會包含原始 MIDI 品質統計、BPMFix stats、cleaning stats，以及 hand-split stats。
-
-如果 `song.mid` 已存在，流程不會重新轉錄；只會補缺失的 stats、BPM-fixed MIDI、cleaned MIDI。
-
-這個 pipeline 只做 BPM 修正，不對齊第一拍、不寫調號，分手固定兩隻手，也不裁短重疊。
-
-### 建議的後處理順序
-
-轉錄完成後，對 `song_bpmfix_cleaned.mid` 依序執行（全部直接覆寫同一個檔案，不會多出 MIDI）：
-
-| 順序 | 工具 / 腳本 | 處理目的 | 備註 |
-|:---:|:---|:---|:---|
-| **Step 0** | `transcribe.command` | 音訊轉錄、BPM 修正、基礎清理與初步分手 | 輸出 `song_bpmfix_cleaned.mid` |
-| **Step 1** | 主面板「鋼琴捲簾」頁 | 對齊第一拍（手動） | 寫入 `song_bpmfix.mid` 與顯示中的 `song_bpmfix_cleaned.mid`，並重寫調號 |
-| **Step 2** | `key_signature.command` | 補寫調號 | 若第一拍沒移動則在此補寫調號 |
-| 可選 | `playable_reduction.command` | 刪到兩隻手彈得到 | 兩隻手時在分手前執行；三隻手時在分手後只修第一個人的兩隻手 |
-| **Step 3** | `hand_split_channels.command` | 重新多手分離 | 需要三隻手/四隻手時執行（如 `--hands 3`） |
-| **Step 4** | `trim_overlaps.command` | 裁短踏板造成的重疊 | 消除長音重疊，使五線譜與樂譜更整齊 |
-| **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | 檢查結果 | 輸出捲簾截圖或文字拍位以供確認 |
-
-> [!NOTE]
-> 裁短只移動音尾，重跑分手不會恢復原本的音長；要回到裁短前的狀態，需從 `song_bpmfix.mid` 重新執行清理。
-
-非交互執行（agent 用）：
+先安裝 Python 3.11、Tk、ffmpeg 與 Node.js。使用 Homebrew 時：
 
 ```bash
-python src/midi_workbench.py song_bpmfix.mid
-python src/key_signature.py song_bpmfix_cleaned.mid
-python src/playable_reduction.py song_bpmfix_cleaned.mid
-python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-python src/trim_overlaps.py song_bpmfix_cleaned.mid
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+brew install python@3.11 python-tk@3.11 ffmpeg node
 ```
 
-### `postprocess.py`（統一執行器）
+如果你用 python.org 的 Python 3.11，Tk 已包含在安裝檔中；仍請自行安裝 ffmpeg 與 Node.js。若 `python3.11` 不在 `PATH`，把下方指令中的 `python3.11` 換成 `$(brew --prefix python@3.11)/bin/python3.11`。
 
-把上面的步驟依序一次跑完，每一步都可以開關。每次都從 `song_bpmfix.mid` 重新產生 `song_bpmfix_cleaned.mid`，所以改了開關重跑，不會疊加上一次的結果，也不會多出 MIDI。輸入可以是同一首的 `song.mid`、`song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid`。
+<details>
+<summary><strong>Apple Silicon（arm64）安裝</strong></summary>
 
-| 順序 | 步驟 | 預設 | 開關與參數 |
-|:---:|---|:---:|---|
-| 1 | BPMFix、自動對齊第一拍、調號 | 有 `--bpm` / `--audio` 時執行 | `--no-first-beat`、`--no-key-signature`；都不給時沿用現有的 `song_bpmfix.mid` |
-| 2 | 規則清理 | 開 | `--no-clean`、`--semitone-pairs` |
-| 3 | 可彈性清理 | 關 | `--playable`；每手音數和跨度用 `--set` |
-| 4 | 分手 | 開 | `--no-split`、`--hands` |
-| 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
-| 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait` |
-
-- 可彈性清理：兩隻手時在分手前處理全部的音；三隻手時改在分手後，只處理第一個人的左手和第二右手（低音和中聲部），第二個人的右手（最上面的 right）不動；四隻手不支援。截斷重疊必須在分手之後。組合不成立時不會執行。兩手時，每手音數與跨度限制（`playable.max_notes`、`playable.max_span`）也會套用到分手，讓已可彈的組維持在限制內；清理後仍未解決的組保留原樣。
-- 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
-- 報告先寫在最終檔旁的暫存檔，全部步驟成功後才替換；失敗時保留原報告並刪除暫存檔。
-
-報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。
-- 主面板的鋼琴捲簾把手動調整的第一拍寫入 `song_bpmfix.mid`，後續處理沿用這份檔案。是否自動調整第一拍依處理步驟的勾選執行，不另外判斷手動修改紀錄。
-
-閾值用 `--set 名稱=值` 覆蓋（可重複），`--list-parameters` 列出全部可調的閾值和預設值；有改的值會記在報告的步驟清單裡。可彈性清理的每手音數和跨度也在這裡（`playable.max_notes`、`playable.max_span`）。
-
-```bash
-python src/postprocess.py song.mid --audio song.flac
-python src/postprocess.py song.mid --bpm 135 --hands 3
-python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
-python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --set playable.max_notes=5
-python src/postprocess.py --list-parameters
-```
-
-### GUI 啟動入口
-
-設定好 Python 環境後，執行一次對應平台的產生器，會在 repo 根目錄建立不顯示命令列視窗的面板入口：
-
-| 平台 | 產生器 | 產生的入口 |
-|---|---|---|
-| Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk`（以 `pythonw.exe` 啟動） |
-| macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
-
-入口內存的是本機的絕對路徑，因此不納入 git，由各自的機器產生。可以複製到桌面、開始選單，或拖到 Dock、`/Applications`。搬移 repo 或重建 Python 環境後，重新執行產生器即可。需要看命令列輸出時，改用 `python src/postprocess_panel.py` 或 `macos/postprocess_panel.command`。macOS 產生器會在建立前檢查面板能否載入；產生的 App 把執行中的輸出寫入 `~/Library/Logs/Piano MIDI Cleanup/panel.log`，失敗時顯示錯誤對話框。
-
-統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用已修正速度、手動指定、從音訊偵測）、每一步的開關，以及按主題排列的設定分頁。「詳細報告」以項目／值兩欄顯示已生成的 TXT，開啟面板或切換 MIDI 時讀入；底部狀態欄顯示最新狀態。
-
-- 開關和閾值可以存成預設組合（Preset），例如「一人彈」「三手」；Defaults 回到預設值。
-- 上次的選擇和預設組合存在 `~/.piano-midi-cleanup-panel.json`。
-- 首次開啟內容區為 1280 × 720，之後記住視窗大小、位置與最大化狀態。處理頁的左右面板隨視窗伸展，「開始處理」位於處理步驟框的右下角。
-- 「依踏板狀態限制截斷」在面板預設關閉；命令列預設開啟，可用 `--no-pedal-protection` 關閉。詳見 [截斷規格](docs/spec/07-overlap-trim.md)。
-- BPM 為空白、非數字、非有限或超出 MIDI tempo 範圍時，面板顯示錯誤，不會結束。
-- 面板只是把選擇轉成 `postprocess.py` 的命令列，執行時會先印出這行命令。
-
-「關於」頁顯示統一版本號、專案首頁、問題回報，以及本專案與隨附開源元件的授權全文，包含和弦推斷使用的 note-seq。版本與元件資訊由 `src/app_info.py` 管理。
-
-「鋼琴捲簾」頁優先顯示同曲的 `song_bpmfix_cleaned.mid`；尚無處理結果時才顯示選取的輸入檔。切換到此頁或檔案變更時重載，同一檔保留捲動位置與縮放，新曲依可見音域置中：
-
-- 音條依手上色（右手藍、第二右手橙、第二左手紫、左手綠，與 PNG 截圖一致），深淺表示力度；上方標小節號，左側標音名，底部是延音踏板（CC64）踩下的區間。
-- 調號只在首次出現及轉調處顯示，例如 `Key=C Major`、`Key=A minor`，不隨介面語言翻譯。滑鼠移到任何音符上，底部狀態欄顯示音名與力度。
-- 「修改痕跡」可顯示淡紅色刪音、淡橙色截短音尾或全部痕跡，預設不顯示；滑鼠提示框顯示刪除／截短的處理環節。紀錄在 MIDI 旁的 `.changes.json`，只適用於對應的處理結果；沒有紀錄的舊 MIDI 不會憑空補畫。痕跡不參與播放。
-- 小節號下方是和弦軌道（`src/chord_analysis.py`）：以半拍為一格，每格累計各音名的發聲長度（延音踏板撐住的部分以一半權重計，最多 2 拍；低音區加倍），用移植自 Magenta note-seq 的 HMM 以 Viterbi 同時推斷調性與和弦，分解和弦與琶音因此合成同一個和弦。每格的最低音是和弦根音或和弦音時加分；三個以上的音同時起音、或出現比所有發聲中的音更低的低音時，較容易換和弦。切出的每段再由 Tonal.js 依主要音名命名，保留推斷的根音，低音不是根音時寫成轉位。第一拍對齊後，第一個音之後第一條小節線之前的音是弱起，不標和弦（第一個音離小節線 1/4 拍以內時當作正拍）。滑鼠移到和弦上顯示其他讀法、低音和組成音；工具列的「和弦」可收起這一列。需要 Node.js，沒有時這一列顯示提示，其他功能照常。
-- 播放、暫停（焦點在捲簾上時可按空白鍵）、點擊定位；切換分頁後焦點不會自動進入輸入框；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動。可依手關閉聲音。
-- 調整速度與第一拍位置時網格即時預覽；按「儲存第一拍」寫入同一首的 `song_bpmfix.mid` 並重寫調號；顯示的是 `song_bpmfix_cleaned.mid` 時它也一起改寫，修改痕跡跟著平移，不必重新處理。顯示的檔案沒有對應的 `song_bpmfix.mid` 時不能調整。
-- 播放預設使用內建 Coopiano 物理建模鋼琴，直接送到系統預設音訊裝置。輸出選單保留本機 MIDI 埠（Windows 包含可用的 `Microsoft GS Wavetable Synth`），macOS／Linux 亦可選 `piano-midi-cleanup` 虛擬埠。選擇會記住；新增此預設時，舊的 MIDI 專用設定不會覆蓋 Coopiano，之後可自行改選並儲存。首次播放會在背景準備音源，完成後自動開始。錯誤會顯示在捲簾頁，不會靜默換成其他音源。
-
-### `transcribe_mps.command`
-
-保留的 Apple GPU / MPS 支持版入口，流程與 `transcribe.command` 相同，但設備選擇順序為：
-
-```text
-MPS -> CUDA -> CPU
-```
-
-目前在 M2 MacBook Air 實測中，這個模型使用 MPS 反而比 CPU 慢，因此日常使用主入口 `transcribe.command`。
-
-## Standalone Tools
-
-### `bpmfix.py`
-
-BPM 修正、自動對齊第一拍、寫入調號，輸出 `*_bpmfix.mid`。只有命令列用法（給 agent 或腳本），一般使用請用統一執行器或主面板；手動調整第一拍在主面板的鋼琴捲簾。
-
-寫入第一拍時依 BPM 重算 tick，再把第一拍移到第 1 小節開頭；有弱起音落到 0 之前時，在前面補整數小節。channel 不變。結果會更新至 `*_stats.txt`。
-
-`transcribe.command` pipeline 只做 BPM 修正，不對齊第一拍、不寫調號。
-
-自動對齊第一拍只看 BPM 修正後的 MIDI（不需要原音訊），假設固定 4/4：
-
-```text
-1. 起音依 velocity 加權，在八分音符週期上取平均相位，得到格線位移
-2. 在八分音符的兩個位置中，選落在四分音符格線上權重較大的作為正拍
-3. 四拍中左手（channel 3）或低音（<= F#3）起音權重最大的一拍作為第 1 拍
-4. 取離 0 秒最近的小節線，已對齊的 MIDI 再跑一次幾乎不動
-```
-
-結果（估計位置、八分音符格線一致性、第 1 到 4 拍的低音比例、平移 tick）更新至 `*_stats.txt`。低音大量切分、前奏無低音、3/4 拍時第 1 拍可能選錯，可在主面板的鋼琴捲簾用 ±1 拍修正。
-
-命令列用法：
-
-```bash
-python src/bpmfix.py song.mid --audio song.flac
-```
-
-```bash
-python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature
-```
-
-自動偵測會用 Essentia 拍點的半拍相位一致性估計實際 BPM（對漏拍、反拍跳動不敏感），再檢查四捨五入成整數後曲尾的格線漂移：
-
-```text
-end_drift_ms = duration * |beat_phase_bpm / applied_bpm - 1| * 1000
-```
-
-漂移 <= 50 ms 時套用整數 BPM；超過時保留兩位小數。報告會輸出 Essentia 原始 BPM、beat-phase BPM 與 coherence、是否取整，以及 `Estimated end drift`。手動輸入的 BPM 會直接使用。
-
-修正邏輯保留實際播放速度，只重算 MIDI ticks 和 tempo metadata：
-
-```text
-new_ticks = old_ticks * applied_bpm / source_bpm
-```
-
-`source_bpm` 取自 MIDI 本身的 tempo（轉錄輸出為 120；沒有 tempo event 時視為 120），所以對已修正過的 MIDI 再跑一次也不會改變播放時間。
-
-### `midi_stats.command`
-
-只做 MIDI 品質統計。
-
-使用方式：
-
-1. 選擇 MIDI。
-2. 輸出 `*_stats.txt`。
-
-統計項目：
-
-```text
-Total notes
-Very short notes (< 0.050s)
-Low velocity notes (<= 30)
-Lowest note
-Highest note
-Pitch span
-Average velocity
-Max simultaneous keys
-```
-
-音高會同時輸出 MIDI note number 和英文音名，例如 `24 (C1)`。
-
-「最多同時按鍵數」依 MIDI 音符的按下至放開區間估計，不額外計入延音踏板（CC64）留下的聲音。若來源轉錄把踏板延音直接寫入音長，此值會高估實際按鍵數，不能單憑它判定手指不夠。
-
-### `clean_midi_rules.command`
-
-只做第一階段保守規則清理。
-
-使用方式：
-
-1. 選擇 MIDI。
-2. 輸出 `*_cleaned.mid`。
-3. 輸出 `*_clean_report.txt`。
-
-注意：獨立執行 `clean_midi_rules.command` 時會輸出 `*_clean_report.txt`；`transcribe.command` pipeline 中，清理報告會更新至原本的 `song_stats.txt`。
-
-清理規則只刪除高度疑似 artifact 的 note，不做音樂語義判斷、不分手、不量化、不判斷和弦/調性/旋律。
-
-目前規則：
-
-```text
-duration < 0.03s
-velocity < 30
-velocity < 45 and duration <= a 16th note (0.25 beat)
-pitch outside 21-108
-```
-
-可選：`--semitone-pairs` 另外處理半音雙音（預設關閉）。相差一個半音、起音相差 50ms 以內的兩顆音，刪較弱的那顆；力度相同時刪較短的。要判斷哪些半音是和弦本來的音，已經是音樂判斷，所以這裡只做簡單處理，見 `docs/cleaning-rules.md`。
-
-清理報告示例：
-
-```text
-MIDI rule cleaning stats
-Input: song_bpmfix.mid
-Output: song_bpmfix_cleaned.mid
-Original notes: 1000
-Removed notes: 35 (3.50%)
-Kept notes: 965 (96.50%)
-Rule removals:
-- Duration < 0.030s: 12 (1.20%)
-- Velocity < 30: 3 (0.30%)
-- Velocity < 45 and duration <= 0.25 beat: 18 (1.80%)
-- Pitch outside 21-108: 2 (0.20%)
-```
-
-所有百分比都以 `Original notes` 為分母。
-
-### `hand_split_channels.command`
-
-只做初步分手，直接在清理後 MIDI 上修改 note channel。預設兩隻手；需要三隻手的曲子加 `--hands 3`（多一個第二右手），四隻手加 `--hands 4`（再多一個第二左手）。一隻手對應一個 channel，不在單手內再分聲部。
-
-它不拆成多個 instrument track，也不刪除 note。
-
-先找每一拍的分團線：鋼琴捲簾上低音、中音常擠成一團，高音的分解和弦在上方另成一團，兩團之間是一段空白音域。對每一拍（含前後各一拍的起音）計算每條分界線到上下最近音的距離，再用 Viterbi 讓分界線盡量走在最寬的空白中、且每移動一個半音付 0.5 的成本。
-
-分配方式是成本最小化的 beam search：起音相差 50 ms 內的音視為同一組，每組由低到高排序後切成每隻手一段（兩隻手：左手、右手；三隻手：左手、第二右手、右手；四隻手：左手、第二左手、第二右手、右手），再在整首曲子上選總成本最低的路徑。成本包括：
-
-```text
-單手跨度：12 半音內不計，超過 14 半音大幅加重
-音域：左手高於 D4、右手低於 G3 時依距離計算
-移動速度：手的位置變化除以該手距離上一個起音的時間（空閒的手移動較便宜）
-快速段落：該手已連續彈 3 個以上間隔 < 0.25 s 的單音時，每多一個同時音都加成本（右手快速單音中的雙音傾向交給空閒的左手）
-分團：最上面那隻手（右手）拿到分團線以下的音、其他手拿到分團線以上的音，每個音 4；分界線上下的空白小於 4 半音時按比例減輕
-第二隻手：三或四隻手時，每個交給第二右手或第二左手的音 1，只在需要時才用
-```
-
-報告會輸出單手跨度超過 12 半音的組數，以及快速段落中仍為多音的次數。所有權重都是檔案開頭的常數。
-
-channel 對應：
-
-```text
-MIDI channel 1 = right hand
-MIDI channel 2 = second right hand（只在 --hands 3）
-MIDI channel 3 = left hand
-MIDI channel 4 = second left hand（只在 --hands 4）
-```
-
-對 `mido` 這類 0-based channel 的 library 來說，channel 0、1、2、3 分別是 MIDI channel 1、2、3、4。
-
-這一步主要是為了讓 Logic Pro 樂譜視圖可以直接用 Piano 1 / Piano 3 顯示左右手，方便人工檢查和編輯；三隻手時需要另外在 Logic 設定含 channel 2 的譜表樣式。
-
-非交互執行：
-
-```bash
-python src/hand_split_channels.py song_bpmfix_cleaned.mid
-python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-```
-
-### `playable_reduction.command`
-
-可選，給一個人負責的兩手聲部用。兩手歌曲在分手之前執行：刪掉最少的音，讓每個起音組兩隻手都彈得到，直接修改 MIDI。三手歌曲的用法見下文。起音相差 50 ms 內的音視為同一組。
-
-```text
-彈得到：把組裡的音由低到高切成兩段（低的給左手、高的給右手），有一種切法讓每隻手都不超過 4 個音、跨度不超過 12 半音
-刪哪幾個：先求刪的數量最少，再求代價最低；有八度重複的音最便宜，只出現一次的較貴，最高音（旋律）和最低音（低音）最貴，同樣代價時刪較弱的
-一組最多刪 3 個；還彈不到的組不動，列在報告裡
-```
-
-三隻手的曲子（兩個人彈：第一個人彈低音和中聲部，第二個人的右手彈最上面）在分手後加 `--three-hands`：只處理 left 和 second_right 兩個 channel，right 不動；刪完後若這兩隻手的分配仍超出限制，就改用彈得到、換手最少的切法重新分配。四隻手不支援。
-
-只看同時起音的音，不處理還按著的音、超過 50 ms 的琶音、兩組之間手移動的距離。刪除數和每一處刪除的位置（小節、拍、刪掉的音和原本的組），更新至來源轉錄的 `*_stats.txt`。
-
-非交互執行：
-
-```bash
-python src/playable_reduction.py song_bpmfix_cleaned.mid
-python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 --max-span 14
-```
-
-### `trim_overlaps.command`
-
-分手之後執行：把踏板延音造成、同一隻手內重疊的音裁短，直接修改 MIDI。只移動音尾，不刪音、不動起音。每隻手（channel）分開處理，起音相差 50 ms 內的音視為同一組。
-
-開啟「依踏板狀態限制截斷」時，截斷前依同聲道的踏板（CC64 = 127 踩下、0 鬆開）推算止音點：note-off 落在踩踏板期間時，聲音延到下一次鬆踏板。只有截斷後的止音點比原本提前不超過 0.1 秒（`SUSTAIN_TOLERANCE_SECONDS`），且沒有同音重疊／重彈，才接受截斷；踏板與音尾同 tick 時按最不利的先後順序計算。半踏板、其他持音控制或音符配對不完整的聲道保留原音尾。面板預設關閉此限制；命令列預設開啟，用 `--no-pedal-protection` 關閉後略過上述拒絕判斷，其他規則不變。不保證所有音源聽感完全相同，也不保證處理後所有重疊都消除。分手會同步映射相容的踏板控制；不同來源的踏板若會在目的聲道衝突，則停止分手並保留該次分手前的檔案。
-
-```text
-快速音型（預設右手和第二右手）：連續 3 組以上、每組間隔 0.5 拍以內的起音；音型內每個音最晚在同一隻手下一組起音結束
-換和聲：某個起音時刻所有手合起來有 3 個以上不同音名時，這隻手在 MIDI 中尚未放開、音名不在其中的音在此結束
-換和弦：一隻手彈新的和弦或八度（2 個音以上）時，上一個和弦在 MIDI 中尚未放開的音在此結束
-按鍵需求過大：按 MIDI 音長估計，前音加新音超過 5 個或跨度超過 14 半音時，前音在此結束
-跨節拍線：一隻手在節拍線前後 1/8 拍內有新起音時，跨過該線仍未放開的音在此結束；線前 1/4 拍內才起音的音不算
-```
-
-各規則的裁短數，以及每隻手「最多同時按鍵數」的處理前後值，更新至來源轉錄的 `*_stats.txt`。這些規則整理的是 MIDI 譜面上的按鍵需求，不限制踏板延續的實際發聲數。
-
-非交互執行：
-
-```bash
-python src/trim_overlaps.py song_bpmfix_cleaned.mid
-python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
-```
-
-`--fast-figure-hands` 指定套用快速音型的手。左手預設不套，因為它也會截斷分解和弦下按著的低音。
-
-### `midi_workbench.py`
-
-不經過 BPM 修正，依音符自動把第一拍對齊到小節線，直接覆寫所選檔案（通常是 `song_bpmfix.mid`）；第一拍有移動時重新寫入調號（`--no-key-signature` 關閉）。只有命令列用法，手動調整請用主面板的鋼琴捲簾。
-
-```bash
-python src/midi_workbench.py song_bpmfix.mid
-```
-
-### `key_signature.command`
-
-依每 4 小節一段判斷調號並寫入 MIDI 的 key signature event（直接覆寫），讓 Logic 樂譜在轉調處換調號。需要已對齊小節的 MIDI（BPM 修正加第一拍對齊之後）。
-
-判斷方式：
-
-```text
-1. 從弱起之後的第一個完整小節開始，每 4 小節一段（弱起音算進第一段）
-2. 每段對 12 個大調調號計算需要臨時記號的音符數（關係小調共用調號）
-3. Viterbi 選臨時記號總數最少的路徑；每次換調額外計 4 個音的成本，只在段落交界換調
-4. 只有臨時記號超過該段音符 10% 的 4 小節段才逐小節檢查：用該段與前後段的調號，在臨時記號最少的小節線切開，讓換調可以落在段內
-5. 6 / 7 個升降號的同音異名調用 F# 和 Db
-```
-
-原有的 key signature event 會全部替換；每段的調號、臨時記號數更新至來源轉錄的 `*_stats.txt`。固定假設 4/4。
-
-非交互執行：
-
-```bash
-python src/key_signature.py song_bpmfix_cleaned.mid
-```
-
-### `generate_chord_review.command`
-
-開發中：輸出內容尚未定案，不屬於預設流程，只在明確需要時手動執行。
-
-只讀取已完成後處理的 MIDI，輸出英文 Markdown 格式的 vertical chord chart。它不修改 MIDI。
-
-命令：
-
-```bash
-python src/generate_chord_review.py input.mid
-```
-
-預設輸出：
-
-```text
-song_chord_review.md
-```
-
-表格欄位：
-
-```text
-Bar
-Beat
-Chord
-Bass
-LH
-RH
-Range
-NoteCount
-```
-
-每小節固定 4 行；如果同一拍內有多個起音事件，`Beat` 和 `Chord` 會用 `;` 分隔。和弦推定使用 vendored Tonal.js，邏輯對齊 pianometer 的 `Tonal.Chord.detect(notes, { assumePerfectFifth: true })`，每個事件最多保留前 3 個候補；無法推定時寫 `-`。
-
-### `note_text_review.py`
-
-只讀取已對齊小節的 MIDI，把音符印成文字，每個起音群組一行：小節、拍位，再由低到高列出每個音的手（`R` 右手、`R2` 第二右手、`L2` 第二左手、`L` 左手，未分手為 `?`）、音名和長度（拍）。它不修改 MIDI，也不屬於預設流程，用於檢查分手、調號等問題時手動執行。固定假設 4/4。
-
-```bash
-python src/note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
-python src/note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
-```
-
-輸出範例：
-
-```text
-m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
-```
-
-### `pianoroll_snapshot.command`
-
-把已對齊小節的 MIDI 輸出成鋼琴捲簾 PNG，每張 4 小節，不修改 MIDI。顏色區分手：藍 = 右手、橙 = 第二右手、紫 = 第二左手、綠 = 左手。每張的音域依那 4 小節的音自動決定。
-
-```text
-landscape：4 小節排成一行，1920 寬
-portrait：橫向圖順時針旋轉 90 度，4 小節由上往下連續排列，適合手機查看
-```
-
-每次選擇橫向或直向一種格式，輸出到 MIDI 旁邊的 `<MIDI 名>_pianoroll/`（已加入 .gitignore）。獨立截圖腳本預設輸出橫向；主面板預設不輸出。
-
-```bash
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
-```
-
-## Python Entrypoints
-
-這些 `.command` 背後呼叫的 Python 腳本：
-
-```text
-src/transcribe.py
-src/transcribe_mps.py
-postprocess.py
-postprocess_panel.py
-first_beat.py
-pianoroll_canvas.py
-bpmfix.py
-midi_stats_command.py
-clean_midi_rules.py
-hand_split_channels.py
-playable_reduction.py
-trim_overlaps.py
-midi_workbench.py
-key_signature.py
-generate_chord_review.py
-note_text_review.py
-pianoroll_snapshot.py
-```
-
-共用 helper：
-
-```text
-bpmfix_utils.py
-midi_playback.py
-midi_stats.py
-detect_chords_tonal.js
-vendor/tonal.min.js
-```
-
-`hand_split_channels.py` 也提供讀取音符、分組和 channel 對應給其他工具使用。
-
-## Dependencies
-
-所有 `.command` 和 BPM 偵測共用同一個使用者層級 Python 環境（需要 tkinter，Homebrew 用 `python@3.11` 加 `python-tk@3.11`）：
-
-```text
-$HOME/.local/share/piano-midi-cleanup-env
-```
-
-`.command` 找不到這個環境時，才依序嘗試 `./.venv` 和系統 Python。
-
-建立環境（Intel Mac 版本鎖定：PyTorch 最後的 macOS x86_64 版本是 2.2.2，需搭配 `numpy<2`；numba / llvmlite 新版沒有 x86_64 wheel）：
+Apple Silicon 不需要 Intel 的舊版套件鎖定，直接安裝目前可用的版本：
 
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
 ```
+
+Apple Silicon 的自動 BPM 使用 Python Essentia；Node.js 只在顯示和弦軌時需要。
+
+</details>
+
+<details>
+<summary><strong>Intel Mac（x86_64）安裝</strong></summary>
+
+Intel Mac 使用最後一個支援 macOS x86_64 的 PyTorch，因此版本必須固定。`numpy` 也要留在 2 以下；`numba`、`llvmlite` 與 `essentia` 使用下列版本：
 
 ```bash
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow sounddevice
+python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5"
 ```
 
-Apple Silicon（arm64）不需要上面的 Intel 版本鎖定，用 uv 建立後安裝同一組套件即可（已驗證：torch 2.14.1、numpy 2.4.6、essentia 2.1b6-dev）：
+請不要只升級 `torch` 或 `numpy`，否則 Intel 環境可能無法啟動。
 
-```bash
-uv venv --python 3.11 ~/.local/share/piano-midi-cleanup-env
-VIRTUAL_ENV=~/.local/share/piano-midi-cleanup-env uv pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow sounddevice
-```
+</details>
 
-`pianoroll_snapshot.py` 用 Pillow 畫圖。
+## 啟動 GUI
 
-ffmpeg 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
+### Windows
 
-Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. 本機 Node 放在 `$HOME/.local/share/node-<version>-darwin-x64`，並以 `$HOME/.local/bin/node` 連結加入 PATH。
+雙擊 `windows\create_shortcut.cmd`。它會在專案根目錄建立 `Piano MIDI Cleanup.lnk`，使用 `pythonw.exe` 開啟面板，不會出現命令列視窗。可以把捷徑複製到桌面或開始選單。
 
-鋼琴捲簾預設用 Coopiano 直接發聲，音訊輸出使用 `sounddevice`，外部 MIDI 輸出使用 `python-rtmidi`（均列在安裝指令中）。Windows x64 的原生音源 DLL 和 macOS 的通用版 dylib（Intel 與 Apple Silicon）已隨 repo 提供；Linux 需先在 `sound_sources/coopiano` 執行 `make playback`。音源、授權與建置方式見 [sound_sources/README.md](sound_sources/README.md)。
-
-Vendored JS:
-
-```text
-vendor/tonal.min.js
-vendor/essentia-wasm.umd.js
-vendor/essentia.js-core.umd.js
-```
-
-Tonal.js 用於和弦命名；`src/chord_inference.py` 修改自 Magenta note-seq 的和弦推斷（Apache-2.0）；essentia.js（WebAssembly）用於自動 BPM 偵測。授權檔分別是 `vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。
-
-模型權重預設位置：
-
-```text
-$HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
-```
-
-第一次轉譜若缺少這個檔案或檔案不完整，入口會用 urllib 從 Zenodo 下載，核對大小與 Content-Length，完整後才原子替換；失敗時保留舊檔、清除暫存檔。MPS 入口共用同一份下載邏輯，不需要 wget。
-
-可覆蓋的環境變數：
-
-```text
-PIANO_MIDI_CLEANUP_BPM_ENV
-PIANO_MIDI_CLEANUP_BPM_PYTHON
-```
-
-## Windows
-
-各工具在倉庫的 `windows/` 目錄有同名的 `.cmd` 啟動檔（例如 `windows/transcribe.cmd`；只有命令列用法的 `bpmfix.py`、`midi_workbench.py` 沒有），macOS 啟動檔則存放在 `macos/` 目錄（例如 `macos/transcribe.command`），可以直接雙擊，也能在 PowerShell 執行。啟動檔會先切換到自己的資料夾並設定 `PYTHONUTF8=1`，再依序尋找：
-
-```text
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
-.venv\Scripts\python.exe
-py -3.11
-PATH 上的 python
-```
-
-找不到 Python 時會顯示訊息並暫停。所有 Python CLI 都可以直接用 PowerShell 執行，例如 `python src/bpmfix.py song.mid --bpm 135`。
-
-建立共用的 Python 3.11 環境：
+若捷徑啟動失敗，在專案資料夾開啟 cmd 並執行下行，可查看完整錯誤訊息：
 
 ```bat
-py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow sounddevice
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess_panel.py
 ```
 
-需要 NVIDIA GPU 時，把第一行 pip 換成 PyTorch 官網目前的 CUDA wheel index（例如 `--index-url https://download.pytorch.org/whl/cu126`）。Essentia 沒有 Windows wheel，因此不安裝；自動 BPM 偵測改用倉庫內建的 essentia.js（WebAssembly），需要 Node.js。因為音訊解碼與重取樣方式不同，結果可能與 Python Essentia 版本略有差異。
+### macOS
 
-`ffmpeg` 需在 PATH 上（librosa 讀取 m4a / mp3 等格式時使用）。
+雙擊 `macos/create_app.command`，它會在專案根目錄建立 `Piano MIDI Cleanup.app`。可以拖到 Dock 或 `/Applications`。若 App 啟動失敗，錯誤會顯示對話框，詳細輸出在 `~/Library/Logs/Piano MIDI Cleanup/panel.log`。
 
-鋼琴捲簾預設使用 Coopiano 直接發聲，不需 VST、虛擬 MIDI 線或外部播放器；仍可在輸出選單改選 GS 或其他 MIDI 埠。Windows 即時播放整合及 DLL 已附帶；音源使用系統預設音訊裝置及其取樣率，遠端桌面工作階段須有可用的音訊播放裝置。系統性 GUI／RDP 播放驗證仍待補齊，建置成功不代表已驗證聽感。Node.js 會從 PATH 或 `%ProgramFiles%\nodejs` 尋找，也可用 `PIANO_MIDI_CLEANUP_NODE` 指定；自動 BPM 偵測與和弦偵測都需要它。
+不想建立 App 時，也可以雙擊 `macos/postprocess_panel.command`，或執行：
 
-Windows 上不支援：
-
-```text
-transcribe_mps.command / src/transcribe_mps.py（Apple MPS）
+```bash
+~/.local/share/piano-midi-cleanup-env/bin/python src/postprocess_panel.py
 ```
 
-## Notes
+## 日常流程
 
-- `src/transcribe.py` 會依序嘗試 CUDA、CPU。
-- `src/transcribe_mps.py` 會依序嘗試 MPS、CUDA、CPU；在 Apple Silicon 且 PyTorch MPS 可用時會使用 Apple GPU。
-- BPM 修正以固定 BPM 為前提，不建立 tempo map。
-- 小節計算一律假設 4/4，3/4 等拍號尚未支援；調號只寫大調，小調以關係大調表示。
-- 規則清理是低風險 preprocessing；後續更複雜的判斷應放在 feature extraction 或 ML classifier 等更高階流程中。
+### 已經有 MIDI
+
+1. 開啟 GUI，選擇 `song.mid` 或任何要整理的 MIDI。
+2. 選速度來源：
+   - **手動指定速度（BPM）**：知道歌曲速度時使用。**先選檔案，再輸入 BPM**；換檔案時面板會清空 BPM 欄位。
+   - **從音訊偵測速度**：選來源音訊，由程式估計速度。
+   - **沿用已修正的速度**：已有同曲的 `song_bpmfix.mid` 時使用，也適合保留手動第一拍後重跑。第一次處理且尚無這個檔案時，請選前兩項之一。
+3. 初次可沿用預設步驟，按「開始處理」。需要刪減難彈音群時，再勾選「精簡為一人雙手可彈的音符」；需要三／四手時，到「細部設定 → 左右手分配 → 演奏手數」調整。
+4. 處理成功後，`song_bpmfix_cleaned.mid` 才是完整的後處理結果。使用手動 BPM 或音訊偵測時，捲簾預覽會停在 `song_bpmfix.mid`，**不會自動切到 cleaned**；沿用速度時則維持目前顯示。請在檔案欄選擇 `song_bpmfix_cleaned.mid` 檢查結果；要製作樂譜時，將這個 MIDI 匯入樂譜軟體。
+5. 在鋼琴捲簾中檢查音符、和弦與踏板；需要調整第一拍時，見下一節。
+
+### 從鋼琴音訊開始
+
+1. 先確認音訊是鋼琴獨奏或已分離的鋼琴聲部。
+2. Windows 雙擊 `windows\transcribe.cmd`；macOS 雙擊 `macos/transcribe.command`。兩者都會開啟檔案選擇視窗，可以一次選多個音訊檔。`src/transcribe.py` 目前也是用檔案對話框，**沒有**無介面的音訊命令列用法。
+3. 第一次轉譜會用 Python 自動下載約 **165 MB** 的模型權重，不需要 `wget`。下載失敗時會保留舊檔，之後可重試。
+4. 轉譜會在音訊旁寫出 `song.mid`、`song_stats.txt`、`song_bpmfix.mid`、`song_bpmfix_cleaned.mid`。這一步只做 BPM 修正、規則清理與兩手初步分手；**不對齊第一拍、不寫調號、不裁短重疊**。
+5. 回到 GUI，選擇生成的 `song_bpmfix_cleaned.mid`，在捲簾檢查並儲存第一拍，這也會寫入調號。要再調整清理、手數或截斷時，選「沿用已修正的速度」重新處理。
+
+若 `song.mid` 已經存在，轉譜入口不會重新轉錄，只會補上缺少的統計與後處理檔案。
+
+### 第一拍、預覽與重跑
+
+- 捲簾顯示你目前選的檔案，或本次操作明確產生的預覽檔；它不會自動偏好 cleaned。
+- **顯示 cleaned 時**按「儲存第一拍」：會同時更新同曲的 `song_bpmfix.mid` 和正在顯示的 `song_bpmfix_cleaned.mid`，重寫兩邊的調號，平移修改痕跡，然後預覽切到 `song_bpmfix.mid`。
+- **顯示原始 `song.mid` 時**按「儲存第一拍」：會建立或覆寫同曲的 `song_bpmfix.mid`，**不會修改原始檔**，然後預覽切到 `song_bpmfix.mid`。
+- 檔名以 `_bpmfix` 或 `_bpmfix_cleaned` 結尾時，必須找得到對應的 `song_bpmfix.mid` 才能調整第一拍。
+- 之後重跑請選「**沿用已修正的速度**」，才能保留手動對齊。若又從原始 `song.mid` 重算並開啟自動第一拍，手動結果可能被取代。
+- 每次重跑都會從 `song_bpmfix.mid` 重建並覆寫 `song_bpmfix_cleaned.mid`；請保留原始音訊、`song.mid` 與 `song_bpmfix.mid`，不要只留 cleaned。
+
+## 輸出檔案
+
+| 檔案 | 內容 | 備註 |
+|:---|:---|:---|
+| `song.mid` | 轉譜原始 MIDI | 盡量不要直接編輯 |
+| `song_stats.txt` | 各步驟統計與執行紀錄 | 每個處理區塊會更新 |
+| `song_bpmfix.mid` | BPM 修正後的 MIDI；第一拍與調號可寫在這裡 | 後處理的重建來源；手動第一拍也寫在這裡 |
+| `song_bpmfix_cleaned.mid` | 規則清理、分手、可選截斷後的最終 MIDI | 每次重跑都會覆寫 |
+| `song_bpmfix_cleaned.changes.json` | 捲簾「修改痕跡」用的紀錄 | 只對應同一個 cleaned 檔 |
+| `*.chords.json` | 顯示過的 MIDI 的和弦分析快取 | 以 MIDI 內容與分析版本比對 |
+| `song_bpmfix_cleaned_pianoroll/` | 捲簾 PNG | 只有勾選截圖時產生 |
+
+獨立執行 `clean_midi_rules` 時，另外會在輸入檔旁產生對應的 `*_clean_report.txt`。
+
+## 常見問題與限制
+
+- **找不到 Python**：啟動器會依序找共用環境、專案內 `.venv`、`py -3.11` 或 `PATH` 上的 Python。請確認 Python 3.11 與 tkinter 已安裝，再重建環境。
+- **`tkinter` 載入失敗**：Windows 請用 python.org 版本；macOS Homebrew 請補裝 `python-tk@3.11`。
+- **m4a / mp3 讀不進來**：先安裝 ffmpeg 並確認 `ffmpeg` 指令在 `PATH` 上。
+- **和弦軌沒有內容**：macOS 與 Windows 都需要 Node.js。缺少 Node.js 時只影響和弦顯示；Windows 的自動 BPM 也無法使用。
+- **第一次轉譜很久或下載失敗**：模型約 165 MB，只用 Python 下載，沒有 `wget`。網路不穩時重試即可。
+- **BPM 抓成一半或兩倍**：選「手動指定速度（BPM）」輸入正確速度。換檔案後 BPM 欄會清空，記得先選檔再輸入。
+- **第一拍不對**：在捲簾用 ±1 拍調整並儲存。低音切分、無低音前奏、3/4 拍等情況可能判錯。
+- **處理後看不到 cleaned**：這是預期行為。手動 BPM 或音訊處理成功後，預覽是 `song_bpmfix.mid`；請自己選 `song_bpmfix_cleaned.mid`。
+- **重跑後手動第一拍不見了**：下一輪選「沿用已修正的速度」，不要從原始檔重算自動對齊。
+- **播放不是匯出**：捲簾播放只是即時試聽，本工具不輸出 WAV、MP3 或其他音訊檔。
+- **內建音源**：Coopiano 是物理建模音源，不需要下載鋼琴取樣。播放使用系統預設音訊裝置；Windows 遠端桌面工作階段必須有可用的播放裝置。
+- **播放環境**：Windows x64 與 macOS 的原生音源庫已隨專案提供；跨平台與遠端桌面的系統性播放驗證仍待補齊。
+- **只支援 4/4 與單一速度**：變速、自由速度、3/4 等拍號會讓小節線失準。
+- **不是完成樂譜**：輸出仍是 MIDI，不是排版好的樂譜或 MusicXML。轉譜錯誤、錯音與漏音仍需人工檢查。
+- **三手與四手**：分手支援 2 到 4 隻手。可彈性清理只在兩手時處理全部音符；三手時必須在分手後執行，且只處理第一位演奏者的 left 與 second_right，最上面的 right 保留不動。四手可以分手，但不支援可彈性清理。
+- **截斷預設不同**：GUI 的「依踏板狀態限制截斷」預設**關閉**；命令列預設**開啟**，可用 `--no-pedal-protection` 關閉。
+
+## 進階文件與命令列
+
+完整規則、門檻依據與已知限制見[設計規格](docs/spec/README.md)。目前待解問題見[待解決問題](docs/open-issues.md)，清理規則細節見[清理規則](docs/cleaning-rules.md)。
+
+統一執行器可直接用命令列跑完整流程。以下在專案資料夾中執行；macOS 先啟用剛才安裝套件的共用環境：
+
+```bash
+. "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
+python src/postprocess.py song.mid --audio song.flac
+python src/postprocess.py song.mid --bpm 135 --hands 3
+python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+python src/postprocess.py --list-parameters
+```
+
+Windows 不使用上面的啟用指令，改在 cmd 中直接呼叫共用環境的 `python.exe`，路徑請加引號：
+
+```bat
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess.py song.mid --bpm 135
+```
+
+`windows\*.cmd` 與 `macos/*.command` 是可直接雙擊的獨立工具入口。`bpmfix.py` 與 `midi_workbench.py` 只有命令列用法，沒有雙擊入口。各工具與參數的對照見[執行器與工具規格](docs/spec/08-runner-and-tools.md)。
+
+## 授權與來源
+
+Copyright (c) 2026 hibikiwtnb and contributors.
+
+本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發本程式時須依授權提供相應原始碼，修改版若透過網路與使用者互動，須依第 13 條提供原始碼取得方式。軟體不附任何保證。
+
+轉譜使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0）。內建音源 Coopiano、和弦命名 Tonal.js、和弦推斷 note-seq、Windows 自動 BPM 使用的 Essentia.js 等第三方元件保留各自授權；來源與授權全文見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。本專案是個人專案，與 ByteDance 無關。

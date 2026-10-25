@@ -2,584 +2,211 @@
 
 [Chinese README](README.md)
 
-## License
+Version **1.0.1**. Piano MIDI Cleanup turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
 
-Copyright (c) 2026 hibikiwtnb and contributors.
+The project is distributed as **source code** only. There is no installer and no prebuilt Windows or macOS application.
 
-Original project code is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`); see [LICENSE](LICENSE). Commercial use is permitted. Distribution of covered software requires providing its Corresponding Source under the license terms. Modified versions that interact with users over a network must offer those users access to their Corresponding Source as required by section 13. The software comes without warranty.
+## What it does
 
-Third-party components, upstream models and weights retain their respective licenses. See [sound_sources/README.md](sound_sources/README.md), `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt` for the bundled components.
+- Fixes the song BPM and aligns the first beat to a bar line.
+- Writes key signatures so score view changes key at modulations.
+- Removes obvious transcription noise with conservative rules.
+- Splits notes into 2 to 4 hands, marked by MIDI channel.
+- Shortens overlaps inside one hand that were caused by sustain-pedal tails.
+- Provides a piano roll, note text review, piano roll PNGs and other inspection tools.
+- Includes a piano-audio transcription entrypoint built on ByteDance's `piano_transcription_inference`.
 
-## Features
+The tool does **not** separate sources. If the input is a full song mix, separate the piano part yourself first; otherwise other instruments will be transcribed as piano.
 
-Turns AI piano transcription MIDI into MIDI you can read and edit as a score: BPM fixing, first beat alignment (main panel piano roll with realtime playback), key signatures, conservative rule-based cleanup, hand split (two to four hands, marked by MIDI channel), pedal overlap trimming, and checking tools such as a note text dump and piano roll images. Every step takes MIDI as input and is not tied to a transcription model.
+## Getting started
 
-A transcription entrypoint is included (`src/transcribe.py`, plus an Apple GPU / MPS version). It uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0; Kong et al., "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times"). This is a personal project, not affiliated with ByteDance.
+Prepare the Python environment once, then launch the tool from a desktop shortcut:
 
-The macOS `macos/*.command` and Windows `windows/*.cmd` launchers are double-clickable, and every tool also has a dialog-free command line for agents.
+1. Open the project page: <https://github.com/hibikiwtnb/piano-midi-cleanup>.
+2. Choose **Code → Download ZIP** and extract it to a permanent folder. You should see `README.md`, `src/`, `windows/` and `macos/`.
+3. Create a Python 3.11 environment for your platform (below).
+4. Run the launcher generator for your platform once to create the GUI entry.
 
-4/4 is assumed: first beat alignment, key signatures, the note text review and piano roll images all count four beats per bar.
+If you move the folder or rebuild the Python environment, run the generator again. The `.cmd` / `.command` files switch to the project folder themselves, so you do not need to `cd` first.
 
-The [design specification](docs/spec/README.md) (Traditional Chinese) describes each step, the basis of its thresholds and its known limits.
+## Requirements
 
-## Main Pipeline
+- **Python 3.11** with **tkinter**. On Windows choose 64-bit Python 3.11 from the [official Python downloads](https://www.python.org/downloads/windows/). On macOS use python.org Python, or Homebrew `python@3.11` plus `python-tk@3.11`.
+- Python packages: `torch`, `numpy`, `mido`, `librosa`, `piano_transcription_inference`, `python-rtmidi`, `pillow`, `sounddevice`. The macOS installs also include `numba`, `llvmlite` and `essentia`.
+- **[ffmpeg](https://ffmpeg.org/download.html)** on `PATH` for m4a, mp3 and similar compressed audio formats.
+- **[Node.js](https://nodejs.org/en/download)**: required on Windows for automatic BPM detection and chord display; on macOS only the chord track needs it.
+- Transcription can run on CPU. An NVIDIA GPU may use a CUDA PyTorch build instead. Linux is outside the GUI support described here.
 
-### `transcribe.command`
+## Windows x64 setup
 
-Main transcription entrypoint. Double-click it, then choose one or more audio files. MIDI files are written next to the selected audio files.
+After installing Python, open **Command Prompt (cmd.exe)** from the Start menu and paste these commands. This block uses cmd syntax; keep the quotes around paths:
 
-Device selection order:
-
-```text
-CUDA -> CPU
+```bat
+py -3.11 -m venv "%USERPROFILE%\.local\share\piano-midi-cleanup-env"
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install --upgrade pip
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
 ```
 
-Pipeline:
+For an NVIDIA GPU, replace the third line with PyTorch's current CUDA wheel index, for example `--index-url https://download.pytorch.org/whl/cu126`.
 
-```text
-Pianotrans inference
--> write original MIDI
--> write MIDI stats
--> detect BPM from source audio
--> write BPM-fixed MIDI
--> rule-based conservative cleanup
--> provisional hand split by MIDI channel
-```
+Essentia has no Windows wheel, so it is not installed. Automatic BPM detection uses the bundled essentia.js instead and therefore needs Node.js. Install ffmpeg and add its `bin` folder to `PATH` as well.
 
-Output files:
+## macOS setup
 
-```text
-song.mid
-song_stats.txt
-song_bpmfix.mid
-song_bpmfix_cleaned.mid
-```
+The macOS `.command` launchers look for `~/.local/share/piano-midi-cleanup-env` by default. Run these commands in the project folder.
 
-`song_stats.txt` contains the original MIDI quality stats, BPMFix stats, cleanup stats, and hand-split stats.
-
-If `song.mid` already exists, the pipeline does not run transcription again. It only fills in missing stats, BPM-fixed MIDI, and cleaned MIDI.
-
-This pipeline only fixes the BPM: it does not align the first beat or write key signatures, splits into two hands only, and does not trim overlaps.
-
-### Suggested post-processing order
-
-After transcription, run these on `song_bpmfix_cleaned.mid` in order (each overwrites the same file, so no extra MIDI is created):
-
-| Step | Tool / Script | Purpose | Notes |
-|:---:|:---|:---|:---|
-| **Step 0** | `transcribe.command` | Audio transcription, BPM fix, basic cleaning, preliminary hand split | Outputs `song_bpmfix_cleaned.mid` |
-| **Step 1** | Main panel Piano roll tab | First beat alignment (manual) | Saves to `song_bpmfix.mid` and the shown `song_bpmfix_cleaned.mid`, rewriting key signatures |
-| **Step 2** | `key_signature.command` | Write key signature | Fills in key signatures when the first beat did not move |
-| Optional | `playable_reduction.command` | Reduce to what two hands can play | Before the split with two hands; after it, on the first player's two hands, with three |
-| **Step 3** | `hand_split_channels.command` | Re-split hands | Use when 3 or 4 hands are needed (e.g., `--hands 3`) |
-| **Step 4** | `trim_overlaps.command` | Trim sustain pedal overlaps | Removes overlapping notes for cleaner notation/score reading |
-| **Step 5** | `pianoroll_snapshot.command` / `note_text_review.py` | Verify and review | Inspect piano roll snapshots or text review of notes |
-
-> [!NOTE]
-> Trimming only moves note ends, and splitting hands again does not restore original lengths; to revert to the pre-trimmed state, clean again from `song_bpmfix.mid`.
-
-Non-interactive (for agents):
+Install Python 3.11, Tk, ffmpeg and Node.js. With Homebrew:
 
 ```bash
-python src/midi_workbench.py song_bpmfix.mid
-python src/key_signature.py song_bpmfix_cleaned.mid
-python src/playable_reduction.py song_bpmfix_cleaned.mid
-python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-python src/trim_overlaps.py song_bpmfix_cleaned.mid
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
+brew install python@3.11 python-tk@3.11 ffmpeg node
 ```
 
-### `postprocess.py` (one runner)
+If you use python.org Python 3.11, Tk is included in the installer; still install ffmpeg and Node.js separately. If `python3.11` is not on `PATH`, replace `python3.11` in the commands below with `$(brew --prefix python@3.11)/bin/python3.11`.
 
-Runs the steps above in order in one go, each one switchable. `song_bpmfix_cleaned.mid` is rebuilt from `song_bpmfix.mid` on every run, so changing a switch and running again does not stack on the previous result and adds no MIDI. The input can be `song.mid`, `song_bpmfix.mid` or `song_bpmfix_cleaned.mid` of one song.
+<details>
+<summary><strong>Apple Silicon (arm64) setup</strong></summary>
 
-| Order | Step | Default | Switches and parameters |
-|:---:|---|:---:|---|
-| 1 | BPMFix, auto first beat, key signatures | Runs with `--bpm` / `--audio` | `--no-first-beat`, `--no-key-signature`; without either, the existing `song_bpmfix.mid` is reused |
-| 2 | Rule cleaning | On | `--no-clean`, `--semitone-pairs` |
-| 3 | Playable reduction | Off | `--playable`; notes and span per hand with `--set` |
-| 4 | Hand split | On | `--no-split`, `--hands` |
-| 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
-| 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait` |
-
-- Playable reduction: with two hands it handles every note before the split; with three hands it runs after the split on the first player's left and second right hand only (bass and middle voice) and leaves the other player's right hand (the top `right`) alone; four hands are not supported. Overlap trimming needs the hand split. Other combinations do not run. With two hands, the per-hand note and span limits (`playable.max_notes`, `playable.max_span`) also constrain the split so groups already playable stay within the limits. If a group has no feasible partition, all its original unconstrained cuts remain available, the normal beam-search costs choose the assignment, and every note is preserved; reduction lists those unsolved groups in its report.
-- Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
-- The report is staged in a temporary file next to the final report and published only after every step succeeds; a failed run keeps the previous report and removes the staged file.
-- The main panel piano roll saves a hand-set first beat to `song_bpmfix.mid`, which subsequent processing reuses. Automatic first-beat alignment follows the selected processing steps; the runner does not inspect manual-edit history.
-
-Thresholds are overridden with `--set name=value` (repeatable), and `--list-parameters` lists every threshold with its default; changed values are recorded in the step list of the report. The playable reduction's notes and span per hand are set here too (`playable.max_notes`, `playable.max_span`).
-
-```bash
-python src/postprocess.py song.mid --audio song.flac
-python src/postprocess.py song.mid --bpm 135 --hands 3
-python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
-python src/postprocess.py song_bpmfix_cleaned.mid --set clean.min_velocity=25 --set playable.max_notes=5
-python src/postprocess.py --list-parameters
-```
-
-### GUI launchers
-
-After setting up the Python environment, run the generator for your platform once. It creates a panel launcher in the repository root that opens without a console window:
-
-| Platform | Generator | Launcher |
-|---|---|---|
-| Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk` (runs `pythonw.exe`) |
-| macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
-
-Launchers store absolute paths for the local machine, so they are not tracked in git; each machine generates its own. You can copy them to the Desktop or Start menu, or drag them to the Dock or `/Applications`. Run the generator again after moving the repository or rebuilding the Python environment. To see console output, run `python src/postprocess_panel.py` or `macos/postprocess_panel.command` instead. The macOS generator checks that the panel can be imported before building; the generated app writes runtime output to `~/Library/Logs/Piano MIDI Cleanup/panel.log` and shows an error dialog on failure.
-
-The tkinter panel lets you choose the MIDI, tempo source and processing steps, with settings grouped by topic. The Detailed report tab loads the existing TXT at startup and when the MIDI changes, displaying items and values in two columns. The bottom status bar shows the latest status.
-
-Reports update items line by line within each block: identical lines stay, changed values update, new items are added and removed items disappear. Other blocks stay intact, repeated blocks retain their latest result, and identical content causes no file write.
-
-- Switches and thresholds can be saved as presets, such as one player or three hands; Defaults restores the defaults.
-- The last choices and the presets are kept in `~/.piano-midi-cleanup-panel.json`.
-- The initial content size is 1280 × 720; subsequent launches restore size, position and maximized state. Processing panels fill the available height, with Run at the bottom right of the steps frame.
-- Pedal-based trimming limits default to off in the panel. The CLI defaults to on; use `--no-pedal-protection` to disable them. See [the trimming specification](docs/spec/07-overlap-trim.md).
-- A blank, non-numeric, non-finite or out-of-range BPM shows an error in the panel without closing it.
-- The panel only turns the choices into a `postprocess.py` command line, which it prints first.
-
-About shows the shared version number, project and issue links, and the full project and bundled-component licenses, including note-seq for chord inference. `src/app_info.py` holds version and component metadata.
-
-The Piano roll tab prefers the song's `song_bpmfix_cleaned.mid`, falling back to the selected input when no processed result exists. It reloads changed files when opened, preserving scroll and zoom for the same file and centering a new song on the visible pitch range:
-
-- Notes are coloured by hand (right blue, second right orange, second left purple, left green, as in the PNG snapshots) and shaded by velocity; bar numbers run along the top, note names down the left, and sustain pedal (CC64) down intervals along the bottom.
-- Key labels appear only initially and when the key changes, as `Key=C Major` or `Key=A minor`, regardless of interface language. Hovering any note shows its pitch and velocity in the bottom status bar.
-- Change overlay can show deleted notes in pale red, shortened tails in pale orange, or both; it defaults to hidden. Hover tooltips identify the processing stage responsible. The adjacent `.changes.json` must match the processed MIDI; old files without records are not reconstructed by guesswork. Overlays do not affect playback.
-- A chord track sits below the bar numbers (`src/chord_analysis.py`). Each half beat is a frame holding how long each pitch class sounds (pedal-held tails count half, for at most 2 beats; bass notes count double), and an HMM ported from Magenta note-seq infers key and chords together by Viterbi, so broken chords and arpeggios add up to one chord. A frame's lowest note scores for chords it is the root or a tone of; chord changes are likelier where three or more pitches start or a note starts below everything sounding. Tonal.js then names each segment from its main pitch classes, keeping the inferred root and writing an inversion when the bass is not the root. After first beat alignment, notes before the first bar line after the first note are a pickup and get no chord (a first note within a quarter beat of a bar line counts as the downbeat). Hover a chord for other readings, the bass and the chord tones; the Chords toggle hides the row. It needs Node.js; without it the row shows a notice and the rest works as usual.
-- Play, pause (Space while the roll has focus) and click to seek; switching tabs never focuses an entry; Ctrl/Alt + wheel zooms and Shift + wheel scrolls horizontally. Hands can be muted.
-- The grid previews tempo and first beat edits as you type. "Save first beat" writes them to the song's `song_bpmfix.mid` and rewrites key signatures; when `song_bpmfix_cleaned.mid` is shown it is rewritten too and the change marks move with it, so no reprocessing is needed. Editing is off when the shown file has no matching `song_bpmfix.mid`.
-- Playback defaults to the built-in Coopiano physical modeling piano through the OS default audio device. Existing MIDI outputs remain selectable, including GS on Windows when available and the `piano-midi-cleanup` virtual port on macOS / Linux. The selection is remembered. Legacy MIDI-only settings do not override the new Coopiano default; subsequent choices are saved. First playback prepares the synth in the background and starts when ready. Errors are displayed instead of silently changing outputs.
-
-### `transcribe_mps.command`
-
-Preserved Apple GPU / MPS-capable entrypoint. It runs the same pipeline as `transcribe.command`, but uses this device selection order:
-
-```text
-MPS -> CUDA -> CPU
-```
-
-On the tested M2 MacBook Air, this Pianotrans model was slower on MPS than on CPU, so `transcribe.command` is the recommended daily entrypoint.
-
-## Standalone Tools
-
-### `bpmfix.py`
-
-BPM fixing, automatic first beat alignment and key signatures, writing `*_bpmfix.mid`. Command line only (for agents and scripts); use the runner or the main panel for regular work, and its piano roll to set the first beat by hand.
-
-Saving the first beat rescales ticks to the BPM, then moves the first beat to the start of bar 1; if pickup notes would start before 0, whole bars are added in front. Channels are unchanged. The result is updated in `*_stats.txt`.
-
-The `transcribe.command` pipeline only runs the BPM fix: it does not align the first beat or write key signatures.
-
-Automatic first beat alignment uses only the BPM-fixed MIDI (no audio) and assumes a fixed 4/4:
-
-```text
-1. Velocity-weighted onsets give the mean phase on the 8th-note period, i.e. the grid offset
-2. Of the two 8th-note positions, the one with more weight on the quarter grid is the beat
-3. Of the four beats, the one with the most left-hand (channel 3) or bass (<= F#3) onset weight is beat 1
-4. The bar line nearest to 0 s is used, so running it again on an aligned MIDI barely moves it
-```
-
-The result (estimate, 8th-grid coherence, bass share on beats 1-4, shift ticks) is updated in `*_stats.txt`. Beat 1 may be wrong with heavily syncopated bass, intros without bass, or 3/4; fix it with +-1 beat in the main panel piano roll.
-
-Command line:
-
-```bash
-python src/bpmfix.py song.mid --audio song.flac
-```
-
-```bash
-python src/bpmfix.py song.mid --bpm 135 --no-auto-first-beat --no-key-signature
-```
-
-Automatic BPM detection estimates the actual BPM from the half-beat phase coherence of the Essentia beats (robust to missed beats and off-beat jumps), then checks the grid drift at the end of the song if the BPM is rounded to an integer:
-
-```text
-end_drift_ms = duration * |beat_phase_bpm / applied_bpm - 1| * 1000
-```
-
-If the drift is <= 50 ms, the integer BPM is applied; otherwise two decimals are kept. The report shows the raw Essentia BPM, the beat-phase BPM and coherence, whether rounding was applied, and `Estimated end drift`. Manual BPM input is used as entered.
-
-The fix keeps the real playback speed and rewrites MIDI ticks plus tempo metadata:
-
-```text
-new_ticks = old_ticks * applied_bpm / source_bpm
-```
-
-`source_bpm` is the MIDI's own tempo (120 for transcription output; 120 when there is no tempo event), so running the fix again on an already fixed MIDI keeps the playback time.
-
-### `midi_stats.command`
-
-Runs MIDI quality statistics only.
-
-Usage:
-
-1. Choose a MIDI file.
-2. The tool writes `*_stats.txt`.
-
-Statistics:
-
-```text
-Total notes
-Very short notes (< 0.050s)
-Low velocity notes (<= 30)
-Lowest note
-Highest note
-Pitch span
-Average velocity
-Max simultaneous keys
-```
-
-Pitch values include both MIDI note number and English pitch name, for example `24 (C1)`.
-
-### `clean_midi_rules.command`
-
-Runs first-stage conservative rule-based cleanup only.
-
-Usage:
-
-1. Choose a MIDI file.
-2. The tool writes `*_cleaned.mid`.
-3. The tool writes `*_clean_report.txt`.
-
-When run standalone, `clean_midi_rules.command` writes `*_clean_report.txt`. In the full `transcribe.command` pipeline, the cleanup report is updated in the original `song_stats.txt`.
-
-The cleanup step removes only highly likely artifacts. It does not perform musical semantic judgment, hand splitting, quantization, chord analysis, key analysis, or melody analysis.
-
-Current rules:
-
-```text
-duration < 0.03s
-velocity < 30
-velocity < 45 and duration <= a 16th note (0.25 beat)
-pitch outside 21-108
-```
-
-Optional: `--semitone-pairs` also handles semitone pairs (off by default). Of two notes a semitone apart starting within 50 ms, the softer one is removed, or the shorter one at equal velocity. Telling which semitones belong to the chord is a musical judgment, so this stays simple; see `docs/cleaning-rules.md`.
-
-Cleanup report example:
-
-```text
-MIDI rule cleaning stats
-Input: song_bpmfix.mid
-Output: song_bpmfix_cleaned.mid
-Original notes: 1000
-Removed notes: 35 (3.50%)
-Kept notes: 965 (96.50%)
-Rule removals:
-- Duration < 0.030s: 12 (1.20%)
-- Velocity < 30: 3 (0.30%)
-- Velocity < 45 and duration <= 0.25 beat: 18 (1.80%)
-- Pitch outside 21-108: 2 (0.20%)
-```
-
-All percentages use `Original notes` as the denominator.
-
-### `hand_split_channels.command`
-
-Marks a provisional hand split directly on a cleaned MIDI file by changing note channels only. Two hands by default; for songs that need three hands add `--hands 3` (a second right hand), for four `--hands 4` (also a second left hand). One hand is one channel; voices inside one hand are not split.
-
-It does not create separate instrument tracks and does not remove notes.
-
-First a blob line is found for every beat: on a piano roll the bass and middle notes often form one blob and the fast broken chords another above it, with an empty pitch band in between. For each beat (with the onsets of one beat on each side) each candidate line is scored by its distance to the nearest notes above and below, and Viterbi keeps the line in the widest empty band while charging 0.5 per semitone it moves.
-
-Assignment is a cost-minimizing beam search. Notes whose onsets are within 50 ms form one group; each group is sorted by pitch and cut into one contiguous slice per hand (two hands: left, right; three hands: left, second right, right; four hands: left, second left, second right, right). The lowest-cost path over the whole song is chosen. Cost terms:
-
-```text
-Hand span: free up to 12 semitones, heavily penalized beyond 14
-Register: left hand above D4, right hand below G3, by distance
-Movement speed: change of hand position divided by time since that hand's previous onset (an idle hand moves cheaply)
-Fast runs: once a hand has played 3 or more consecutive single notes each < 0.25 s apart, each extra simultaneous note costs more (a dyad inside a fast right-hand single-note run tends to go to an idle left hand)
-Blob: 4 per note when the top hand (right) gets a note below the blob line or another hand gets one above it; scaled down where the empty band is narrower than 4 semitones on each side
-Second hands: with three or four hands, 1 per note given to the second right or second left hand, so they are used only when needed
-```
-
-The report shows the number of groups with a hand span over 12 semitones and the number of multi-note hands left inside fast runs. All weights are constants at the top of the file.
-
-Channel mapping:
-
-```text
-MIDI channel 1 = right hand
-MIDI channel 2 = second right hand (only with --hands 3)
-MIDI channel 3 = left hand
-MIDI channel 4 = second left hand (only with --hands 4)
-```
-
-For 0-based libraries such as `mido`, channels 0, 1, 2 and 3 are MIDI channels 1, 2, 3 and 4.
-
-This step is intended to make the MIDI easier to inspect and edit in Logic Pro score view; with three hands Logic needs a staff style that includes channel 2.
-
-Non-interactive:
-
-```bash
-python src/hand_split_channels.py song_bpmfix_cleaned.mid
-python src/hand_split_channels.py song_bpmfix_cleaned.mid --hands 3
-```
-
-### `playable_reduction.command`
-
-Optional, for the two-hand part assigned to one player. For two-hand songs, run before the hand split: removes the fewest notes so two hands can play every onset group, in place. Three-hand usage is described below. Notes whose onsets are within 50 ms form one group.
-
-```text
-Playable: the group, sorted by pitch, can be cut into a low part (left hand) and a high part (right hand) with at most 4 notes and 12 semitones per hand
-What goes: the fewest notes, then the cheapest; a note doubled in another octave is cheapest, a single pitch class dearer, the top (melody) and bottom (bass) notes dearest, and the softer note at equal cost
-At most 3 notes per group; groups still unplayable are left as they are and listed in the report
-```
-
-Only notes starting together count: held notes, arpeggios wider than 50 ms and hand moves between groups are not handled. For a three-hand split (two players: the first plays bass and middle voice, the second player's right hand the top), run it after the split with `--three-hands`: only the left and second_right channels are reduced and right is left alone; when the split of those two hands still does not fit, they are reassigned to the fitting cut that moves the fewest notes. Four hands are not supported. The removal count and every removal (bar, beat, removed notes and the group) are updated in the source transcription `*_stats.txt`.
-
-Non-interactive:
-
-```bash
-python src/playable_reduction.py song_bpmfix_cleaned.mid
-python src/playable_reduction.py song_bpmfix_cleaned.mid --max-notes-per-hand 5 --max-span 14
-```
-
-### `trim_overlaps.command`
-
-Run after the hand split: shortens notes that the sustain pedal left overlapping within one hand, in place. Only note ends move; no notes are removed and no onsets change. Each hand (channel) is handled separately, and notes whose onsets are within 50 ms form one group.
-
-When pedal-based trimming limits are enabled, each proposed trim estimates where the note stops sounding from the pedal on the same channel (CC64 = 127 down, 0 up): a note-off while the pedal is down sounds until the next pedal release. The trim is accepted only if the sound ends at most 0.1 s earlier than before (`SUSTAIN_TOLERANCE_SECONDS`) and no same-pitch notes repeat or overlap; a pedal change on the same tick as a note end is counted in its least favourable order. Half-pedal values, other hold controls, and incomplete note pairing preserve the original ends on that channel. The panel defaults to off; the CLI defaults to on, with `--no-pedal-protection` bypassing these rejection checks while retaining the candidate rules. This does not guarantee identical sound across instruments or removal of every overlap. Hand splitting also maps compatible pedal controls; conflicting source pedal streams stop the split without saving that split.
-
-```text
-Fast figure (right and second right hand by default): 3 or more onset groups each within 0.5 beat of the previous; inside it every note ends by the next onset group of the same hand
-Harmony change: when the notes of one onset over all hands have 3 or more pitch classes, held MIDI notes of the hand whose pitch class is not among them end there
-Chord change: when a hand plays a new chord or octave (2 or more notes), held MIDI notes of its previous chord end there
-Out of reach: when held MIDI notes plus the new ones exceed 5 notes or span more than 14 semitones, the held notes end there
-Beat line: when a hand has an onset within 1/8 beat of a beat line, its MIDI notes held across that line end there; notes that started within 1/4 beat before the line are kept
-```
-
-The trim counts per rule and each hand's maximum simultaneous keys, before and after, are updated in the source transcription `*_stats.txt`. These rules estimate key-holding requirements from MIDI note intervals; they do not limit how many notes may keep sounding under the pedal. CC64 sustain tails are not added to the count. If the transcription has already extended note lengths for the pedal, the estimate can exceed the actual number of held keys.
-
-Non-interactive:
-
-```bash
-python src/trim_overlaps.py song_bpmfix_cleaned.mid
-python src/trim_overlaps.py song_bpmfix_cleaned.mid --fast-figure-hands right second_right left
-```
-
-`--fast-figure-hands` picks the hands that get the fast figure rule. The left hand is off by default because the rule also cuts bass notes held under a broken chord.
-
-### `midi_workbench.py`
-
-Aligns the first beat to a bar line from the notes, without the BPM fix, overwriting the chosen file (usually `song_bpmfix.mid`); when the first beat moves, key signatures are written again (`--no-key-signature` skips it). Command line only; set the first beat by hand in the main panel piano roll.
-
-```bash
-python src/midi_workbench.py song_bpmfix.mid
-```
-
-### `key_signature.command`
-
-Detects the key signature per 4-bar phrase and writes key signature events into the MIDI in place, so Logic score view changes key at modulations. The MIDI must be bar-aligned (after the BPM fix and first beat alignment).
-
-Method:
-
-```text
-1. Phrases of 4 bars start at the first full bar after any pickup (pickup notes count into the first phrase)
-2. For each phrase, count the notes that need accidentals under each of the 12 major key signatures (relative minors share them)
-3. Viterbi picks the path with the fewest accidentals; each key change costs 4 extra notes, and keys only change at phrase boundaries
-4. Only a phrase whose accidentals exceed 10% of its notes is checked bar by bar: it is split at the bar line, with the keys of it and its neighbouring phrases, that gives the fewest accidentals, so a key change can fall inside that phrase
-5. F# and Db are used for the 6- and 7-accidental enharmonic pairs
-```
-
-Existing key signature events are replaced. Each segment's key and accidental count is updated in the source transcription `*_stats.txt`. 4/4 is assumed.
-
-Non-interactive use:
-
-```bash
-python src/key_signature.py song_bpmfix_cleaned.mid
-```
-
-### `generate_chord_review.command`
-
-Work in progress: the output is not final. It is not part of the default pipeline; run it manually only when explicitly needed.
-
-Reads a processed MIDI and writes an English Markdown vertical chord chart. It does not modify the MIDI.
-
-Command:
-
-```bash
-python src/generate_chord_review.py input.mid
-```
-
-Default output:
-
-```text
-song_chord_review.md
-```
-
-Table columns:
-
-```text
-Bar
-Beat
-Chord
-Bass
-LH
-RH
-Range
-NoteCount
-```
-
-Each bar has 4 fixed rows. If multiple onset events appear inside the same beat, `Beat` and `Chord` are separated with `;`. Chord detection uses vendored Tonal.js and follows pianometer's `Tonal.Chord.detect(notes, { assumePerfectFifth: true })`; each event keeps up to the first 3 candidates. Undetected chords are written as `-`.
-
-### `note_text_review.py`
-
-Reads a bar-aligned MIDI and prints its notes as text, one onset group per line: bar, beat, then for each note from low to high its hand (`R` right, `R2` second right, `L2` second left, `L` left, `?` when not split), pitch name and length in beats. It does not modify the MIDI and is not part of the default flow; run it by hand when checking hand split, key signatures and similar. Assumes 4/4.
-
-```bash
-python src/note_text_review.py song_bpmfix_cleaned.mid --bars 95-97
-python src/note_text_review.py song_bpmfix_cleaned.mid -o song_notes.txt
-```
-
-Example output:
-
-```text
-m96 beat 2.51  LA#3(0.99b) LC#4(1.22b) RG#4(1.00b)
-```
-
-### `pianoroll_snapshot.command`
-
-Saves piano roll PNGs of a bar-aligned MIDI, four bars per image, without modifying the MIDI. Colors mark the hand: blue = right, amber = second right, purple = second left, green = left. Each image's pitch range follows the notes in its four bars.
-
-```text
-landscape: four bars in one row, 1920 wide
-portrait: landscape image rotated 90 degrees clockwise, with four continuous bars running downward, for phones
-```
-
-Choose one orientation per export. Images are written to `<MIDI name>_pianoroll/` next to the MIDI (ignored by git). The standalone script defaults to landscape; the panel defaults to no image export.
-
-```bash
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid
-python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --bars 17-32 --layout portrait -o out_dir
-```
-
-## Python Entrypoints
-
-Python scripts used by the `.command` launchers:
-
-```text
-src/transcribe.py
-src/transcribe_mps.py
-postprocess.py
-postprocess_panel.py
-first_beat.py
-pianoroll_canvas.py
-bpmfix.py
-midi_stats_command.py
-clean_midi_rules.py
-hand_split_channels.py
-playable_reduction.py
-trim_overlaps.py
-midi_workbench.py
-key_signature.py
-generate_chord_review.py
-note_text_review.py
-pianoroll_snapshot.py
-```
-
-Shared helpers:
-
-```text
-bpmfix_utils.py
-midi_playback.py
-midi_stats.py
-detect_chords_tonal.js
-vendor/tonal.min.js
-```
-
-`hand_split_channels.py` also provides note reading, onset grouping and the channel mapping to the other tools.
-
-## Dependencies
-
-All `.command` launchers and BPM detection share one user-level Python environment (tkinter is required; with Homebrew use `python@3.11` plus `python-tk@3.11`):
-
-```text
-$HOME/.local/share/piano-midi-cleanup-env
-```
-
-If that environment is missing, the launchers fall back to `./.venv` and then system Python.
-
-Create the environment (Intel Mac pins: the last PyTorch for macOS x86_64 is 2.2.2, which needs `numpy<2`; newer numba / llvmlite have no x86_64 wheels):
+Apple Silicon does not need the old Intel package pins. Install current versions:
 
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
 ```
+
+Automatic BPM detection on Apple Silicon uses Python Essentia. Node.js is only needed for the chord track.
+
+</details>
+
+<details>
+<summary><strong>Intel Mac (x86_64) setup</strong></summary>
+
+Intel Macs use the last PyTorch release for macOS x86_64, so the versions must stay pinned. `numpy` must stay below 2, and `numba`, `llvmlite` and `essentia` use the versions below:
 
 ```bash
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow sounddevice
+python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5"
 ```
 
-`pianoroll_snapshot.py` draws with Pillow.
+Do not upgrade only `torch` or `numpy`; the Intel environment may stop working.
 
-ffmpeg must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
+</details>
 
-Tonal.js chord detection and Windows automatic BPM detection require Node.js. The launcher searches `PATH` and common Node locations; `PIANO_MIDI_CLEANUP_NODE` can override it. On this setup Node lives in `$HOME/.local/share/node-<version>-darwin-x64` and is exposed on PATH through a `$HOME/.local/bin/node` link.
+## Launching the GUI
 
-Realtime piano roll playback uses Coopiano with `sounddevice`; external MIDI output uses `python-rtmidi` (both are included in the install command). The Windows x64 native synth DLL and a universal macOS dylib (Intel and Apple Silicon) are included. On Linux, run `make playback` in `sound_sources/coopiano` first. See [sound_sources/README.md](sound_sources/README.md) for source, license and build details.
+### Windows
 
-Vendored JS:
+Double-click `windows\create_shortcut.cmd`. It creates `Piano MIDI Cleanup.lnk` in the project root and opens the panel with `pythonw.exe`, without a console window. You can copy the shortcut to the Desktop or Start menu.
 
-```text
-vendor/tonal.min.js
-vendor/essentia-wasm.umd.js
-vendor/essentia.js-core.umd.js
-```
-
-Tonal.js names chords; `src/chord_inference.py` is modified from Magenta note-seq's chord inference (Apache-2.0); essentia.js (WebAssembly) is used for automatic BPM detection. The licenses are `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`.
-
-Default model checkpoint path:
-
-```text
-$HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
-```
-
-On the first transcription, a missing or incomplete checkpoint is downloaded from Zenodo with urllib, verified against its size and Content-Length, and atomically replaced only when complete; on failure the old file is kept and the temporary file removed. The MPS entrypoint shares the same download logic and wget is not needed.
-
-Overridable environment variables:
-
-```text
-PIANO_MIDI_CLEANUP_BPM_ENV
-PIANO_MIDI_CLEANUP_BPM_PYTHON
-```
-
-## Windows
-
-Tools have a matching `.cmd` launcher in the `windows/` folder (for example `windows/transcribe.cmd`; the command-line-only `bpmfix.py` and `midi_workbench.py` have none), and macOS launchers are located in the `macos/` folder (for example `macos/transcribe.command`). Double-click it, or run it from PowerShell. The launcher changes to its own folder, sets `PYTHONUTF8=1`, and looks for Python in this order:
-
-```text
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe
-.venv\Scripts\python.exe
-py -3.11
-python on PATH
-```
-
-If none is found it prints a message and pauses. Every Python CLI also works directly from PowerShell, for example `python src/bpmfix.py song.mid --bpm 135`.
-
-Create the shared Python 3.11 environment:
+If the shortcut fails to start, open cmd in the project folder and run this command to see the full error:
 
 ```bat
-py -3.11 -m venv %USERPROFILE%\.local\share\piano-midi-cleanup-env
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe -m pip install mido librosa piano_transcription_inference python-rtmidi pillow sounddevice
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess_panel.py
 ```
 
-For an NVIDIA GPU, replace the first pip line with the current CUDA wheel index from PyTorch (for example `--index-url https://download.pytorch.org/whl/cu126`). Essentia has no Windows wheels, so it is not installed; automatic BPM detection uses the vendored essentia.js (WebAssembly) instead and requires Node.js. Because audio decoding and resampling differ, results may differ slightly from the Python Essentia build.
+### macOS
 
-`ffmpeg` must be on PATH (librosa uses it to read m4a / mp3 and similar formats).
+Double-click `macos/create_app.command`. It creates `Piano MIDI Cleanup.app` in the project root; drag it to the Dock or `/Applications`. If the app fails to start, it shows a dialog and writes details to `~/Library/Logs/Piano MIDI Cleanup/panel.log`.
 
-Realtime piano roll playback defaults to Coopiano and needs no VST, virtual MIDI cable or external player. GS and other existing MIDI ports remain selectable. The Windows realtime integration and DLL are included. Coopiano uses the OS default output device and its sample rate; an RDP session must have an available playback device. Systematic GUI/RDP playback validation remains outstanding; a successful build is not evidence of listening quality. Node.js is found on PATH or in `%ProgramFiles%\nodejs`; `PIANO_MIDI_CLEANUP_NODE` overrides it. Both automatic BPM detection and chord detection need it.
+Without the app, double-click `macos/postprocess_panel.command`, or run:
 
-Not available on Windows:
-
-```text
-transcribe_mps.command / src/transcribe_mps.py (Apple MPS)
+```bash
+~/.local/share/piano-midi-cleanup-env/bin/python src/postprocess_panel.py
 ```
 
-## Notes
+## Everyday workflow
 
-- `src/transcribe.py` tries CUDA, then CPU.
-- `src/transcribe_mps.py` tries MPS, then CUDA, then CPU; on Apple Silicon with PyTorch MPS available, it uses Apple GPU.
-- BPM fixing assumes a fixed BPM and does not build a tempo map.
-- Bars always assume 4/4; 3/4 and other meters are not supported yet. Key signatures are written as major keys; minor keys appear as their relative major.
-- Rule cleanup is conservative preprocessing. More complex decisions should be handled by later feature extraction or ML/classifier workflows.
+### You already have MIDI
+
+1. Open the GUI and choose `song.mid` or any MIDI you want to process.
+2. Choose the tempo source:
+   - **Set tempo (BPM)**: enter the song's known tempo. **Choose the file first, then enter the BPM**; changing the file clears the BPM field.
+   - **Detect tempo from audio**: choose the source audio to estimate its tempo.
+   - **Keep corrected tempo**: use an existing `song_bpmfix.mid` for this song, including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
+3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
+4. On success, `song_bpmfix_cleaned.mid` is the complete post-processed result. With manual BPM or audio detection, the piano-roll preview stays on `song_bpmfix.mid`; it does **not** automatically switch to the cleaned file. When keeping corrected tempo, the current display stays as it is. Select `song_bpmfix_cleaned.mid` in the file field to inspect it, or import that MIDI into notation software to prepare a score.
+5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
+
+### Start from piano audio
+
+1. Make sure the audio is solo piano or an already-separated piano part.
+2. Windows: double-click `windows\transcribe.cmd`. macOS: double-click `macos/transcribe.command`. Both open a file dialog and accept one or more audio files. `src/transcribe.py` currently also uses a file dialog; there is **no** headless audio command line.
+3. The first transcription downloads a model of about **165 MB** with Python; `wget` is not needed. A failed download keeps the old file, and you can retry.
+4. Transcription writes `song.mid`, `song_stats.txt`, `song_bpmfix.mid` and `song_bpmfix_cleaned.mid` next to the audio. This step only fixes the BPM, runs rule cleanup and does a provisional two-hand split; it does **not** align the first beat, write key signatures or trim overlaps.
+5. Return to the GUI, select the generated `song_bpmfix_cleaned.mid`, and check and save the first beat in the roll; this also writes key signatures. To adjust cleanup, hand count or trimming afterward, select **Keep corrected tempo** and process again.
+
+If `song.mid` already exists, the transcription entrypoint does not transcribe again; it only fills in missing stats and post-processing files.
+
+### First beat, preview and reruns
+
+- The roll shows the file you selected, or a preview file explicitly produced by the current action. It does not automatically prefer the cleaned file.
+- **When the cleaned file is shown**, **Save first beat** updates both the song's `song_bpmfix.mid` and the shown `song_bpmfix_cleaned.mid`, rewrites key signatures on both, shifts the change overlay, and then switches the preview to `song_bpmfix.mid`.
+- **When the original `song.mid` is shown**, **Save first beat** creates or replaces the song's `song_bpmfix.mid` and **does not edit the original**, then switches the preview to `song_bpmfix.mid`.
+- If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching `song_bpmfix.mid` must exist before the first beat can be edited.
+- On later runs, choose **Keep corrected tempo** to retain manual alignment. Recomputing from the original `song.mid` with automatic first-beat alignment can replace it.
+- Every run rebuilds and overwrites `song_bpmfix_cleaned.mid` from `song_bpmfix.mid`. Keep the source audio, `song.mid` and `song_bpmfix.mid`; do not keep only the cleaned file.
+
+## Output files
+
+| File | Contents | Notes |
+|:---|:---|:---|
+| `song.mid` | Original transcribed MIDI | Avoid editing it directly |
+| `song_stats.txt` | Statistics and run record | Each processing block is updated |
+| `song_bpmfix.mid` | MIDI after the BPM fix; first beat and key signatures can be written here | Rebuild source; manual first beat is saved here |
+| `song_bpmfix_cleaned.mid` | Final MIDI after rule cleanup, hand split and optional trim | Overwritten on every run |
+| `song_bpmfix_cleaned.changes.json` | Data for the roll's change overlay | Tied to the same cleaned file |
+| `*.chords.json` | Chord-analysis cache for a viewed MIDI | Matched by MIDI content and analysis version |
+| `song_bpmfix_cleaned_pianoroll/` | Piano roll PNGs | Created only when snapshots are enabled |
+
+Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt` next to the input.
+
+## Common problems and limitations
+
+- **Python not found**: the launcher tries the shared environment, the project `.venv`, `py -3.11` and Python on `PATH`. Confirm Python 3.11 and tkinter are installed, then rebuild the environment.
+- **tkinter fails to load**: use the python.org build on Windows; on macOS Homebrew, install `python-tk@3.11`.
+- **m4a / mp3 will not load**: install ffmpeg and make sure the `ffmpeg` command is on `PATH`.
+- **The chord track is empty**: Node.js is required on both macOS and Windows. Without Node.js only chord display is affected; on Windows automatic BPM also becomes unavailable.
+- **First transcription is slow or the download fails**: the model is about 165 MB and is downloaded with Python, not `wget`. Retry on an unstable connection.
+- **BPM is detected at half or double speed**: enter the correct value with **Set tempo (BPM)**. Changing the file clears the field, so choose the file first.
+- **The first beat is wrong**: adjust it by ±1 beat in the roll and save. Syncopated bass, an intro without bass, or 3/4 can confuse the estimate.
+- **The cleaned file is not shown after processing**: this is expected. After manual BPM or audio processing the preview is `song_bpmfix.mid`; select `song_bpmfix_cleaned.mid` yourself.
+- **My manual first beat disappeared after a rerun**: choose **Keep corrected tempo** next time instead of recomputing automatic alignment from the original.
+- **Playback is not export**: roll playback is realtime monitoring only. The tool does not write WAV, MP3 or other audio files.
+- **Built-in sound**: Coopiano is a physical-modeling instrument, so no piano samples are downloaded. Playback uses the OS default audio device; a Windows Remote Desktop session must have a usable playback device.
+- **Playback environments**: native synth libraries ship for Windows x64 and macOS; systematic playback validation across platforms and Remote Desktop sessions remains outstanding.
+- **4/4 and one tempo only**: tempo changes, free tempo and 3/4 will make bar lines drift.
+- **Not a finished score**: the output is still MIDI, not engraved notation or MusicXML. Wrong and missing notes still need human review.
+- **Three and four hands**: splitting supports 2 to 4 hands. Playable reduction handles every note with two hands; with three hands it must run after the split, and only the first player's left and second_right are reduced while the top right is left alone. Four-hand splitting is supported, but playable reduction is not.
+- **Different trim defaults**: the GUI's pedal-aware trim protection is **off** by default; the command line defaults to **on** and can disable it with `--no-pedal-protection`.
+
+## Advanced docs and command line
+
+The [design specification](docs/spec/README.md) documents every rule, threshold and known limit (Traditional Chinese). Current issues are in [open issues](docs/open-issues.md), and cleanup details are in [cleaning rules](docs/cleaning-rules.md).
+
+Run these examples in the project folder. On macOS, first activate the shared environment where the packages were installed:
+
+```bash
+. "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
+python src/postprocess.py song.mid --audio song.flac
+python src/postprocess.py song.mid --bpm 135 --hands 3
+python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+python src/postprocess.py --list-parameters
+```
+
+On Windows, skip the activation command above and call the shared environment's `python.exe` directly in cmd, quoting its path:
+
+```bat
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess.py song.mid --bpm 135
+```
+
+`windows\*.cmd` and `macos/*.command` are double-clickable standalone tools. `bpmfix.py` and `midi_workbench.py` are command-line only and have no double-click entry. See the [runner and tools specification](docs/spec/08-runner-and-tools.md) for the full tool and option map.
+
+## License and attribution
+
+Copyright (c) 2026 hibikiwtnb and contributors.
+
+Original project code is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`); see [LICENSE](LICENSE). Commercial use is permitted. Distribution requires providing the Corresponding Source under the license terms, and modified versions that interact with users over a network must offer access to their Corresponding Source as required by section 13. The software comes without warranty.
+
+Transcription uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0). Bundled third-party components, including the Coopiano piano sound, Tonal.js chord naming, note-seq chord inference and Essentia.js for Windows automatic BPM, retain their own licenses. See [sound_sources/README.md](sound_sources/README.md), `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`. This is a personal project, not affiliated with ByteDance.
