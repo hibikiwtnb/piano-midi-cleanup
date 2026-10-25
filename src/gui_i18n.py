@@ -82,7 +82,7 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
-        'About': '關於', 'Version: {} (development build)': '版本：{}（開發版）',
+        'About': '關於', 'Version: {}': '版本：{}',
         'Prepare piano transcription MIDI for reading and editing.': '將鋼琴轉譜 MIDI 整理成更容易閱讀、編輯的版本。',
         'Project home': '專案首頁', 'Report an issue': '問題回報',
         'Bundled open-source components': '隨程式附帶的開源元件',
@@ -239,7 +239,7 @@ _TEXT = {
         'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
-        'About': '关于', 'Version: {} (development build)': '版本：{}（开发版）',
+        'About': '关于', 'Version: {}': '版本：{}',
         'Prepare piano transcription MIDI for reading and editing.': '将钢琴转谱 MIDI 整理成更容易阅读、编辑的版本。',
         'Project home': '项目首页', 'Report an issue': '问题反馈',
         'Bundled open-source components': '随程序附带的开源组件',

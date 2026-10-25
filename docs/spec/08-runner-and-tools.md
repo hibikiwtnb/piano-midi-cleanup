@@ -72,7 +72,7 @@
 
 `src/coopiano_output.py` 在背景初始化 Coopiano，按需準備擊弦資料，透過原生橋接與 sounddevice 輸出；初始化完成前不開始播放時鐘。停止或切換輸出會清除內建音源的延音。Windows x64 DLL 與 macOS 通用庫已附帶，Linux 需本機建置；建置與授權詳見 `sound_sources/README.md`。RDP 需有可用的系統播放裝置，不能把編譯成功視為已驗證聽感。
 
-「關於」分頁位於詳細報告右側，提供版本、專案首頁、問題回報、AGPLv3 授權全文，以及 Coopiano、Tonal.js、note-seq、Essentia.js 的來源和本地授權全文。`src/app_info.py` 統一保存名稱、版本、授權及元件資訊；目前為 `0.1.0.dev0` 開發版。本專案原創程式碼採用 `AGPL-3.0-only`，第三方元件保留原有授權。
+「關於」分頁位於詳細報告右側，提供版本、專案首頁、問題回報、AGPLv3 授權全文，以及 Coopiano、Tonal.js、note-seq、Essentia.js 的來源和本地授權全文。`src/app_info.py` 統一保存名稱、版本、授權及元件資訊；目前為 `1.0.0`，分頁顯示 `Version: {}`。本專案原創程式碼採用 `AGPL-3.0-only`，第三方元件保留原有授權。
 
 ## 報告
 

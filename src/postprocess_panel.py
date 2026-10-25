@@ -280,7 +280,7 @@ class Panel:
         title_font.configure(size=16, weight='bold')
         self.about_title_font = title_font
         ttk.Label(content, text=APP_NAME, font=title_font).grid(row=0, column=0, columnspan=3, sticky='w')
-        ttk.Label(content, text=tr('Version: {} (development build)').format(VERSION)).grid(
+        ttk.Label(content, text=tr('Version: {}').format(VERSION)).grid(
             row=1, column=0, columnspan=3, sticky='w', pady=(4, 12))
         ttk.Label(content, text=tr('Prepare piano transcription MIDI for reading and editing.')).grid(
             row=2, column=0, columnspan=3, sticky='w')
