@@ -2,7 +2,7 @@
 
 ## 目的
 
-把每顆音分配給一隻手，以 MIDI channel 標記，讓樂譜軟體分上下兩譜表，並讓截斷可以按手處理。支援二到四隻手。
+把每顆音分配給一隻手，以 MIDI channel 標記，讓樂譜軟體依手別分譜表，並讓截斷可以按手處理。支援二到四隻手；實際譜表配置需在樂譜軟體中設定。
 
 程式：`src/hand_split_channels.py`。直接覆寫 `song_bpmfix_cleaned.mid`。
 

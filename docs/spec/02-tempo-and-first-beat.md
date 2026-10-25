@@ -13,7 +13,7 @@
 ### BPM 來源
 
 - **手動指定**：使用者給定 BPM，直接採用（四捨五入到小數 2 位）。
-- **從音訊偵測**：Essentia `RhythmExtractor2013(method='multifeature')`。macOS／Linux 用另一個 Python 環境執行（`PIANO_MIDI_CLEANUP_BPM_ENV`），Windows 用 essentia.js 經 Node 執行。
+- **從音訊偵測**：Essentia `RhythmExtractor2013(method='multifeature')`。macOS／Linux 以共用環境的 Python 子程序執行，預設環境同 `~/.local/share/piano-midi-cleanup-env`，可用 `PIANO_MIDI_CLEANUP_BPM_ENV`／`PIANO_MIDI_CLEANUP_BPM_PYTHON` 指定其他環境；Windows 用 essentia.js 經 Node 執行。
 
 偵測後的修正：
 
@@ -47,9 +47,13 @@
 
 ### 手動調整
 
-主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。儲存時寫入同一首的 `song_bpmfix.mid` 並重寫調號；顯示的是 `song_bpmfix_cleaned.mid` 時，它也以同一個位移量與調號改寫，修改痕跡紀錄跟著平移，不必重新處理。顯示的檔案是 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 且找得到對應的 `song_bpmfix.mid` 時才能調整。
+主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。捲簾顯示目前選取的檔案或明確產生的預覽檔，不會自動改用 `song_bpmfix_cleaned.mid`。
 
-是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
+- 顯示原始 `song.mid` 時儲存：建立或覆寫同曲的 `song_bpmfix.mid`，不修改原檔，儲存後預覽切到 `song_bpmfix.mid`。
+- 顯示 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 時儲存：寫入 `song_bpmfix.mid` 並重寫調號；顯示的是 cleaned 時，它也以同一個位移量與調號改寫，修改痕跡紀錄跟著平移，不必重新處理；儲存後預覽切到 `song_bpmfix.mid`。
+- 檔名以 `_bpmfix` 或 `_bpmfix_cleaned` 結尾時，對應的 `song_bpmfix.mid` 必須存在才能調整。
+
+之後重跑時選「沿用 `song_bpmfix.mid`」可保留手動對齊；若從原始 `song.mid` 重算並執行自動第一拍，手動結果可能被取代。是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
 
 ## 報告
 

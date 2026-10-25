@@ -15,7 +15,7 @@
 
 ### 重建語義
 
-- 不給 `--bpm`／`--audio` 時沿用現有的 `song_bpmfix.mid`。
+- 不給 `--bpm`／`--audio` 時沿用現有的 `song_bpmfix.mid`；重跑時要保留手動第一拍，應使用這個方式。若從原始 `song.mid` 以 `--bpm`／`--audio` 重算並執行自動第一拍，可能覆蓋手動對齊。
 - 每次都從 `song_bpmfix.mid` 重新產生 `song_bpmfix_cleaned.mid`；關閉清理時直接複製。改設定重跑不會疊加前次結果，也不會多出 MIDI。
 - 輸入可以是同一首的 `song.mid`、`song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid`。
 
@@ -47,13 +47,13 @@
 
 | 項目 | 內容 |
 |---|---|
-| 載入 | 優先顯示同曲的 `song_bpmfix_cleaned.mid`，尚無處理結果時才顯示選取的輸入檔；切換到此頁或檔案變更時重載，同一檔重載保留捲動與縮放，新曲依可見音域置中 |
+| 載入 | 顯示目前選取的檔案；手動第一拍儲存或手動 BPM／音訊處理成功後，預覽改為 `song_bpmfix.mid`，沿用來源時維持目前預覽。不會自動改用 `song_bpmfix_cleaned.mid`；切換到此頁或檔案變更時重載，同一檔重載保留捲動與縮放，新曲依可見音域置中 |
 | 音符 | 依聲道上色：右手藍、第二右手橙、第二左手紫、左手綠（與 `pianoroll_snapshot.py` 共用顏色）；深淺表示力度，可關閉 |
 | 軸 | 上方小節號，首次調號與轉調處標示 `Key=C Major`／`Key=A minor`；左側音名，網格為小節、拍、十六分音符 |
 | 和弦 | 小節尺下方的和弦軌，工具列可收起；背景分析，不改寫 MIDI；滑鼠提示其他讀法、低音與組成音 |
 | 踏板 | 底部畫 CC64 踩下的區間；各手踏板相同時合併為一列 |
 | 播放 | 單一播放／暫停按鈕；預設由 Coopiano 合成至系統預設音訊輸出，仍可選本機 MIDI 埠；可依手靜音，順序為左手、右手、第二左手、第二右手；處理開始前停止播放，輸出選擇保存於面板設定 |
-| 第一拍 | 速度與第一拍位置的網格即時預覽；儲存寫入 `song_bpmfix.mid` 與顯示中的 `song_bpmfix_cleaned.mid`，並重寫調號（第 2 章） |
+| 第一拍 | 速度與第一拍位置的網格即時預覽；顯示 cleaned 時儲存會同時寫入 `song_bpmfix.mid` 與顯示中的 cleaned、重寫調號並平移修改痕跡；顯示原始 MIDI 時建立或覆寫 `song_bpmfix.mid`，不改原檔；儲存後預覽切到 bpmfix。`_bpmfix`／`_bpmfix_cleaned` 檔須有對應的 `song_bpmfix.mid` 才能編輯（第 2 章） |
 | 操作 | 點擊定位；焦點在卷簾時空白鍵播放／暫停；切換分頁不自動聚焦輸入框；Ctrl／Alt + 滾輪縮放，Shift + 滾輪水平捲動 |
 | 提示 | 所有音符懸停時，底部狀態欄顯示音名與力度；刪除／截短理由另用滑鼠提示框，現有理由只記錄處理環節 |
 
@@ -67,7 +67,7 @@
 
 ### 和弦分析
 
-`src/chord_analysis.py` 以半拍為格累計音級發聲長度，納入低音與踏板延音，再由移植自 Magenta note-seq 的 `src/chord_inference.py` 以 HMM／Viterbi 推斷和弦段落。段落由 Tonal.js 命名；弱起不標和弦，低音非根音時可顯示轉位。需要 Node.js，缺少時在和弦軌提示，其他功能照常。分析在背景執行，依檔案與修改時間快取；結果只供檢視，未接入刪音規則。
+`src/chord_analysis.py` 以半拍為格累計音級發聲長度，納入低音與踏板延音，再由移植自 Magenta note-seq 的 `src/chord_inference.py` 以 HMM／Viterbi 推斷和弦段落。段落由 Tonal.js 命名；弱起不標和弦，低音非根音時可顯示轉位。需要 Node.js，缺少時在和弦軌提示，其他功能照常。分析在背景執行，結果存成 MIDI 旁的 `.chords.json`，以 MIDI 內容的 SHA-256 與分析版本（`CHORD_CACHE_VERSION`）比對；卷簾另以檔案路徑與修改時間做記憶體中的快速檢查。結果只供檢視，未接入刪音規則。
 
 ### 音源與關於
 
