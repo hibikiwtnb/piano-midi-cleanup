@@ -1,8 +1,10 @@
 import argparse
+import filecmp
 import math
 import os
 import shutil
 import sys
+import tempfile
 from collections import namedtuple
 
 import clean_midi_rules
@@ -151,10 +153,28 @@ def plan_steps(args):
 
 
 def run_postprocess(args):
+    """Publish the new report only after every requested step succeeds."""
+    stats_path = stats_path_for(source_midi_path(args.input_midi))
+    descriptor, staged_path = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(stats_path)),
+                                              prefix='.' + os.path.basename(stats_path) + '.', suffix='.tmp')
+    os.close(descriptor)
+    try:
+        if os.path.isfile(stats_path):
+            shutil.copyfile(stats_path, staged_path)
+        result = _run_postprocess(args, staged_path)
+        if not os.path.isfile(stats_path) or not filecmp.cmp(staged_path, stats_path, shallow=False):
+            os.replace(staged_path, stats_path)
+        print('Report saved: {}'.format(stats_path))
+        return result
+    finally:
+        if os.path.exists(staged_path):
+            os.unlink(staged_path)
+
+
+def _run_postprocess(args, stats_path):
     source_path = source_midi_path(args.input_midi)
     bpmfix_path = bpmfix_path_for(source_path)
     cleaned_path = cleaned_path_for(bpmfix_path)
-    stats_path = stats_path_for(source_path)
     steps = plan_steps(args)
     names = [name for name, _ in steps]
     overrides = apply_parameters(args.settings)
@@ -162,7 +182,7 @@ def run_postprocess(args):
     if 'bpmfix' in names:
         if not os.path.isfile(source_path):
             raise ValueError('Source MIDI does not exist: {}'.format(source_path))
-        write_midi_stats(source_path, reset_report=True)
+        write_midi_stats(source_path, reset_report=True, report_path=stats_path)
     else:
         if not os.path.isfile(bpmfix_path):
             raise ValueError('No BPM-fixed MIDI to reuse; give --bpm or --audio: {}'.format(bpmfix_path))

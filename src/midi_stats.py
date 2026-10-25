@@ -139,10 +139,10 @@ def format_stats(stats):
     ])
 
 
-def write_midi_stats(midi_path, reset_report=False):
+def write_midi_stats(midi_path, reset_report=False, report_path=None):
     stats = analyze_midi(midi_path)
     report = format_stats(stats)
-    output_path = stats_path_for(midi_path)
+    output_path = report_path or stats_path_for(midi_path)
 
     update_report(output_path, report, replace=reset_report)
 
