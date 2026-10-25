@@ -120,13 +120,13 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 
 ### You already have MIDI
 
-1. Open the GUI and choose `song.mid` or any MIDI you want to process.
+1. Open the GUI and choose any MIDI file you want to process. Keep its existing filename.
 2. Choose the tempo source:
    - **Set tempo (BPM)**: enter the song's known tempo. **Choose the file first, then enter the BPM**; changing the file clears the BPM field.
    - **Detect tempo from audio**: choose the source audio to estimate its tempo.
-   - **Keep corrected tempo**: use an existing `song_bpmfix.mid` for this song, including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
+   - **Keep corrected tempo**: use an existing tempo-corrected file (`*_bpmfix.mid`), including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
 3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
-4. On success, `song_bpmfix_cleaned.mid` is the complete post-processed result. With manual BPM or audio detection, the piano-roll preview stays on `song_bpmfix.mid`; it does **not** automatically switch to the cleaned file. When keeping corrected tempo, the current display stays as it is. Select `song_bpmfix_cleaned.mid` in the file field to inspect it, or import that MIDI into notation software to prepare a score.
+4. On success, the MIDI whose name ends in `_bpmfix_cleaned.mid` is the complete result. With manual BPM or audio detection, the roll previews the tempo-corrected file; it does **not** automatically switch to the processed result. When keeping corrected tempo, the current display stays as it is. Select the processed result in the file field to inspect it, or import that MIDI into notation software to prepare a score.
 5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
 
 ### Start from piano audio
@@ -134,31 +134,33 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 1. Make sure the audio is solo piano or an already-separated piano part.
 2. Windows: double-click `windows\transcribe.cmd`. macOS: double-click `macos/transcribe.command`. Both open a file dialog and accept one or more audio files. `src/transcribe.py` currently also uses a file dialog; there is **no** headless audio command line.
 3. The first transcription downloads a model of about **165 MB** with Python; `wget` is not needed. A failed download keeps the old file, and you can retry.
-4. Transcription writes `song.mid`, `song_stats.txt`, `song_bpmfix.mid` and `song_bpmfix_cleaned.mid` next to the audio. This step only fixes the BPM, runs rule cleanup and does a provisional two-hand split; it does **not** align the first beat, write key signatures or trim overlaps.
-5. Return to the GUI, select the generated `song_bpmfix_cleaned.mid`, and check and save the first beat in the roll; this also writes key signatures. To adjust cleanup, hand count or trimming afterward, select **Keep corrected tempo** and process again.
+4. Transcription writes the original MIDI, report, tempo-corrected MIDI and processed result next to the audio, using its filename as the base (see the table below). This step only fixes the BPM, runs rule cleanup and does a provisional two-hand split; it does **not** align the first beat, write key signatures or trim overlaps.
+5. Return to the GUI, select the processed result, and check and save the first beat in the roll; this also writes key signatures. To adjust cleanup, hand count or trimming afterward, select **Keep corrected tempo** and process again.
 
-If `song.mid` already exists, the transcription entrypoint does not transcribe again; it only fills in missing stats and post-processing files.
+If the original MIDI with the audio's base name already exists, the transcription entrypoint only fills in missing stats and post-processing files instead of transcribing again.
 
 ### First beat, preview and reruns
 
 - The roll shows the file you selected, or a preview file explicitly produced by the current action. It does not automatically prefer the cleaned file.
-- **When the cleaned file is shown**, **Save first beat** updates both the song's `song_bpmfix.mid` and the shown `song_bpmfix_cleaned.mid`, rewrites key signatures on both, shifts the change overlay, and then switches the preview to `song_bpmfix.mid`.
-- **When the original `song.mid` is shown**, **Save first beat** creates or replaces the song's `song_bpmfix.mid` and **does not edit the original**, then switches the preview to `song_bpmfix.mid`.
-- If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching `song_bpmfix.mid` must exist before the first beat can be edited.
-- On later runs, choose **Keep corrected tempo** to retain manual alignment. Recomputing from the original `song.mid` with automatic first-beat alignment can replace it.
-- Every run rebuilds and overwrites `song_bpmfix_cleaned.mid` from `song_bpmfix.mid`. Keep the source audio, `song.mid` and `song_bpmfix.mid`; do not keep only the cleaned file.
+- **When the processed result is shown**, **Save first beat** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and then previews the tempo-corrected file.
+- **When the original MIDI is shown**, **Save first beat** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
+- If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
+- On later runs, choose **Keep corrected tempo** to retain manual alignment. Recomputing from the original MIDI with automatic first-beat alignment can replace it.
+- Every run rebuilds and overwrites the processed result from the tempo-corrected file. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.
 
 ## Output files
 
+Here, `*` stands for your original base filename. Actual outputs keep that name; you do not need to rename files.
+
 | File | Contents | Notes |
 |:---|:---|:---|
-| `song.mid` | Original transcribed MIDI | Avoid editing it directly |
-| `song_stats.txt` | Statistics and run record | Each processing block is updated |
-| `song_bpmfix.mid` | MIDI after the BPM fix; first beat and key signatures can be written here | Rebuild source; manual first beat is saved here |
-| `song_bpmfix_cleaned.mid` | Final MIDI after rule cleanup, hand split and optional trim | Overwritten on every run |
-| `song_bpmfix_cleaned.changes.json` | Data for the roll's change overlay | Tied to the same cleaned file |
+| `*.mid` | Original transcribed MIDI | Avoid editing it directly |
+| `*_stats.txt` | Statistics and run record | Each processing block is updated |
+| `*_bpmfix.mid` | Tempo-corrected MIDI; first beat and key signatures can be written here | Rebuild source; manual first beat is saved here |
+| `*_bpmfix_cleaned.mid` | Processed result after rule cleanup, hand split and optional trim | Overwritten on every run |
+| `*_bpmfix_cleaned.changes.json` | Data for the roll's change overlay | Tied to the same result |
 | `*.chords.json` | Chord-analysis cache for a viewed MIDI | Matched by MIDI content and analysis version |
-| `song_bpmfix_cleaned_pianoroll/` | Piano roll PNGs | Created only when snapshots are enabled |
+| `*_bpmfix_cleaned_pianoroll/` | Piano roll PNGs | Created only when snapshots are enabled |
 
 Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt` next to the input.
 
@@ -171,7 +173,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **First transcription is slow or the download fails**: the model is about 165 MB and is downloaded with Python, not `wget`. Retry on an unstable connection.
 - **BPM is detected at half or double speed**: enter the correct value with **Set tempo (BPM)**. Changing the file clears the field, so choose the file first.
 - **The first beat is wrong**: adjust it by ±1 beat in the roll and save. Syncopated bass, an intro without bass, or 3/4 can confuse the estimate.
-- **The cleaned file is not shown after processing**: this is expected. After manual BPM or audio processing the preview is `song_bpmfix.mid`; select `song_bpmfix_cleaned.mid` yourself.
+- **The result is not shown after processing**: manual BPM or audio processing previews the tempo-corrected file. Select the processed result whose name ends in `_bpmfix_cleaned.mid` in the file field.
 - **My manual first beat disappeared after a rerun**: choose **Keep corrected tempo** next time instead of recomputing automatic alignment from the original.
 - **Playback is not export**: roll playback is realtime monitoring only. The tool does not write WAV, MP3 or other audio files.
 - **Built-in sound**: Coopiano is a physical-modeling instrument, so no piano samples are downloaded. Playback uses the OS default audio device; a Windows Remote Desktop session must have a usable playback device.
@@ -185,20 +187,20 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 
 The [design specification](docs/spec/README.md) documents every rule, threshold and known limit (Traditional Chinese). Current issues are in [open issues](docs/open-issues.md), and cleanup details are in [cleaning rules](docs/cleaning-rules.md).
 
-Run these examples in the project folder. On macOS, first activate the shared environment where the packages were installed:
+In these examples, `input.mid` and `input.flac` stand for your own files; replace them with actual paths, not the table's `*` patterns. Run the commands in the project folder. On macOS, first activate the shared environment where the packages were installed:
 
 ```bash
 . "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
-python src/postprocess.py song.mid --audio song.flac
-python src/postprocess.py song.mid --bpm 135 --hands 3
-python src/postprocess.py song_bpmfix_cleaned.mid --playable --snapshot portrait
+python src/postprocess.py "input.mid" --audio "input.flac"
+python src/postprocess.py "input.mid" --bpm 135 --hands 3
+python src/postprocess.py "input_bpmfix_cleaned.mid" --playable --snapshot portrait
 python src/postprocess.py --list-parameters
 ```
 
 On Windows, skip the activation command above and call the shared environment's `python.exe` directly in cmd, quoting its path:
 
 ```bat
-"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess.py song.mid --bpm 135
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" src\postprocess.py "input.mid" --bpm 135
 ```
 
 `windows\*.cmd` and `macos/*.command` are double-clickable standalone tools. `bpmfix.py` and `midi_workbench.py` are command-line only and have no double-click entry. See the [runner and tools specification](docs/spec/08-runner-and-tools.md) for the full tool and option map.
