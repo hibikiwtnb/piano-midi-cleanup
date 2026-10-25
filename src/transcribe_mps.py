@@ -11,6 +11,7 @@ from clean_midi_rules import apply_rule_cleaning, cleaned_path_for
 from hand_split_channels import apply_hand_split
 from midi_stats import stats_path_for, write_midi_stats
 from piano_transcription_inference import PianoTranscription, sample_rate
+from transcribe import ensure_checkpoint
 
 
 AUDIO_EXTENSIONS = {'.flac', '.mp3', '.wav', '.ape', '.m4a', '.aif', '.aiff'}
@@ -126,7 +127,11 @@ def main():
 
     device = select_device()
     print('Using {} for inference.'.format(device))
-    transcriptor = PianoTranscription(device=device)
+    try:
+        transcriptor = PianoTranscription(device=device, checkpoint_path=ensure_checkpoint())
+    except RuntimeError as error:
+        print(error)
+        return 1
 
     converted = 0
     for audio_path in audio_files:

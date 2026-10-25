@@ -1,7 +1,12 @@
 import os
+from http.client import HTTPException
+from pathlib import Path
+import shutil
 import sys
+import tempfile
 import tkinter as tk
 from tkinter import filedialog
+from urllib.request import urlopen
 
 import librosa
 import torch
@@ -14,6 +19,37 @@ from piano_transcription_inference import PianoTranscription, sample_rate
 
 
 AUDIO_EXTENSIONS = {'.flac', '.mp3', '.wav', '.ape', '.m4a', '.aif', '.aiff'}
+CHECKPOINT_NAME = 'note_F1=0.9677_pedal_F1=0.9186.pth'
+CHECKPOINT_URL = ('https://zenodo.org/records/4034264/files/'
+                  'CRNN_note_F1%3D0.9677_pedal_F1%3D0.9186.pth?download=1')
+MIN_CHECKPOINT_BYTES = 160000000
+
+
+def ensure_checkpoint():
+    """Download the upstream checkpoint without wget; publish only a complete file."""
+    checkpoint = Path.home() / 'piano_transcription_inference_data' / CHECKPOINT_NAME
+    if checkpoint.is_file() and checkpoint.stat().st_size >= MIN_CHECKPOINT_BYTES:
+        return str(checkpoint)
+    temporary = None
+    try:
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        print('Downloading piano transcription model (~165 MB)...', flush=True)
+        with urlopen(CHECKPOINT_URL, timeout=60) as response:
+            length = response.headers.get('Content-Length')
+            with tempfile.NamedTemporaryFile(dir=checkpoint.parent, suffix='.download', delete=False) as output:
+                temporary = Path(output.name)
+                shutil.copyfileobj(response, output)
+        size = temporary.stat().st_size
+        if size < MIN_CHECKPOINT_BYTES or (length is not None and size != int(length)):
+            raise ValueError('The model download is incomplete.')
+        temporary.replace(checkpoint)
+        return str(checkpoint)
+    except (OSError, ValueError, HTTPException) as error:
+        raise RuntimeError('Could not download the piano model. Check your connection and retry. '
+                           'Model location: {}. {}'.format(checkpoint, error)) from error
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def select_device():
@@ -124,7 +160,11 @@ def main():
 
     device = select_device()
     print('Using {} for inference.'.format(device))
-    transcriptor = PianoTranscription(device=device)
+    try:
+        transcriptor = PianoTranscription(device=device, checkpoint_path=ensure_checkpoint())
+    except RuntimeError as error:
+        print(error)
+        return 1
 
     converted = 0
     for audio_path in audio_files:
