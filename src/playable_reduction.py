@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 import mido
 
 from clean_midi_rules import rebuild_track_without_messages
-from hand_split_channels import CHANNELS, collect_notes, group_notes
+from hand_split_channels import CHANNELS, collect_notes, group_notes, hand_fits
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -28,11 +28,6 @@ SINGLE_COST = 3
 OUTER_COST = 5
 BEATS_PER_BAR = 4
 NOTE_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
-
-
-def hand_fits(pitches, max_notes, max_span):
-    """pitches sorted low to high."""
-    return len(pitches) <= max_notes and (not pitches or pitches[-1] - pitches[0] <= max_span)
 
 
 def playable_cuts(pitches, max_notes, max_span):

@@ -190,7 +190,9 @@ def run_postprocess(args):
                                      max_span=playable_reduction.DEFAULT_MAX_SPAN,
                                      hands=playable_reduction.THREE_HAND_PLAYER if args.hands == 3 else None)
         elif name == 'split':
-            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands)
+            limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN) \
+                if args.playable and args.hands == 2 else None
+            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands, limits=limits)
         elif name == 'trim':
             apply_overlap_trim(cleaned_path, report_path=stats_path, fast_figure_hands=tuple(args.fast_figure_hands),
                                protect_pedal=not args.no_pedal_protection)

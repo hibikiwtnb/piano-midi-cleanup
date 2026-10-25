@@ -327,7 +327,12 @@ def cut_options(size, hands):
     return list(itertools.combinations_with_replacement(range(size + 1), hands - 1))
 
 
-def search_splits(groups, hands, blobs, ticks_per_beat):
+def hand_fits(pitches, max_notes, max_span):
+    """Whether sorted pitches fit one hand's simultaneous-note limits."""
+    return len(pitches) <= max_notes and (not pitches or pitches[-1] - pitches[0] <= max_span)
+
+
+def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
     """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
     beam = [{
         'pitch': [None] * hands,
@@ -342,11 +347,20 @@ def search_splits(groups, hands, blobs, ticks_per_beat):
         pitches = sorted(note['note'] for note in group)
         onset = group[0]['start_seconds']
         blob = blobs[group[0]['start_ticks'] // ticks_per_beat]
+        options = []
+        for cuts in cut_options(len(pitches), hands):
+            bounds = (0,) + cuts + (len(pitches),)
+            slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
+            options.append((cuts, slices))
+        if limits is not None:
+            fitting = [(cuts, slices) for cuts, slices in options
+                       if all(hand_fits(part, *limits) for part in slices)]
+            # Reduction explicitly preserves unsolved groups; keep those assignable too.
+            if fitting:
+                options = fitting
         candidates = []
         for state in beam:
-            for cuts in cut_options(len(pitches), hands):
-                bounds = (0,) + cuts + (len(pitches),)
-                slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
+            for cuts, slices in options:
                 cost = split_cost(slices, onset, state, blob)
                 candidates.append(next_state(state, slices, onset, cost, cuts, state))
         candidates.sort(key=lambda item: item['cost'])
@@ -361,9 +375,9 @@ def search_splits(groups, hands, blobs, ticks_per_beat):
     return cuts_per_group
 
 
-def assign_groups(groups, hands, blobs, ticks_per_beat):
+def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None):
     names = HANDS[hands]
-    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat)):
+    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat, limits=limits)):
         ordered = sorted(group, key=lambda note: note['note'])
         for index, note in enumerate(ordered):
             note['hand'] = names[sum(1 for cut in cuts if index >= cut)]
@@ -454,12 +468,12 @@ def apply_channels(notes):
         note['end_message'].channel = channel
 
 
-def split_hands_in_place(midi_path, hands=2):
+def split_hands_in_place(midi_path, hands=2, limits=None):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
     blobs = blob_lines(notes, midi_file.ticks_per_beat)
-    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat)
+    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits)
     map_pedal_channels(midi_file, notes)
     apply_channels(notes)
     midi_file.save(midi_path)
@@ -514,8 +528,8 @@ def write_split_report(stats, report_path=None, append=False):
         print('Updating hand split report: {}'.format(report_path))
 
 
-def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2):
-    stats = split_hands_in_place(midi_path, hands=hands)
+def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None):
+    stats = split_hands_in_place(midi_path, hands=hands, limits=limits)
     write_split_report(stats, report_path=report_path, append=append_report)
     return stats
 
