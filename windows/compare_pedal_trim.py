@@ -130,10 +130,11 @@ def main():
     settings = json.loads((Path.home() / '.piano-midi-cleanup-panel.json').read_text(encoding='utf-8'))
     if settings['source'] != 'reuse' or not settings['last']['switches']['trim']:
         raise ValueError('This comparison requires the saved reuse-BPM and overlap-trim settings.')
-    sources = sorted((ROOT / 'testdata').glob('*_bpmfix.mid'))
+    data_root = ROOT.parent / 'piano-midi-cleanup-data'
+    sources = sorted(data_root.glob('*_bpmfix.mid'))
     if not sources:
         raise ValueError('No BPM-fixed MIDI files found.')
-    output = ROOT / 'testdata' / ('pedal-trim-comparison-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
+    output = data_root / ('pedal-trim-comparison-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
     output.mkdir()
     old_source = subprocess.run(['git', 'show', LEGACY_REVISION + ':src/trim_overlaps.py'], cwd=ROOT,
                                 check=True, capture_output=True, encoding='utf-8').stdout
