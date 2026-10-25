@@ -1,7 +1,7 @@
 """Application identity shared by the UI and future release packaging."""
 
 APP_NAME = 'Piano MIDI Cleanup'
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 LICENSE_ID = 'AGPL-3.0-only'
 PROJECT_URL = 'https://github.com/hibikiwtnb/piano-midi-cleanup'
 ISSUES_URL = PROJECT_URL + '/issues'

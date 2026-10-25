@@ -101,8 +101,9 @@ python src/pianoroll_snapshot.py song_bpmfix_cleaned.mid --layout portrait
 | 5 | 截斷重疊 | 開 | `--no-trim`、`--fast-figure-hands` |
 | 6 | 捲簾截圖 | 關 | `--snapshot landscape / portrait` |
 
-- 可彈性清理：兩隻手時在分手前處理全部的音；三隻手時改在分手後，只處理第一個人的左手和第二右手（低音和中聲部），第二個人的右手（最上面的 right）不動；四隻手不支援。截斷重疊必須在分手之後。組合不成立時不會執行。
+- 可彈性清理：兩隻手時在分手前處理全部的音；三隻手時改在分手後，只處理第一個人的左手和第二右手（低音和中聲部），第二個人的右手（最上面的 right）不動；四隻手不支援。截斷重疊必須在分手之後。組合不成立時不會執行。兩手時，每手音數與跨度限制（`playable.max_notes`、`playable.max_span`）也會套用到分手，讓已可彈的組維持在限制內；清理後仍未解決的組保留原樣。
 - 統計報告：重跑 BPMFix 時整份重寫；沿用 `song_bpmfix.mid` 時，保留它的品質、BPMFix、第一拍、調號段落，其餘重建。最後附上這次執行的步驟清單。
+- 報告先寫在最終檔旁的暫存檔，全部步驟成功後才替換；失敗時保留原報告並刪除暫存檔。
 
 報告以同一區塊內的項目逐行更新：相同行保留，值變更時更新，新增項目加入，新版已不存在的項目移除。其他區塊保留，舊重複區塊整理為最新一份；完全相同時不寫檔。
 - 主面板的鋼琴捲簾把手動調整的第一拍寫入 `song_bpmfix.mid`，後續處理沿用這份檔案。是否自動調整第一拍依處理步驟的勾選執行，不另外判斷手動修改紀錄。
@@ -126,7 +127,7 @@ python src/postprocess.py --list-parameters
 | Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk`（以 `pythonw.exe` 啟動） |
 | macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
 
-入口內存的是本機的絕對路徑，因此不納入 git，由各自的機器產生。可以複製到桌面、開始選單，或拖到 Dock、`/Applications`。搬移 repo 或重建 Python 環境後，重新執行產生器即可。需要看命令列輸出時，改用 `python src/postprocess_panel.py` 或 `macos/postprocess_panel.command`。
+入口內存的是本機的絕對路徑，因此不納入 git，由各自的機器產生。可以複製到桌面、開始選單，或拖到 Dock、`/Applications`。搬移 repo 或重建 Python 環境後，重新執行產生器即可。需要看命令列輸出時，改用 `python src/postprocess_panel.py` 或 `macos/postprocess_panel.command`。macOS 產生器會在建立前檢查面板能否載入；產生的 App 把執行中的輸出寫入 `~/Library/Logs/Piano MIDI Cleanup/panel.log`，失敗時顯示錯誤對話框。
 
 統一執行器的 tkinter 面板：選 MIDI、BPM 來源（沿用已修正速度、手動指定、從音訊偵測）、每一步的開關，以及按主題排列的設定分頁。「詳細報告」以項目／值兩欄顯示已生成的 TXT，開啟面板或切換 MIDI 時讀入；底部狀態欄顯示最新狀態。
 
@@ -134,6 +135,7 @@ python src/postprocess.py --list-parameters
 - 上次的選擇和預設組合存在 `~/.piano-midi-cleanup-panel.json`。
 - 首次開啟內容區為 1280 × 720，之後記住視窗大小、位置與最大化狀態。處理頁的左右面板隨視窗伸展，「開始處理」位於處理步驟框的右下角。
 - 「依踏板狀態限制截斷」在面板預設關閉；命令列預設開啟，可用 `--no-pedal-protection` 關閉。詳見 [截斷規格](docs/spec/07-overlap-trim.md)。
+- BPM 為空白、非數字、非有限或超出 MIDI tempo 範圍時，面板顯示錯誤，不會結束。
 - 面板只是把選擇轉成 `postprocess.py` 的命令列，執行時會先印出這行命令。
 
 「關於」頁顯示統一版本號、專案首頁、問題回報，以及本專案與隨附開源元件的授權全文，包含和弦推斷使用的 note-seq。版本與元件資訊由 `src/app_info.py` 管理。
@@ -541,6 +543,8 @@ Tonal.js 用於和弦命名；`src/chord_inference.py` 修改自 Magenta note-se
 ```text
 $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 ```
+
+第一次轉譜若缺少這個檔案或檔案不完整，入口會用 urllib 從 Zenodo 下載，核對大小與 Content-Length，完整後才原子替換；失敗時保留舊檔、清除暫存檔。MPS 入口共用同一份下載邏輯，不需要 wget。
 
 可覆蓋的環境變數：
 

@@ -6,6 +6,8 @@
 
 `src/transcribe.py` 使用 ByteDance 的 `piano_transcription_inference`（Kong et al., *High-resolution Piano Transcription with Pedals by Regressing Onset and Offset Times*, 2021）。設備順序 CUDA → CPU；`src/transcribe_mps.py` 為 MPS → CUDA → CPU，實測 Apple MPS 比 CPU 慢，不作日常入口。
 
+兩個入口共用 `ensure_checkpoint()`：預設位置缺少模型或檔案過小時，用 urllib 從 Zenodo 下載，核對大小與 Content-Length，完整後才原子替換；失敗時保留舊檔並清除暫存檔。不需要外部 wget。
+
 轉譜入口在轉譜後直接執行 BPM 修正、規則清理與兩手分手，不做第一拍、調號與截斷；完整後處理用統一執行器（第 8 章）。`song.mid` 已存在時不重新轉譜，只補缺少的檔案。
 
 ## 預設模型輸出的性質

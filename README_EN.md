@@ -102,8 +102,9 @@ Runs the steps above in order in one go, each one switchable. `song_bpmfix_clean
 | 5 | Overlap trim | On | `--no-trim`, `--fast-figure-hands` |
 | 6 | Piano roll snapshots | Off | `--snapshot landscape / portrait` |
 
-- Playable reduction: with two hands it handles every note before the split; with three hands it runs after the split on the first player's left and second right hand only (bass and middle voice) and leaves the other player's right hand (the top `right`) alone; four hands are not supported. Overlap trimming needs the hand split. Other combinations do not run.
+- Playable reduction: with two hands it handles every note before the split; with three hands it runs after the split on the first player's left and second right hand only (bass and middle voice) and leaves the other player's right hand (the top `right`) alone; four hands are not supported. Overlap trimming needs the hand split. Other combinations do not run. With two hands, the per-hand note and span limits (`playable.max_notes`, `playable.max_span`) also constrain the split so groups already playable stay within the limits. If a group has no feasible partition, all its original unconstrained cuts remain available, the normal beam-search costs choose the assignment, and every note is preserved; reduction lists those unsolved groups in its report.
 - Stats report: rewritten when BPMFix runs; when `song_bpmfix.mid` is reused, its quality, BPMFix, first beat and key signature sections are kept and the rest is rebuilt. The steps of the run are listed at the end.
+- The report is staged in a temporary file next to the final report and published only after every step succeeds; a failed run keeps the previous report and removes the staged file.
 - The main panel piano roll saves a hand-set first beat to `song_bpmfix.mid`, which subsequent processing reuses. Automatic first-beat alignment follows the selected processing steps; the runner does not inspect manual-edit history.
 
 Thresholds are overridden with `--set name=value` (repeatable), and `--list-parameters` lists every threshold with its default; changed values are recorded in the step list of the report. The playable reduction's notes and span per hand are set here too (`playable.max_notes`, `playable.max_span`).
@@ -125,7 +126,7 @@ After setting up the Python environment, run the generator for your platform onc
 | Windows | `windows/create_shortcut.cmd` | `Piano MIDI Cleanup.lnk` (runs `pythonw.exe`) |
 | macOS | `macos/create_app.command` | `Piano MIDI Cleanup.app` |
 
-Launchers store absolute paths for the local machine, so they are not tracked in git; each machine generates its own. You can copy them to the Desktop or Start menu, or drag them to the Dock or `/Applications`. Run the generator again after moving the repository or rebuilding the Python environment. To see console output, run `python src/postprocess_panel.py` or `macos/postprocess_panel.command` instead.
+Launchers store absolute paths for the local machine, so they are not tracked in git; each machine generates its own. You can copy them to the Desktop or Start menu, or drag them to the Dock or `/Applications`. Run the generator again after moving the repository or rebuilding the Python environment. To see console output, run `python src/postprocess_panel.py` or `macos/postprocess_panel.command` instead. The macOS generator checks that the panel can be imported before building; the generated app writes runtime output to `~/Library/Logs/Piano MIDI Cleanup/panel.log` and shows an error dialog on failure.
 
 The tkinter panel lets you choose the MIDI, tempo source and processing steps, with settings grouped by topic. The Detailed report tab loads the existing TXT at startup and when the MIDI changes, displaying items and values in two columns. The bottom status bar shows the latest status.
 
@@ -135,6 +136,7 @@ Reports update items line by line within each block: identical lines stay, chang
 - The last choices and the presets are kept in `~/.piano-midi-cleanup-panel.json`.
 - The initial content size is 1280 × 720; subsequent launches restore size, position and maximized state. Processing panels fill the available height, with Run at the bottom right of the steps frame.
 - Pedal-based trimming limits default to off in the panel. The CLI defaults to on; use `--no-pedal-protection` to disable them. See [the trimming specification](docs/spec/07-overlap-trim.md).
+- A blank, non-numeric, non-finite or out-of-range BPM shows an error in the panel without closing it.
 - The panel only turns the choices into a `postprocess.py` command line, which it prints first.
 
 About shows the shared version number, project and issue links, and the full project and bundled-component licenses, including note-seq for chord inference. `src/app_info.py` holds version and component metadata.
@@ -531,6 +533,8 @@ Default model checkpoint path:
 ```text
 $HOME/piano_transcription_inference_data/note_F1=0.9677_pedal_F1=0.9186.pth
 ```
+
+On the first transcription, a missing or incomplete checkpoint is downloaded from Zenodo with urllib, verified against its size and Content-Length, and atomically replaced only when complete; on failure the old file is kept and the temporary file removed. The MPS entrypoint shares the same download logic and wget is not needed.
 
 Overridable environment variables:
 
