@@ -307,14 +307,15 @@ class Panel:
             ttk.Button(content, text=license_name,
                        command=lambda path=license_path, name=name: self.show_license(name, path)).grid(
                 row=row, column=2, sticky='w', pady=6)
-        ttk.Separator(content).grid(row=9, column=0, columnspan=3, sticky='ew', pady=16)
-        ttk.Label(content, text=tr('Project license')).grid(row=10, column=0, columnspan=3, sticky='w')
+        license_row = 6 + len(BUNDLED_COMPONENTS)
+        ttk.Separator(content).grid(row=license_row, column=0, columnspan=3, sticky='ew', pady=16)
+        ttk.Label(content, text=tr('Project license')).grid(row=license_row + 1, column=0, columnspan=3, sticky='w')
         ttk.Button(content, text=LICENSE_ID, command=lambda: self.show_license(APP_NAME, 'LICENSE')).grid(
-            row=11, column=0, sticky='w', pady=(4, 16))
+            row=license_row + 2, column=0, sticky='w', pady=(4, 16))
         ttk.Label(content, text=tr('Third-party components retain their respective licenses.')).grid(
-            row=11, column=1, columnspan=2, sticky='w', pady=(4, 16))
+            row=license_row + 2, column=1, columnspan=2, sticky='w', pady=(4, 16))
         ttk.Label(content, text=tr('This interface processes MIDI. Audio transcription is performed by upstream models.')).grid(
-            row=12, column=0, columnspan=3, sticky='w')
+            row=license_row + 3, column=0, columnspan=3, sticky='w')
 
     def show_license(self, name, relative_path):
         path = Path(__file__).resolve().parents[1] / relative_path
