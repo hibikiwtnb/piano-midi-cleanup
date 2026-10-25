@@ -4,7 +4,7 @@
 
 Version **1.0.1**. Piano MIDI Cleanup turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
 
-The project is distributed as **source code** only. There is no installer and no prebuilt Windows or macOS application.
+Scripts are provided to create a Windows shortcut or macOS app. Set up the Python environment below, run the script once, then double-click the shortcut or app to launch.
 
 ## What it does
 
