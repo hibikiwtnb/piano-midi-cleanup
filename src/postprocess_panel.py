@@ -374,7 +374,7 @@ class Panel:
             self.roll.focus_roll()
 
     def refresh_roll(self):
-        """Show the selected input until an explicit GUI edit produces a corrected file."""
+        """Show the latest successful output, or the selected input before processing."""
         if self.main_tabs.select() == str(self.roll) and not self.running:
             midi_path = self.preview_path or self.midi.get().strip()
             self.roll.show(midi_path)
@@ -713,11 +713,10 @@ class Panel:
                              audio=self.audio.get(), last=preset)
         save_settings(self.settings)
         self.roll.stop()
-        self.run_preview = None
-        if self.source.get() != 'reuse':
-            selected = self.midi.get().strip()
-            target = postprocess.bpmfix_path_for(postprocess.source_midi_path(selected))
-            self.run_preview = (selected, target)
+        selected = self.midi.get().strip()
+        target = postprocess.cleaned_path_for(
+            postprocess.bpmfix_path_for(postprocess.source_midi_path(selected)))
+        self.run_preview = (selected, target)
         self.running = True
         self.run_button.configure(state='disabled')
         self.status_fragment = ''

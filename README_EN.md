@@ -126,7 +126,7 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
    - **Detect tempo from audio**: choose the source audio to estimate its tempo.
    - **Keep corrected tempo**: use an existing tempo-corrected file (`*_bpmfix.mid`), including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
 3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
-4. On success, the MIDI whose name ends in `_bpmfix_cleaned.mid` is the complete result. With manual BPM or audio detection, the roll previews the tempo-corrected file; it does **not** automatically switch to the processed result. When keeping corrected tempo, the current display stays as it is. Select the processed result in the file field to inspect it, or import that MIDI into notation software to prepare a score.
+4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
 5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
 
 ### Start from piano audio
@@ -141,7 +141,7 @@ If the original MIDI with the audio's base name already exists, the transcriptio
 
 ### First beat, preview and reruns
 
-- The roll shows the file you selected, or a preview file explicitly produced by the current action. It does not automatically prefer the cleaned file.
+- The roll initially shows the file you selected. After successful processing, it automatically shows the latest result.
 - **When the processed result is shown**, **Save first beat** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and then previews the tempo-corrected file.
 - **When the original MIDI is shown**, **Save first beat** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
 - If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
@@ -173,7 +173,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **First transcription is slow or the download fails**: the model is about 165 MB and is downloaded with Python, not `wget`. Retry on an unstable connection.
 - **BPM is detected at half or double speed**: enter the correct value with **Set tempo (BPM)**. Changing the file clears the field, so choose the file first.
 - **The first beat is wrong**: adjust it by ±1 beat in the roll and save. Syncopated bass, an intro without bass, or 3/4 can confuse the estimate.
-- **The result is not shown after processing**: manual BPM or audio processing previews the tempo-corrected file. Select the processed result whose name ends in `_bpmfix_cleaned.mid` in the file field.
+- **The result is not shown after processing**: check that processing finished, then open the piano roll. If processing failed, check the report for the error message.
 - **My manual first beat disappeared after a rerun**: choose **Keep corrected tempo** next time instead of recomputing automatic alignment from the original.
 - **Playback is not export**: roll playback is realtime monitoring only. The tool does not write WAV, MP3 or other audio files.
 - **Built-in sound**: Coopiano is a physical-modeling instrument, so no piano samples are downloaded. Playback uses the OS default audio device; a Windows Remote Desktop session must have a usable playback device.

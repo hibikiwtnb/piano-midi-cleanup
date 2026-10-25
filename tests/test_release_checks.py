@@ -3,17 +3,18 @@
 import contextlib
 from http.client import IncompleteRead
 import io
+import queue
 from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import mido
 import postprocess
-from postprocess_panel import PanelArgumentParser
+from postprocess_panel import Panel, PanelArgumentParser
 from hand_split_channels import collect_notes, group_notes, hand_fits, split_hands_in_place
 from transcribe import CHECKPOINT_NAME, ensure_checkpoint
 
@@ -53,6 +54,49 @@ class ReleaseChecks(unittest.TestCase):
             for channel in (0, 2):
                 pitches = sorted(n['note'] for n in group if n['start_message'].channel == channel)
                 self.assertTrue(hand_fits(pitches, 4, 12))
+
+    def test_gui_shows_processed_result_after_success(self):
+        source = self.root / 'song.mid'
+        self.make_midi(source)
+        target = str(self.root / 'song_bpmfix_cleaned.mid')
+        for mode, code, changed_selection in (
+                ('bpm', 0, False), ('audio', 0, False), ('reuse', 0, False),
+                ('reuse', 1, False), ('reuse', 0, True)):
+            with self.subTest(mode=mode, code=code, changed_selection=changed_selection):
+                panel = object.__new__(Panel)
+                panel.running = False
+                panel.midi = Mock(get=Mock(return_value=str(source)))
+                panel.source = Mock(get=Mock(return_value=mode))
+                panel.bpm = Mock(get=Mock(return_value='120'))
+                panel.audio = Mock(get=Mock(return_value='input.wav'))
+                panel.settings = {}
+                panel.preview_path = 'previous.mid'
+                panel.current_preset = Mock(return_value={})
+                panel.argv = Mock(return_value=[str(source), '--bpm', '120'])
+                panel.roll = Mock()
+                panel.main_tabs = Mock()
+                panel.main_tabs.select.return_value = str(panel.roll)
+                panel.run_button = Mock()
+                panel.status = Mock()
+                panel.root = Mock()
+                panel.render_report = Mock()
+                panel.report_tree = Mock()
+                panel.load_existing_report = Mock(side_effect=lambda **_: panel.refresh_roll())
+                panel.lines = queue.Queue()
+                with patch('postprocess_panel.save_settings'), patch('postprocess_panel.threading.Thread'):
+                    panel.run()
+                self.assertEqual(panel.run_preview, (str(source), target))
+                if changed_selection:
+                    panel.midi.get.return_value = 'other.mid'
+                    panel.preview_path = None
+                panel.lines.put(('done', code))
+                panel.drain()
+                if code:
+                    self.assertEqual(panel.preview_path, 'previous.mid')
+                    panel.roll.show.assert_not_called()
+                else:
+                    panel.roll.show.assert_called_once_with('other.mid' if changed_selection else target)
+                self.assertFalse(panel.running)
 
     def test_failed_run_preserves_previous_report(self):
         source = self.root / 'song.mid'
