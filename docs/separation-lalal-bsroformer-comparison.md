@@ -8,13 +8,15 @@ La la 勇気のうた 用 HiRes + lalal.ai v6 分離後，轉譜結果明顯比�
 
 | 代號 | 音源 | 鋼琴分離 | 轉譜 |
 |---|---|---|---|
-| old | 不明，可能是 256k AAC | lalal.ai Orion（v4）或更早 | Pianotrans，過去的結果 |
+| old | CD 擷取的 AIF（使用者於 2020 年購入 CD） | lalal.ai v5 Perseus，Deep extraction（2026-05-16 郵件確認） | Pianotrans，3,440 音的樣本 |
 | v6 | CD 轉出的 WAV（44.1 kHz） | lalal.ai v6 Andromeda | Pianotrans，CPU |
 | bsr | 同 v6 | BS-RoFormer SW（jarredou BS-ROFO-SW-Fixed）Core ML 版，6 軌輸出取 piano | Pianotrans，CPU |
 
 - BS-RoFormer 使用 `~/bs-roformer-sw` 的 Swift driver（`cpuAndGPU`），全曲 5 分 41 秒分離耗時 3 分 07 秒。
 - 兩份新轉譜都只寫原始 MIDI 與 `midi_stats`，未做 BPMFix 和清理。
 - 三份 MIDI 以起音包絡做互相關，估計偏移都是 0，直接比較，不平移。
+- 使用者保留的 2026-05-16 LALAL.AI 郵件確認，提交檔為 `A song for You! You_ You!! (Off Vocal).aif`，Algorithm 為 Perseus、Stem separation type 為 piano、Enhanced Processing 為 Deep extraction。AIF 是該次提交的音訊格式，不依郵件推斷分離輸出格式。
+- 另存於下載目錄的 2022-03-09 MP3 為 44.1 kHz、雙聲道、320 kbps。同批 MIDI 有 6,412 音、567 個極短音（8.84%），與表中 old 的 3,440 音檔案不同。這批封存資料不套用到本表的日期、格式或模型記錄。
 
 ## `midi_stats` 品質統計
 
@@ -62,7 +64,7 @@ La la 勇気のうた 用 HiRes + lalal.ai v6 分離後，轉譜結果明顯比�
 
 ## 結論
 
-- **lalal.ai 新舊對比**：v6 的極短音從 9.5% 降到 2.3%，低力度音從 2.6% 降到 0.4%，音符少了 553 個，減少的主要在中音 C 以上（C4–B5 少了約 510 個）。old 有 874 個音沒有其他版本配對，且多為短、弱的音。和 La la 的觀察一致：舊版分離的雜音大量出現在中高音。這次同時換了音質與分離模型，仍分不開兩者各自的影響。
+- **lalal.ai 新舊對比**：v6 的極短音從 9.5% 降到 2.3%，低力度音從 2.6% 降到 0.4%，音符少了 553 個，減少的主要在中音 C 以上（C4–B5 少了約 510 個）。old 有 874 個音沒有其他版本配對，且多為短、弱的音。兩份都來自 CD，使用同一轉譜模型，對照顯示不同分離版本的輸出差異。中高音的短、弱音減少與分離殘留減少的解釋相符，但沒有人工標註答案，不能將少掉的音全視為雜音，也不能把短音比例當作準確率。
 - **BS-RoFormer SW 已跑通**，品質介於兩者之間：極短音和低力度比例接近 v6 的水準以外，音符數接近 old，比 v6 多出約 450 個。
 - bsr 多出的音集中在中音 C 以下：bsr 有而 v6 沒有配對的 943 個音中，421 個在 C4 以下；bsr 的 C3–B3 有 771 個音，v6 只有 588 個。可能是貝斯、吉他等低音樂器滲入鋼琴軌，也可能是 v6 漏掉的鋼琴低音。這 943 個音裡有 307 個也出現在 old，不能整批當成雜音。
 - v6 有而 bsr 沒有配對的 489 個音中，180 個在 C4 以下、151 個在 C5 以上。
