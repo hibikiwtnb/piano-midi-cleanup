@@ -1,0 +1,124 @@
+"""Regression checks for release-critical input, model, report and hand handling."""
+
+import contextlib
+from http.client import IncompleteRead
+import io
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+
+import mido
+import postprocess
+from postprocess_panel import PanelArgumentParser
+from hand_split_channels import collect_notes, group_notes, hand_fits, split_hands_in_place
+from transcribe import CHECKPOINT_NAME, ensure_checkpoint
+
+
+class ReleaseChecks(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def make_midi(self, path, pitches=(47, 54, 59, 61)):
+        midi = mido.MidiFile()
+        track = mido.MidiTrack()
+        midi.tracks.append(track)
+        for pitch in pitches:
+            track.append(mido.Message('note_on', note=pitch, velocity=80))
+        for index, pitch in enumerate(pitches):
+            track.append(mido.Message('note_off', note=pitch, time=480 if index == 0 else 0))
+        midi.save(path)
+
+    def test_gui_parser_reports_invalid_bpm_without_exiting(self):
+        for bpm in ('', 'abc'):
+            with self.subTest(bpm=bpm), self.assertRaises(ValueError):
+                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(['song.mid', '--bpm', bpm])
+        for bpm in ('0', '-1', 'nan', 'inf', '1e-320', '1e300'):
+            args = postprocess.build_parser().parse_args(['song.mid', '--bpm', bpm])
+            with self.subTest(bpm=bpm), self.assertRaises(ValueError):
+                postprocess.plan_steps(args)
+
+    def test_constrained_split_keeps_feasible_groups_within_limits(self):
+        path = self.root / 'song.mid'
+        self.make_midi(path)
+        split_hands_in_place(path, limits=(4, 12))
+        notes = collect_notes(mido.MidiFile(path))
+        self.assertEqual(len(notes), 4)
+        for group in group_notes(notes):
+            for channel in (0, 2):
+                pitches = sorted(n['note'] for n in group if n['start_message'].channel == channel)
+                self.assertTrue(hand_fits(pitches, 4, 12))
+
+    def test_failed_run_preserves_previous_report(self):
+        source = self.root / 'song.mid'
+        self.make_midi(source)
+        report = self.root / 'song_stats.txt'
+        original = b'MIDI post-processing run\nOutput: previous.mid\n'
+        report.write_bytes(original)
+        args = postprocess.build_parser().parse_args([str(source), '--bpm', '120'])
+        with patch.object(postprocess, 'apply_bpm_fix', side_effect=RuntimeError('Detection failed')):
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(RuntimeError):
+                postprocess.run_postprocess(args)
+        self.assertEqual(report.read_bytes(), original)
+        self.assertEqual(list(self.root.glob('*.tmp')), [])
+
+    def test_constrained_split_preserves_unsolved_groups(self):
+        path = self.root / 'song.mid'
+        self.make_midi(path, pitches=tuple(range(48, 61)))
+        split_hands_in_place(path, limits=(4, 12))
+        self.assertEqual(len(collect_notes(mido.MidiFile(path))), 13)
+
+    def test_successful_run_publishes_report_only_on_completion(self):
+        source = self.root / 'song_bpmfix.mid'
+        self.make_midi(source)
+        args = postprocess.build_parser().parse_args([str(source), '--no-trim', '--playable'])
+        with contextlib.redirect_stdout(io.StringIO()):
+            postprocess.run_postprocess(args)
+        report = self.root / 'song_stats.txt'
+        self.assertIn('MIDI post-processing run', report.read_text(encoding='utf-8'))
+        modified = report.stat().st_mtime_ns
+        with contextlib.redirect_stdout(io.StringIO()):
+            postprocess.run_postprocess(args)
+        self.assertEqual(report.stat().st_mtime_ns, modified)
+
+    def test_model_download_is_atomic_and_does_not_need_wget(self):
+        checkpoint = self.root / 'piano_transcription_inference_data' / CHECKPOINT_NAME
+        checkpoint.parent.mkdir()
+        checkpoint.write_bytes(b'old')
+        response = io.BytesIO(b'complete-model')
+        response.headers = {'Content-Length': '14'}
+        with patch('transcribe.Path.home', return_value=self.root), \
+                patch('transcribe.MIN_CHECKPOINT_BYTES', 10), \
+                patch('transcribe.urlopen', return_value=response):
+            self.assertEqual(ensure_checkpoint(), str(checkpoint))
+        self.assertEqual(checkpoint.read_bytes(), b'complete-model')
+        with patch('transcribe.Path.home', return_value=self.root), \
+                patch('transcribe.MIN_CHECKPOINT_BYTES', 10), patch('transcribe.urlopen') as download:
+            ensure_checkpoint()
+            download.assert_not_called()
+
+    def test_incomplete_download_preserves_old_checkpoint_and_cleans_temporary(self):
+        checkpoint = self.root / 'piano_transcription_inference_data' / CHECKPOINT_NAME
+        checkpoint.parent.mkdir()
+        checkpoint.write_bytes(b'old')
+        for failure in (None, IncompleteRead(b'partial')):
+            response = io.BytesIO(b'short')
+            response.headers = {'Content-Length': '100'}
+            copy_failure = patch('transcribe.shutil.copyfileobj', side_effect=failure) \
+                if failure else contextlib.nullcontext()
+            with patch('transcribe.Path.home', return_value=self.root), \
+                    patch('transcribe.MIN_CHECKPOINT_BYTES', 10), \
+                    patch('transcribe.urlopen', return_value=response), copy_failure:
+                with self.assertRaises(RuntimeError):
+                    ensure_checkpoint()
+            self.assertEqual(checkpoint.read_bytes(), b'old')
+            self.assertEqual(list(checkpoint.parent.glob('*.download')), [])
+
+
+if __name__ == '__main__':
+    unittest.main()
