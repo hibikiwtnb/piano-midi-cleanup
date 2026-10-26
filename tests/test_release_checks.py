@@ -72,6 +72,28 @@ class ReleaseChecks(unittest.TestCase):
         self.assertEqual(hand_split.blob_cost([[48], [72]], blob), 0.0)
         self.assertEqual(hand_split.blob_cost([[72], [48]], blob), 8.0)
 
+    def test_short_blob_evidence_gap_does_not_handoff_upper_voice(self):
+        groups = [[dict(note=p, start_ticks=i * 384, start_seconds=i / 2)
+                   for p in ((36, 60, 84) if i in (0, 4) else (84,))] for i in range(5)]
+        notes = [note for group in groups for note in group]
+        raw = hand_split.blob_lines(notes, 384)
+        self.assertEqual(raw[2][1], 0)
+        blobs = hand_split.blob_lines(notes, 384, hands=3)
+        self.assertEqual([line for line, _ in blobs], [line for line, _ in raw])
+        self.assertGreater(blobs[2][1], 0)
+        self.assertEqual(hand_split.blob_lines(notes, 384, hands=4), raw)
+        hand_split.assign_groups(groups, 3, hand_split.blob_lines(notes, 384, hands=3), 384)
+        self.assertEqual(groups[2][0]['hand'], 'second_right')
+
+    def test_blob_confidence_does_not_fill_long_or_unbracketed_solos(self):
+        for length, anchored in ((9, True), (5, False)):
+            notes = [dict(note=p, start_ticks=i * 384)
+                     for i in range(length)
+                     for p in ((36, 60, 84) if anchored and i in (0, length - 1) else (84,))]
+            raw = hand_split.blob_lines(notes, 384)
+            self.assertEqual(raw[length // 2][1], 0)
+            self.assertEqual(hand_split.blob_lines(notes, 384, hands=3)[length // 2][1], 0)
+
     def test_second_player_activation_waits_for_bar_boundary_and_minimum(self):
         off = {'second_player_active': False, 'second_player_start_bar': None, 'second_player_last_bar': None}
         self.assertEqual(hand_split.second_player_modes(off, 3, False, 4),

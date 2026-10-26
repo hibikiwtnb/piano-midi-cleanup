@@ -299,7 +299,7 @@ def best_previous_lines(totals):
     return best
 
 
-def blob_lines(notes, ticks_per_beat):
+def blob_lines(notes, ticks_per_beat, hands=2):
     """Per beat (line pitch, clarity): notes below the line form the lower blob, the rest the upper blob."""
     if not notes:
         return []
@@ -324,8 +324,27 @@ def blob_lines(notes, ticks_per_beat):
     for best in reversed(back):
         path.append(best[path[-1]])
     path.reverse()
-    return [(BLOB_LOWEST_LINE + line, min(scores[line], BLOB_CLEAR_GAP) / BLOB_CLEAR_GAP)
-            for line, scores in zip(path, beat_scores)]
+    blobs = [(BLOB_LOWEST_LINE + line, min(scores[line], BLOB_CLEAR_GAP) / BLOB_CLEAR_GAP)
+             for line, scores in zip(path, beat_scores)]
+    if hands == 3:
+        # A short rest in one blob is missing evidence, not a new player boundary.
+        # Bridge only gaps bracketed by reliable evidence for the identical line;
+        # longer solos and moving/contradictory boundaries remain uncertain.
+        index = 0
+        while index < len(blobs):
+            line, clarity = blobs[index]
+            if clarity:
+                index += 1
+                continue
+            start = index
+            while index < len(blobs) and blobs[index] == (line, 0.0):
+                index += 1
+            if (start > 0 and index < len(blobs) and index - start <= 2 * BLOB_CONTEXT_BEATS
+                    and blobs[start - 1][0] == line == blobs[index][0]):
+                confidence = min(blobs[start - 1][1], blobs[index][1])
+                for beat in range(start, index):
+                    blobs[beat] = (line, confidence)
+    return blobs
 
 
 def blob_cost(slices, blob):
@@ -632,7 +651,7 @@ def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=Non
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
-    blobs = blob_lines(notes, midi_file.ticks_per_beat)
+    blobs = blob_lines(notes, midi_file.ticks_per_beat, hands=hands)
     assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits,
                   second_player_bars=second_player_bars)
     map_pedal_channels(midi_file, notes)
