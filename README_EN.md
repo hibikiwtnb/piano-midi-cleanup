@@ -2,7 +2,7 @@
 
 [Chinese README](README.md)
 
-Version **1.2.0**. Piano MIDI Cleanup turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
+Version **1.0.1**. Piano MIDI Cleanup turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
 
 Scripts are provided to create a Windows shortcut or macOS app. Set up the Python environment below, run the script once, then double-click the shortcut or app to launch.
 
@@ -180,7 +180,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **Playback environments**: native synth libraries ship for Windows x64 and macOS; systematic playback validation across platforms and Remote Desktop sessions remains outstanding.
 - **4/4 and one tempo only**: tempo changes, free tempo and 3/4 will make bar lines drift.
 - **Not a finished score**: the output is still MIDI, not engraved notation or MusicXML. Wrong and missing notes still need human review.
-- **Three and four hands**: splitting supports 2 to 4 hands. With three hands, the first player owns `left` and `right`, and `second_right` is the highest register played by the second player (Primo). Primo joins in whole-bar passages for at least 4 bars by default; adjust this with `--primo-activation-bars`. Three-hand mode automatically enables playable reduction and optimizes three candidates together: one player with all notes, one player after deleting the fewest low-priority notes, and Primo. Removal cost reuses the existing priorities (doubled notes cheapest, inner voices next, melody/bass highest); chosen deletions are removed from the output MIDI and recorded as playable changes. Four-hand splitting is supported, but playable reduction is not. The `--playable` flag is optional with three hands and remains accepted.
+- **Three and four hands**: splitting supports 2 to 4 hands. Playable reduction handles every note with two hands; with three hands it must run after the split, and only the first player's left and second_right are reduced while the top right is left alone. Four-hand splitting is supported, but playable reduction is not.
 - **Different trim defaults**: the GUI's pedal-aware trim protection is **off** by default; the command line defaults to **on** and can disable it with `--no-pedal-protection`.
 
 ## Advanced docs and command line
@@ -193,12 +193,9 @@ In these examples, `input.mid` and `input.flac` stand for your own files; replac
 . "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
 python src/postprocess.py "input.mid" --audio "input.flac"
 python src/postprocess.py "input.mid" --bpm 135 --hands 3
-python src/postprocess.py "input.mid" --bpm 135 --hands 3 --primo-activation-bars 4
 python src/postprocess.py "input_bpmfix_cleaned.mid" --playable --snapshot portrait
 python src/postprocess.py --list-parameters
 ```
-
-With three hands, `--playable` is optional; passing it is compatible and does not run a second reduction.
 
 On Windows, skip the activation command above and call the shared environment's `python.exe` directly in cmd, quoting its path:
 

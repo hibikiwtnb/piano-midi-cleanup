@@ -2,7 +2,7 @@
 
 [English README](README_EN.md)
 
-目前版本 **1.2.0**。Piano MIDI Cleanup 把 AI 鋼琴轉譜的 MIDI 整理成更容易看譜、編輯和練習的版本。你可以在桌面介面中校正速度與小節線、清理疑似雜音、分配左右手，再用內建鋼琴試聽結果。
+目前版本 **1.0.1**。Piano MIDI Cleanup 把 AI 鋼琴轉譜的 MIDI 整理成更容易看譜、編輯和練習的版本。你可以在桌面介面中校正速度與小節線、清理疑似雜音、分配左右手，再用內建鋼琴試聽結果。
 
 專案提供 Windows 捷徑與 macOS App 的建立腳本。先完成下方的 Python 環境安裝，再執行一次腳本，之後即可雙擊開啟。
 
@@ -180,7 +180,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 - **播放環境**：Windows x64 與 macOS 的原生音源庫已隨專案提供；跨平台與遠端桌面的系統性播放驗證仍待補齊。
 - **只支援 4/4 與單一速度**：變速、自由速度、3/4 等拍號會讓小節線失準。
 - **不是完成樂譜**：輸出仍是 MIDI，不是排版好的樂譜或 MusicXML。轉譜錯誤、錯音與漏音仍需人工檢查。
-- **三手與四手**：分手支援 2 到 4 隻手。三手時第一位演奏者負責 `left` 與 `right`，最高音域的 `second_right` 是第二位演奏者（Primo）；Primo 以整小節區段加入，預設至少連續 4 小節，可用 `--primo-activation-bars` 調整。三手模式會自動啟用可彈性精簡，並在下列三者間共同最佳化：保留全部音符的一人雙手、刪除少量次要音後的一人雙手、以及啟用 Primo。刪音成本沿用既有優先級（重複音最低、內聲部次之、旋律最高音與低音最低音最高）；選中的刪音會從輸出 MIDI 移除，並記為 playable 變更。四手可以分手，但不支援可彈性精簡。
+- **三手與四手**：分手支援 2 到 4 隻手。可彈性清理只在兩手時處理全部音符；三手時必須在分手後執行，且只處理第一位演奏者的 left 與 second_right，最上面的 right 保留不動。四手可以分手，但不支援可彈性清理。
 - **截斷預設不同**：GUI 的「依踏板狀態限制截斷」預設**關閉**；命令列預設**開啟**，可用 `--no-pedal-protection` 關閉。
 
 ## 進階文件與命令列
@@ -193,12 +193,9 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 . "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
 python src/postprocess.py "input.mid" --audio "input.flac"
 python src/postprocess.py "input.mid" --bpm 135 --hands 3
-python src/postprocess.py "input.mid" --bpm 135 --hands 3 --primo-activation-bars 4
 python src/postprocess.py "input_bpmfix_cleaned.mid" --playable --snapshot portrait
 python src/postprocess.py --list-parameters
 ```
-
-三手模式的 `--playable` 可省略；即使寫上也會自動併入同一次決策，不會重複刪音。
 
 Windows 不使用上面的啟用指令，改在 cmd 中直接呼叫共用環境的 `python.exe`，路徑請加引號：
 

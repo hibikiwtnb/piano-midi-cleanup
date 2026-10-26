@@ -15,9 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import mido
 import postprocess
 import hand_split_channels as hand_split
-from postprocess_panel import Panel, PanelArgumentParser, default_preset, normalize_preset
+from postprocess_panel import Panel, PanelArgumentParser
 from hand_split_channels import collect_notes, group_notes, hand_fits, split_hands_in_place
-from note_changes import load_changes
 from transcribe import CHECKPOINT_NAME, ensure_checkpoint
 
 
@@ -26,10 +25,6 @@ class ReleaseChecks(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
-
-    def note_group(self, pitches, tick=0, seconds=0.0):
-        return [dict(note=pitch, start_ticks=tick, start_seconds=seconds, velocity=80)
-                for pitch in pitches]
 
     def make_midi(self, path, pitches=(47, 54, 59, 61)):
         midi = mido.MidiFile()
@@ -153,194 +148,6 @@ class ReleaseChecks(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
                     ['song.mid', '--set', 'split.repeat_cost=' + value])
-
-    def test_primo_activation_bars_cli_rejects_invalid_values(self):
-        parser = postprocess.build_parser(parser_class=PanelArgumentParser)
-        self.assertEqual(parser.parse_args(['song.mid']).primo_activation_bars, 4)
-        self.assertEqual(
-            parser.parse_args(['song.mid', '--hands', '3', '--primo-activation-bars', '1']).primo_activation_bars, 1)
-        for value in ('0', '-1', 'abc', '1.5'):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                parser.parse_args(['song.mid', '--primo-activation-bars', value])
-
-    def test_primo_transitions_wait_for_bar_boundary_and_minimum(self):
-        off = {'primo_active': False, 'primo_start_bar': None, 'primo_last_bar': None}
-        self.assertEqual(hand_split.primo_active_modes(off, 3, False, 4),
-                         ((False, None, None, 0.0),))
-        self.assertEqual(hand_split.primo_active_modes(off, 3, True, 4),
-                         ((False, None, None, 0.0), (True, 3, 3, 9.0)))
-        on = {'primo_active': True, 'primo_start_bar': 3, 'primo_last_bar': 3}
-        before_minimum = hand_split.primo_active_modes(on, 6, True, 4)
-        self.assertEqual([mode[0] for mode in before_minimum], [True])
-        self.assertEqual(before_minimum[0][3], 3.0)
-        self.assertEqual(hand_split.primo_active_modes(on, 7, False, 4),
-                         ((True, 3, 3, 0.0),))
-        self.assertIn((False, None, None, 3.0), hand_split.primo_active_modes(on, 7, True, 4))
-
-    def test_primo_bar_segments_include_silent_bars(self):
-        chain = [
-            {'primo_active': False, 'primo_start_bar': None},
-            {'primo_active': True, 'primo_start_bar': 0},
-            {'primo_active': True, 'primo_start_bar': 0},
-            {'primo_active': False, 'primo_start_bar': None},
-            {'primo_active': True, 'primo_start_bar': 8},
-            {'primo_active': True, 'primo_start_bar': 8},
-        ]
-        self.assertEqual(hand_split.primo_bar_segments(chain, [0, 0, 4, 5, 8, 10]),
-                         [(1, 5), (9, 11)])
-
-    def test_primo_setting_does_not_change_two_or_four_hands(self):
-        def assignments(hands, primo_activation_bars):
-            groups = [
-                [dict(note=48, start_ticks=0, start_seconds=0.0),
-                 dict(note=55, start_ticks=0, start_seconds=0.0)],
-                [dict(note=60, start_ticks=384, start_seconds=0.5)],
-                [dict(note=55, start_ticks=1536, start_seconds=2.0),
-                 dict(note=64, start_ticks=1536, start_seconds=2.0),
-                 dict(note=84, start_ticks=1536, start_seconds=2.0)],
-                [dict(note=50, start_ticks=3072, start_seconds=4.0)],
-            ]
-            blobs = [(60, 0.5)] * 10
-            hand_split.assign_groups(groups, hands, blobs, 384,
-                                     primo_activation_bars=primo_activation_bars)
-            return [[note['hand'] for note in group] for group in groups]
-
-        for hands in (2, 4):
-            with self.subTest(hands=hands):
-                self.assertEqual(assignments(hands, 1), assignments(hands, 8))
-
-    def test_primo_keeps_third_hand_empty_outside_reported_segments(self):
-        groups = [
-            [dict(note=pitch, start_ticks=0, start_seconds=0.0) for pitch in (48, 60, 72)],
-            [dict(note=60, start_ticks=768, start_seconds=1.0)],
-            [dict(note=pitch, start_ticks=7680, start_seconds=10.0) for pitch in (48, 60, 72)],
-            [dict(note=60, start_ticks=18432, start_seconds=24.0)],
-        ]
-        blobs = [(60, 0.5)] * 50
-        cuts_per_group, segments = hand_split.search_splits(
-            groups, 3, blobs, 384, limits=(1, 12), primo_activation_bars=4)
-        self.assertTrue(segments)
-        for start, end in segments:
-            self.assertGreaterEqual(end - start + 1, 4)
-        bars = [group[0]['start_ticks'] // (384 * 4) + 1 for group in groups]
-        for group, bar, cuts in zip(groups, bars, cuts_per_group):
-            if not any(start <= bar <= end for start, end in segments):
-                self.assertEqual(cuts[1], len(group))
-        self.assertTrue(any(cuts[1] < len(group) for group, cuts in zip(groups, cuts_per_group)))
-
-    def test_three_hands_enable_integrated_playable_without_flag(self):
-        for extra in ([], ['--playable']):
-            with self.subTest(extra=extra):
-                args = postprocess.build_parser().parse_args(['song.mid', '--hands', '3', '--no-trim'] + extra)
-                steps = postprocess.plan_steps(args)
-                names = [name for name, _ in steps]
-                self.assertIn('split', names)
-                self.assertNotIn('playable', names)
-                self.assertIn('integrated playable reduction', dict(steps)['split'])
-
-    def test_two_hands_keep_separate_playable_step(self):
-        args = postprocess.build_parser().parse_args(['song.mid', '--hands', '2', '--playable', '--no-trim'])
-        self.assertEqual([name for name, _ in postprocess.plan_steps(args)],
-                         ['reuse_bpmfix', 'clean', 'playable', 'split'])
-
-    def test_four_hands_still_reject_playable_and_three_hands_need_split(self):
-        four = postprocess.build_parser().parse_args(['song.mid', '--hands', '4', '--playable', '--no-trim'])
-        with self.assertRaises(ValueError):
-            postprocess.plan_steps(four)
-        three = postprocess.build_parser().parse_args(['song.mid', '--hands', '3', '--no-split'])
-        with self.assertRaises(ValueError):
-            postprocess.plan_steps(three)
-
-    def test_gui_three_hands_forces_playable_switch(self):
-        def panel_for(hands):
-            panel = object.__new__(Panel)
-            panel.hands = Mock(get=Mock(return_value=hands))
-            panel.switches = {'playable': Mock()}
-            panel.step_checks = {'playable': Mock()}
-            panel.primo_entry = Mock()
-            panel.hands_note = Mock()
-            return panel
-
-        three = panel_for('3')
-        three.update_hand_options()
-        three.switches['playable'].set.assert_called_once_with(True)
-        three.step_checks['playable'].configure.assert_called_once_with(state='disabled')
-        three.primo_entry.configure.assert_called_once_with(state='readonly')
-        three.hands_note.grid.assert_called_once_with()
-
-        two = panel_for('2')
-        two.update_hand_options()
-        two.switches['playable'].set.assert_not_called()
-        two.step_checks['playable'].configure.assert_called_once_with(state='normal')
-        two.primo_entry.configure.assert_called_once_with(state='disabled')
-        two.hands_note.grid_remove.assert_called_once_with()
-
-        four = panel_for('4')
-        four.update_hand_options()
-        four.switches['playable'].set.assert_called_once_with(False)
-        four.step_checks['playable'].configure.assert_called_once_with(state='disabled')
-
-    def test_gui_presets_normalize_playable_for_three_hands(self):
-        self.assertTrue(normalize_preset({'hands': 3, 'switches': {'playable': False}})['switches']['playable'])
-        self.assertFalse(normalize_preset({'hands': 4, 'switches': {'playable': True}})['switches']['playable'])
-        self.assertFalse(normalize_preset({'hands': 2, 'switches': {'playable': False}})['switches']['playable'])
-
-    def test_integrated_reduction_removes_one_inner_note_for_two_hands(self):
-        groups = [self.note_group((36, 48, 60, 72, 84))]
-        cuts, segments, details = hand_split.search_splits(
-            groups, 3, [(60, 0.5)] * 10, 480, limits=(2, 12), integrated=True, return_details=True)
-        self.assertEqual(details['group_primo_active'], [False])
-        self.assertEqual(segments, [])
-        self.assertEqual([note['note'] for note in details['removed_per_group'][0]], [60])
-        self.assertIsNotNone(details['off_best_costs'][0])
-        self.assertGreater(details['on_best_costs'][0], details['off_best_costs'][0])
-        self.assertEqual(cuts[0][1], 4)
-
-    def test_integrated_primo_handles_group_that_reduction_cannot_solve(self):
-        pitches = (36, 40, 60, 64, 84, 88, 108, 112)
-        groups = [self.note_group(pitches)]
-        cuts, segments, details = hand_split.search_splits(
-            groups, 3, [(60, 0.5)] * 10, 480, limits=(2, 12), integrated=True, return_details=True)
-        self.assertEqual(details['group_primo_active'], [True])
-        self.assertEqual(details['removed_per_group'][0], ())
-        self.assertLess(details['on_best_costs'][0], details['off_best_costs'][0])
-        self.assertTrue(segments)
-        self.assertLess(cuts[0][1], len(pitches))
-
-    def test_integrated_reduction_deletes_notes_from_output_midi(self):
-        path = self.root / 'song.mid'
-        self.make_midi(path, pitches=(36, 48, 60, 72, 84))
-        stats = split_hands_in_place(path, hands=3, limits=(2, 12))
-        notes = collect_notes(mido.MidiFile(path))
-        self.assertEqual(stats['removed_notes'], 1)
-        self.assertEqual(stats['final_notes'], 4)
-        self.assertEqual(stats['primo_segments'], [])
-        self.assertNotIn(60, [note['note'] for note in notes])
-        self.assertEqual({note['start_message'].channel for note in notes}, {0, 2})
-
-    def test_integrated_reduction_records_playable_deletion(self):
-        source = self.root / 'song_bpmfix.mid'
-        self.make_midi(source, pitches=(36, 40, 44, 48, 52, 84))
-        args = postprocess.build_parser().parse_args(
-            [str(source), '--hands', '3', '--no-clean', '--no-trim'])
-        with contextlib.redirect_stdout(io.StringIO()):
-            cleaned, _ = postprocess.run_postprocess(args)
-        changes = load_changes(cleaned)
-        self.assertTrue(any(change['kind'] == 'deleted' and change['stage'] == 'playable'
-                            for change in changes))
-
-    def test_gui_passes_primo_setting_only_for_three_hands(self):
-        panel = object.__new__(Panel)
-        panel.midi = Mock(get=Mock(return_value='song.mid'))
-        panel.source = Mock(get=Mock(return_value='reuse'))
-        panel.bpm = Mock(get=Mock(return_value=''))
-        panel.audio = Mock(get=Mock(return_value=''))
-        preset = default_preset()
-        preset['hands'] = 3
-        args = panel.argv(preset)
-        self.assertEqual(args[args.index('--primo-activation-bars') + 1], '4')
-        preset['hands'] = 2
-        self.assertNotIn('--primo-activation-bars', panel.argv(preset))
 
     def test_successful_run_publishes_report_only_on_completion(self):
         source = self.root / 'song_bpmfix.mid'

@@ -40,7 +40,7 @@
 
 統一執行器 `src/postprocess.py` 依此順序執行，每一步可開關（第 8 章）。
 
-上圖為兩手流程；三手的可彈性清理不再獨立執行，而是在第 6 章的分手 beam 中與 Primo 一起比較，四手不支援可彈性清理。卷簾顯示目前選取的檔案或明確產生的預覽檔，不會自動改用 cleaned；儲存第一拍時寫入 `song_bpmfix.mid`；顯示 cleaned 時同步改寫它並平移修改痕跡；顯示原始 MIDI 時建立或覆寫 `song_bpmfix.mid`，不改原檔，儲存後預覽切到 bpmfix。重跑時沿用 `song_bpmfix.mid` 可保留手動對齊。
+上圖為兩手流程；三手的可彈性清理改在分手之後，只處理第一位演奏者的 left 與 second_right，四手不支援可彈性清理。卷簾顯示目前選取的檔案或明確產生的預覽檔，不會自動改用 cleaned；儲存第一拍時寫入 `song_bpmfix.mid`；顯示 cleaned 時同步改寫它並平移修改痕跡；顯示原始 MIDI 時建立或覆寫 `song_bpmfix.mid`，不改原檔，儲存後預覽切到 bpmfix。重跑時沿用 `song_bpmfix.mid` 可保留手動對齊。
 
 ## 資料約定
 

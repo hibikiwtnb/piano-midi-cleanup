@@ -58,14 +58,6 @@ SECOND_HAND_NOTE_COST = 1.0
 REPEAT_NOTE_COST = 0.0
 REPEAT_CONTEXT_BEATS = 2.0
 
-# Three-hand split: the second player's right hand joins for whole-bar passages rather than
-# single onsets. Activation is paid per OFF -> ON change, upkeep per active bar, and an ON
-# passage must last at least PRIMO_ACTIVATION_BARS bars.
-PRIMO_ACTIVATION_COST = 8.0
-PRIMO_BAR_COST = 1.0
-PRIMO_ACTIVATION_BARS = 4
-BEATS_PER_BAR = 4
-
 RIGHT_HAND_CHANNEL = 0
 SECOND_RIGHT_HAND_CHANNEL = 1
 LEFT_HAND_CHANNEL = 2
@@ -326,7 +318,7 @@ def split_cost(slices, onset, state, blob):
     return cost + blob_cost(slices, blob)
 
 
-def next_state(state, slices, onset, cost, cuts, parent, removed=(), reduction_loss=0.0):
+def next_state(state, slices, onset, cost, cuts, parent):
     new_state = {
         'pitch': list(state['pitch']),
         'onset': list(state['onset']),
@@ -334,9 +326,6 @@ def next_state(state, slices, onset, cost, cuts, parent, removed=(), reduction_l
         'cost': state['cost'] + cost,
         'cuts': cuts,
         'parent': parent,
-        'removed': tuple(removed),
-        'group_cost': cost,
-        'reduction_loss': reduction_loss,
     }
     for hand, pitches in enumerate(slices):
         if pitches:
@@ -371,196 +360,53 @@ def repeated_note_cost(slices, recent, tick, context_ticks, unique_pitches):
     return cost
 
 
-def primo_active_modes(state, bar, first_of_bar, minimum_bars):
-    """Allowed Primo states at this onset group, with the extra cost each one adds."""
-    if not first_of_bar:
-        # A bar keeps the state chosen at its first onset group.
-        return ((state['primo_active'], state['primo_start_bar'], state['primo_last_bar'], 0.0),)
-    if state['primo_active']:
-        modes = [(True, state['primo_start_bar'], bar,
-                  PRIMO_BAR_COST * (bar - state['primo_last_bar']))]
-        if bar - state['primo_start_bar'] >= minimum_bars:
-            # Leaving at this bar still owes upkeep for any bars since the last onset.
-            modes.append((False, None, None,
-                          PRIMO_BAR_COST * max(0, bar - 1 - state['primo_last_bar'])))
-        return modes
-    return ((False, None, None, 0.0),
-            (True, bar, bar, PRIMO_ACTIVATION_COST + PRIMO_BAR_COST))
-
-
-def primo_bar_segments(chain, group_bars):
-    """1-based inclusive bar ranges where Primo is ON, including bars without onsets."""
-    segments = []
-    start_bar = None
-    for state, bar in zip(chain, group_bars):
-        if state['primo_active']:
-            if start_bar is None:
-                start_bar = state['primo_start_bar']
-        elif start_bar is not None:
-            segments.append((start_bar + 1, bar))
-            start_bar = None
-    if start_bar is not None and group_bars:
-        segments.append((start_bar + 1, group_bars[-1] + 1))
-    return segments
-
-
-def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
-                  primo_activation_bars=PRIMO_ACTIVATION_BARS,
-                  integrated=False, return_details=False, initial_state=None,
-                  force_off=False):
-    """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high.
-
-    With three hands and ``integrated``, every group compares three candidates in
-    the same beam: OFF with all notes, OFF after the existing playable reduction
-    (including its removal loss), and Primo ON with all notes.
-    ``initial_state``/``force_off`` are used to price an OFF-only alternative for
-    report diagnostics without changing the main search.
-    """
-    use_primo = hands == 3
-    if integrated and not use_primo:
-        raise ValueError('Integrated playable reduction is only available with three hands.')
-    bar_ticks = ticks_per_beat * BEATS_PER_BAR
-    group_bars = [group[0]['start_ticks'] // bar_ticks for group in groups] if use_primo else []
-    first_of_bar = ([index == 0 or group_bars[index] != group_bars[index - 1]
-                     for index in range(len(groups))] if use_primo else [])
-    if integrated:
-        from playable_reduction import (DEFAULT_MAX_NOTES_PER_HAND, DEFAULT_MAX_SPAN,
-                                        evaluate_reduction)
-        reduction_limits = limits or (DEFAULT_MAX_NOTES_PER_HAND, DEFAULT_MAX_SPAN)
-    if initial_state is None:
-        initial_pitch = [None] * hands
-        initial_onset = [None] * hands
-        initial_run = [0] * hands
-        initial_recent = {}
-    else:
-        initial_pitch = list(initial_state['pitch'])
-        initial_onset = list(initial_state['onset'])
-        initial_run = list(initial_state['run'])
-        initial_recent = dict(initial_state.get('recent', {}))
+def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
+    """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
     beam = [{
-        'pitch': initial_pitch,
-        'onset': initial_onset,
-        'run': initial_run,
+        'pitch': [None] * hands,
+        'onset': [None] * hands,
+        'run': [0] * hands,
         'cost': 0.0,
         'cuts': None,
         'parent': None,
-        'recent': initial_recent,
-        'primo_active': False,
-        'primo_start_bar': None,
-        'primo_last_bar': None,
-        'removed': (),
-        'group_cost': 0.0,
-        'reduction_loss': 0.0,
+        'recent': {},
     }]
-    off_best_costs = [None] * len(groups)
-    on_best_costs = [None] * len(groups)
 
-    for index, group in enumerate(groups):
+    for group in groups:
         pitches = sorted(note['note'] for note in group)
         onset = group[0]['start_seconds']
         tick = group[0]['start_ticks']
-        bar = group_bars[index] if use_primo else None
         context_ticks = REPEAT_CONTEXT_BEATS * ticks_per_beat
+        unique_pitches = {pitch for pitch, count in Counter(pitches).items() if count == 1}
         blob = blobs[group[0]['start_ticks'] // ticks_per_beat]
-
-        if integrated:
-            plan = evaluate_reduction(group, *reduction_limits)
-            # Candidate A1: keep every note, then use the existing two-hand assignment.
-            off_variants = []
-            for cuts in cut_options(len(pitches), hands):
-                bounds = (0,) + cuts + (len(pitches),)
-                slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
-                if not slices[2]:
-                    off_variants.append((cuts, slices, (), 0.0))
-            # Candidate A2: delete the fewest low-priority notes, then assign the kept notes.
-            if plan.removed:
-                off_pitches = [note['note'] for note in plan.kept]
-                for cut in range(len(off_pitches) + 1):
-                    low = off_pitches[:cut]
-                    high = off_pitches[cut:]
-                    if hand_fits(low, *reduction_limits) and hand_fits(high, *reduction_limits):
-                        off_variants.append(((cut, len(off_pitches)), [low, high, []],
-                                             plan.removed, plan.loss))
-            # Candidate B: keep every note and allow Primo.
-            on_options = []
-            for cuts in cut_options(len(pitches), hands):
-                bounds = (0,) + cuts + (len(pitches),)
-                on_options.append((cuts, [pitches[bounds[hand]:bounds[hand + 1]]
-                                          for hand in range(hands)]))
-        else:
-            plan = None
-            options = []
-            for cuts in cut_options(len(pitches), hands):
-                bounds = (0,) + cuts + (len(pitches),)
-                slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
-                options.append((cuts, slices))
-            if limits is not None:
-                fitting = [(cuts, slices) for cuts, slices in options
-                           if all(hand_fits(part, *limits) for part in slices)]
-                # Reduction explicitly preserves unsolved groups; keep those assignable too.
-                if fitting:
-                    options = fitting
-            off_variants = ([(cuts, slices, (), 0.0) for cuts, slices in options if not slices[2]]
-                            if use_primo else [(cuts, slices, (), 0.0) for cuts, slices in options])
-            on_options = [(cuts, slices) for cuts, slices in options]
-
+        options = []
+        for cuts in cut_options(len(pitches), hands):
+            bounds = (0,) + cuts + (len(pitches),)
+            slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
+            options.append((cuts, slices))
+        if limits is not None:
+            fitting = [(cuts, slices) for cuts, slices in options
+                       if all(hand_fits(part, *limits) for part in slices)]
+            # Reduction explicitly preserves unsolved groups; keep those assignable too.
+            if fitting:
+                options = fitting
         candidates = []
         for state in beam:
-            if force_off:
-                modes = ((False, None, None, 0.0),)
-            elif use_primo:
-                modes = primo_active_modes(state, bar, first_of_bar[index], primo_activation_bars)
-            else:
-                modes = ((False, None, None, 0.0),)
-            for active, start_bar, last_bar, extra_cost in modes:
-                if active:
-                    variants = [(cuts, slices, (), 0.0) for cuts, slices in on_options]
-                else:
-                    variants = off_variants
-                if not variants:
-                    continue
-                for cuts, slices, removed, reduction_loss in variants:
-                    cost = split_cost(slices, onset, state, blob) + extra_cost + reduction_loss
-                    if REPEAT_NOTE_COST:
-                        played_pitches = [pitch for part in slices for pitch in part]
-                        unique_pitches = {pitch for pitch, count in Counter(played_pitches).items()
-                                          if count == 1}
-                        cost += repeated_note_cost(slices, state['recent'], tick, context_ticks,
-                                                   unique_pitches)
-                    child = next_state(state, slices, onset, cost, cuts, state,
-                                       removed=removed, reduction_loss=reduction_loss)
-                    if use_primo:
-                        child['primo_active'] = active
-                        child['primo_start_bar'] = start_bar
-                        child['primo_last_bar'] = last_bar
-                        if state['primo_active'] and not active:
-                            # A later activation starts a new phrase for the third hand.
-                            child['pitch'][2] = None
-                            child['onset'][2] = None
-                            child['run'][2] = 0
-                    candidates.append(child)
-                    if active:
-                        if on_best_costs[index] is None or cost < on_best_costs[index]:
-                            on_best_costs[index] = cost
-                    elif use_primo:
-                        if off_best_costs[index] is None or cost < off_best_costs[index]:
-                            off_best_costs[index] = cost
-        if not candidates:
-            raise ValueError('No feasible hand assignment at onset group {}'.format(index))
+            for cuts, slices in options:
+                cost = split_cost(slices, onset, state, blob)
+                if REPEAT_NOTE_COST:
+                    cost += repeated_note_cost(slices, state['recent'], tick, context_ticks, unique_pitches)
+                candidates.append(next_state(state, slices, onset, cost, cuts, state))
         candidates.sort(key=lambda item: item['cost'])
         beam = candidates[:BEAM_WIDTH]
         if REPEAT_NOTE_COST:
             for state in beam:
                 # Only copy history for retained candidates, not every proposed split.
-                removed_ids = {id(note) for note in state['removed']}
-                played_pitches = [note['note'] for note in group if id(note) not in removed_ids]
-                unique_pitches = {pitch for pitch, count in Counter(played_pitches).items()
-                                  if count == 1}
                 recent = {pitch: previous for pitch, previous in state['parent']['recent'].items()
                           if tick - previous[1] < context_ticks and pitch not in pitches}
-                for position, pitch in enumerate(played_pitches):
+                for index, pitch in enumerate(pitches):
                     if pitch in unique_pitches:
-                        recent[pitch] = (sum(position >= cut for cut in state['cuts']), tick)
+                        recent[pitch] = (sum(index >= cut for cut in state['cuts']), tick)
                 state['recent'] = recent
 
     cuts_per_group = []
@@ -569,61 +415,15 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
         cuts_per_group.append(state['cuts'])
         state = state['parent']
     cuts_per_group.reverse()
-    chain = []
-    if use_primo or return_details:
-        state = beam[0]
-        while state['parent'] is not None:
-            chain.append(state)
-            state = state['parent']
-        chain.reverse()
-    segments = primo_bar_segments(chain, group_bars) if use_primo else []
-    if not return_details:
-        return cuts_per_group, segments
-    details = {
-        'group_bars': group_bars,
-        'group_primo_active': [state.get('primo_active', False) for state in chain],
-        'removed_per_group': [state['removed'] for state in chain],
-        'reduction_losses': [state['reduction_loss'] for state in chain],
-        'group_costs': [state['group_cost'] for state in chain],
-        'off_best_costs': off_best_costs,
-        'on_best_costs': on_best_costs,
-        'total_cost': beam[0]['cost'],
-        'group_states': [{'pitch': list(state['pitch']), 'onset': list(state['onset']),
-                          'run': list(state['run']), 'recent': dict(state.get('recent', {}))}
-                         for state in chain],
-    }
-    return cuts_per_group, segments, details
+    return cuts_per_group
 
 
-def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None,
-                  primo_activation_bars=PRIMO_ACTIVATION_BARS, integrated=False,
-                  return_details=False):
+def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None):
     names = HANDS[hands]
-    if integrated:
-        cuts_per_group, primo_segments, details = search_splits(
-            groups, hands, blobs, ticks_per_beat, limits=limits,
-            primo_activation_bars=primo_activation_bars, integrated=True, return_details=True)
-    elif return_details:
-        cuts_per_group, primo_segments, details = search_splits(
-            groups, hands, blobs, ticks_per_beat, limits=limits,
-            primo_activation_bars=primo_activation_bars, return_details=True)
-    else:
-        cuts_per_group, primo_segments = search_splits(
-            groups, hands, blobs, ticks_per_beat, limits=limits,
-            primo_activation_bars=primo_activation_bars)
-        details = None
-    for index, (group, cuts) in enumerate(zip(groups, cuts_per_group)):
-        removed = details['removed_per_group'][index] if details else ()
-        removed_ids = {id(note) for note in removed}
+    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat, limits=limits)):
         ordered = sorted(group, key=lambda note: note['note'])
-        for note in ordered:
-            note['hand'] = None
-        kept = [note for note in ordered if id(note) not in removed_ids]
-        for position, note in enumerate(kept):
-            note['hand'] = names[sum(1 for cut in cuts if position >= cut)]
-    if return_details:
-        return primo_segments, details
-    return primo_segments
+        for index, note in enumerate(ordered):
+            note['hand'] = names[sum(1 for cut in cuts if index >= cut)]
 
 
 def summarize_groups(groups):
@@ -706,126 +506,37 @@ def map_pedal_channels(midi_file, notes):
 
 def apply_channels(notes):
     for note in notes:
-        if note['hand'] is None:
-            continue
         channel = CHANNELS[note['hand']]
         note['start_message'].channel = channel
         note['end_message'].channel = channel
 
 
-def remove_note_messages(midi_file, notes):
-    """Remove both messages of these notes while keeping the other message objects intact."""
-    removals = defaultdict(set)
-    for note in notes:
-        removals[note['track_index']].update((note['start_index'], note['end_index']))
-    for track_index, track in enumerate(midi_file.tracks):
-        indexes = removals.get(track_index)
-        if not indexes:
-            continue
-        rebuilt = mido.MidiTrack()
-        pending = 0
-        for index, message in enumerate(track):
-            pending += message.time
-            if index in indexes:
-                continue
-            message.time = pending
-            rebuilt.append(message)
-            pending = 0
-        if pending:
-            if rebuilt:
-                rebuilt[-1].time += pending
-            else:
-                rebuilt.append(mido.MetaMessage('end_of_track', time=pending))
-        midi_file.tracks[track_index] = rebuilt
-
-
-def split_hands_in_place(midi_path, hands=2, limits=None,
-                         primo_activation_bars=PRIMO_ACTIVATION_BARS, integrated=None):
-    if integrated is None:
-        integrated = hands == 3
-    if integrated and hands != 3:
-        raise ValueError('Integrated playable reduction is only available with three hands.')
+def split_hands_in_place(midi_path, hands=2, limits=None):
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
     blobs = blob_lines(notes, midi_file.ticks_per_beat)
-    if integrated:
-        from playable_reduction import DEFAULT_MAX_NOTES_PER_HAND, DEFAULT_MAX_SPAN
-        reduction_limits = limits or (DEFAULT_MAX_NOTES_PER_HAND, DEFAULT_MAX_SPAN)
-        primo_segments, details = assign_groups(
-            groups, hands, blobs, midi_file.ticks_per_beat, limits=reduction_limits,
-            primo_activation_bars=primo_activation_bars, integrated=True, return_details=True)
-    else:
-        primo_segments = assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits,
-                                       primo_activation_bars=primo_activation_bars)
-        details = None
-
-    kept_notes = [note for note in notes if note['hand'] is not None]
-    removed_notes = [note for note in notes if note['hand'] is None]
-    if removed_notes:
-        remove_note_messages(midi_file, removed_notes)
-    map_pedal_channels(midi_file, kept_notes)
-    apply_channels(kept_notes)
+    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits)
+    map_pedal_channels(midi_file, notes)
+    apply_channels(notes)
     midi_file.save(midi_path)
 
     wide_span_groups, fast_run_chords = summarize_groups(groups)
-    reduction_changes = []
-    reduction_loss = 0.0
-    diagnostics = []
-    if details:
-        reduction_changes = [(groups[index], list(removed))
-                             for index, removed in enumerate(details['removed_per_group']) if removed]
-        reduction_loss = sum(details['reduction_losses'])
-        for start, end in primo_segments:
-            indexes = [index for index, bar in enumerate(details['group_bars'])
-                       if start - 1 <= bar <= end - 1 and details['group_primo_active'][index]]
-            two_hand_cost = None
-            if indexes:
-                start_state = details['group_states'][indexes[0] - 1] if indexes[0] > 0 else None
-                try:
-                    _, _, alternative = search_splits(
-                        groups[indexes[0]:indexes[-1] + 1], hands, blobs, midi_file.ticks_per_beat,
-                        limits=reduction_limits, primo_activation_bars=primo_activation_bars,
-                        integrated=True, return_details=True, initial_state=start_state,
-                        force_off=True)
-                    two_hand_cost = alternative['total_cost']
-                except ValueError:
-                    pass
-            diagnostics.append({
-                'start': start,
-                'end': end,
-                'notes': sum(1 for index in indexes for note in groups[index]
-                             if note['hand'] == 'second_right'),
-                'primo_cost': sum(details['group_costs'][index] for index in indexes),
-                'two_hand_cost': two_hand_cost,
-            })
 
     stats = {
         'midi_path': midi_path,
         'hands': hands,
         'total_notes': len(notes),
-        'final_notes': len(kept_notes),
-        'hand_notes': {hand: sum(1 for note in kept_notes if note['hand'] == hand) for hand in HANDS[hands]},
+        'hand_notes': {hand: sum(1 for note in notes if note['hand'] == hand) for hand in HANDS[hands]},
         'onset_groups': len(groups),
         'wide_span_groups': wide_span_groups,
         'fast_run_chords': fast_run_chords,
-        'ticks_per_beat': midi_file.ticks_per_beat,
-        'integrated_playable': integrated,
-        'removed_notes': len(removed_notes),
-        'removed_groups': len(reduction_changes),
-        'reduction_changes': reduction_changes,
-        'reduction_loss': reduction_loss,
     }
-    if hands == 3:
-        stats['primo_activation_bars'] = primo_activation_bars
-        stats['primo_segments'] = primo_segments
-        stats['primo_segment_diagnostics'] = diagnostics
     return stats
 
 
 def format_split_stats(stats):
     total_notes = stats['total_notes']
-    final_notes = stats.get('final_notes', total_notes)
     lines = [
         'MIDI provisional hand split stats',
         'MIDI: {}'.format(stats['midi_path']),
@@ -837,40 +548,8 @@ def format_split_stats(stats):
             CHANNELS[hand] + 1,
             hand.replace('_', ' '),
             stats['hand_notes'][hand],
-            stats['hand_notes'][hand] / final_notes if final_notes else 0.0,
+            stats['hand_notes'][hand] / total_notes if total_notes else 0.0,
         ))
-    if stats['hands'] == 3:
-        segments = stats.get('primo_segments') or []
-        lines += [
-            'Primo activation bars (minimum): {}'.format(stats['primo_activation_bars']),
-            'Primo ON segments: {}'.format(len(segments)),
-            'Primo ON ranges: {}'.format(
-                ', '.join('m{}-m{}'.format(start, end) for start, end in segments) if segments else 'none'),
-        ]
-        if stats.get('integrated_playable'):
-            lines += [
-                'Notes after integrated reduction: {}'.format(final_notes),
-                'Removed for two-hand playability: {} in {} onset groups'.format(
-                    stats['removed_notes'], stats['removed_groups']),
-                'Reduction musical-loss cost: {:.1f}'.format(stats['reduction_loss']),
-            ]
-        diagnostics = stats.get('primo_segment_diagnostics') or []
-        if diagnostics:
-            lines.append('Primo ON segment alternatives:')
-            for item in diagnostics:
-                two_hand = ('n/a' if item['two_hand_cost'] is None
-                            else '{:.1f}'.format(item['two_hand_cost']))
-                lines.append('- m{}-m{}: second_right {} notes, Primo {:.1f}, two-hand alternative {}'.format(
-                    item['start'], item['end'], item['notes'], item['primo_cost'], two_hand))
-        changes = stats.get('reduction_changes') or []
-        if changes:
-            from playable_reduction import note_name, position
-            lines.append('Reduction removals:')
-            for group, removed in changes:
-                lines.append('- {}: removed {} from {}'.format(
-                    position(group[0], stats['ticks_per_beat']),
-                    ' '.join(note_name(note) for note in sorted(removed, key=lambda note: note['note'])),
-                    ' '.join(note_name(note) for note in sorted(group, key=lambda note: note['note']))))
     lines += [
         'Onset groups: {}'.format(stats['onset_groups']),
         'Groups with a hand span > {} semitones: {}'.format(COMFORT_SPAN, stats['wide_span_groups']),
@@ -892,10 +571,8 @@ def write_split_report(stats, report_path=None, append=False):
         print('Updating hand split report: {}'.format(report_path))
 
 
-def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None,
-                     primo_activation_bars=PRIMO_ACTIVATION_BARS, integrated=None):
-    stats = split_hands_in_place(midi_path, hands=hands, limits=limits,
-                                 primo_activation_bars=primo_activation_bars, integrated=integrated)
+def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None):
+    stats = split_hands_in_place(midi_path, hands=hands, limits=limits)
     write_split_report(stats, report_path=report_path, append=append_report)
     return stats
 
@@ -912,16 +589,6 @@ def choose_midi():
     )
 
 
-def positive_bars(text):
-    try:
-        value = int(text)
-    except ValueError:
-        raise argparse.ArgumentTypeError('expected a positive whole number: {}'.format(text))
-    if value < 1:
-        raise argparse.ArgumentTypeError('expected a positive whole number: {}'.format(text))
-    return value
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Mark provisional piano hand split by MIDI channel.')
     parser.add_argument('input_midi', nargs='?', help='Input MIDI file to modify in place.')
@@ -931,9 +598,6 @@ def main(argv=None):
     parser.add_argument('--hands', type=int, choices=sorted(HANDS), default=2,
                         help='Number of hands: 3 adds a second right hand on channel 2, 4 also a second left hand on channel 4 '
                              '(default: 2).')
-    parser.add_argument('--primo-activation-bars', type=positive_bars, default=PRIMO_ACTIVATION_BARS,
-                        metavar='N', help='Three hands: keep the second player active for at least N bars (default: {}).'
-                        .format(PRIMO_ACTIVATION_BARS))
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
@@ -945,8 +609,7 @@ def main(argv=None):
         return 1
 
     try:
-        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report, hands=args.hands,
-                         primo_activation_bars=args.primo_activation_bars)
+        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report, hands=args.hands)
     except Exception as error:
         messagebox.showerror('Hand Split failed', str(error))
         raise

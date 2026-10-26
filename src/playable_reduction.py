@@ -3,7 +3,7 @@ import itertools
 import os
 import sys
 import tkinter as tk
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
@@ -75,39 +75,19 @@ def removal_cost(note, notes):
     return cost + note['velocity'] / 1000
 
 
-ReductionPlan = namedtuple('ReductionPlan', 'notes kept removed loss')
-
-
-def evaluate_reduction(group, max_notes, max_span, max_removals=None):
-    """The cheapest fewest-note removal that makes one onset group playable.
-
-    ``removed`` is an empty tuple when the group already fits and None when no
-    allowed removal can solve it. ``loss`` is the sum of the existing removal
-    priorities, so the hand split can compare deleting notes with using Primo.
-    """
+def plan_group(group, max_notes, max_span):
+    """The cheapest fewest notes to remove so the group is playable, [] when it already is, None when unsolved."""
     notes = sorted(group, key=lambda note: note['note'])
     if playable([note['note'] for note in notes], max_notes, max_span):
-        return ReductionPlan(notes, notes, (), 0.0)
-
-    limit = MAX_REMOVALS_PER_GROUP if max_removals is None else max_removals
-    for size in range(1, min(limit, len(notes) - 1) + 1):
+        return []
+    for size in range(1, min(MAX_REMOVALS_PER_GROUP, len(notes) - 1) + 1):
         options = [
             removed for removed in itertools.combinations(notes, size)
             if playable([note['note'] for note in notes if note not in removed], max_notes, max_span)
         ]
         if options:
-            removed = min(options, key=lambda choice: sum(removal_cost(note, notes) for note in choice))
-            removed_ids = {id(note) for note in removed}
-            kept = [note for note in notes if id(note) not in removed_ids]
-            return ReductionPlan(notes, kept, tuple(removed),
-                                 sum(removal_cost(note, notes) for note in removed))
-    return ReductionPlan(notes, notes, None, None)
-
-
-def plan_group(group, max_notes, max_span):
-    """The cheapest fewest notes to remove so the group is playable, [] when it already is, None when unsolved."""
-    plan = evaluate_reduction(group, max_notes, max_span)
-    return None if plan.removed is None else list(plan.removed)
+            return min(options, key=lambda removed: sum(removal_cost(note, notes) for note in removed))
+    return None
 
 
 def position(note, ticks_per_beat):
