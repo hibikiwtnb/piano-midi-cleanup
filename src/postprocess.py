@@ -255,7 +255,7 @@ def build_parser(parser_class=argparse.ArgumentParser):
                         help='Also remove the softer note of semitone pairs in rule cleaning.')
     parser.add_argument('--playable', action='store_true',
                         help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
-                             'player\'s left and second right hand, after the split.')
+                             'player\'s left and right hands, after the split.')
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')
