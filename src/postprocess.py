@@ -58,9 +58,11 @@ PARAMETERS = (
     Parameter('split.hard_span', 'Heavily penalized beyond (semitones)', int, ((hand_split_channels, 'HARD_SPAN'),)),
     Parameter('split.repeat_cost', 'Repeated-note hand continuity (experimental, 0 = off)', float,
               ((hand_split_channels, 'REPEAT_NOTE_COST'),)),
+    Parameter('split.voice_continuity_cost', 'Melodic hand continuity (0 = off)', float,
+              ((hand_split_channels, 'MELODIC_CONTINUITY_COST'),)),
     Parameter('split.second_player_bars', 'Three hands: second player minimum bars', int,
               ((hand_split_channels, 'SECOND_PLAYER_MIN_BARS'),)),
-    Parameter('split.second_right_min_pitch', 'Second right hand: lowest note (C4 = 60, 0 = unrestricted)',
+    Parameter('split.second_right_min_pitch', 'Second right hand: preferred lower boundary (C4 = 60, 0 = off)',
               hand_split_channels.parse_midi_pitch, ((hand_split_channels, 'SECOND_RIGHT_MIN_PITCH'),)),
     Parameter('trim.fast_figure_beats', 'Fast figure: onsets within (beats)', float,
               ((trim_overlaps, 'FAST_FIGURE_BEATS'),)),
@@ -85,8 +87,8 @@ def parse_setting(text):
         raise argparse.ArgumentTypeError('expected key=value with a key from --list-parameters: {}'.format(text))
     try:
         number = PARAMETER_BY_KEY[key].kind(value)
-        if key == 'split.repeat_cost' and (not math.isfinite(number) or number < 0):
-            raise argparse.ArgumentTypeError('split.repeat_cost must be finite and nonnegative.')
+        if key in ('split.repeat_cost', 'split.voice_continuity_cost') and (not math.isfinite(number) or number < 0):
+            raise argparse.ArgumentTypeError('{} must be finite and nonnegative.'.format(key))
         if key == 'split.second_player_bars' and number < 1:
             raise argparse.ArgumentTypeError('split.second_player_bars must be at least 1.')
         return key, number

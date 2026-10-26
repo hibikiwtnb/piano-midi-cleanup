@@ -59,6 +59,8 @@ SECOND_HAND_NOTE_COST = 1.0
 # Optional repeated-note continuity experiment; zero preserves the established split.
 REPEAT_NOTE_COST = 0.0
 REPEAT_CONTEXT_BEATS = 2.0
+MELODIC_CONTINUITY_COST = 0.0
+MELODIC_MAX_STEP = 5
 
 # Three-hand mode: the second player's right hand is enabled in whole-bar segments,
 # never just for single onsets. An ON segment must last at least this many bars.
@@ -68,6 +70,7 @@ SECOND_PLAYER_MIN_BARS = 4
 SECOND_PLAYER_ACTIVATION_COST = 8.0
 SECOND_PLAYER_BAR_COST = 1.0
 SECOND_RIGHT_MIN_PITCH = 0
+SECOND_RIGHT_REGISTER_COST = 10.0
 BEATS_PER_BAR = 4
 
 RIGHT_HAND_CHANNEL = 0
@@ -370,11 +373,24 @@ def blob_cost(slices, blob):
     return wrong * BLOB_SIDE_COST * clarity
 
 
-def split_cost(slices, onset, state, blob):
+def preferred_register_cost(slices, second_player_active=False):
+    """Soft register preference; a small excursion is cheaper than a large one."""
+    if not SECOND_RIGHT_MIN_PITCH or len(slices) < 3:
+        return 0.0
+    upper = slices[HANDS[len(slices)].index('second_right')]
+    distance_squared = sum(max(0, SECOND_RIGHT_MIN_PITCH - pitch) ** 2 for pitch in upper)
+    if len(slices) == 3 and second_player_active:
+        # During joint playing, player one's right hand stays below the upper register.
+        distance_squared += sum(max(0, pitch - SECOND_RIGHT_MIN_PITCH + 1) ** 2 for pitch in slices[1])
+    return SECOND_RIGHT_REGISTER_COST * distance_squared
+
+
+def split_cost(slices, onset, state, blob, second_player_active=False):
     cost = sum(hand_cost(pitches, onset, state['pitch'][hand], state['onset'][hand], state['run'][hand])
                for hand, pitches in enumerate(slices))
     cost += register_cost(slices[0], slices[1])
     cost += sum(len(pitches) for pitches in slices[2:]) * SECOND_HAND_NOTE_COST
+    cost += preferred_register_cost(slices, second_player_active)
     return cost + blob_cost(slices, blob)
 
 
@@ -444,6 +460,44 @@ def second_player_modes(state, bar, first_of_bar, minimum_bars):
     return tuple(modes)
 
 
+def melodic_links(groups, ticks_per_beat):
+    """Mutual nearest neighbors in pitch/time form short, nonbranching voice links.
+
+    Inspect both earlier and later notes; simultaneous and duplicate pitches in a
+    group provide no link. Links expire after the existing two-beat context.
+    """
+    events = []
+    for group_index, group in enumerate(groups):
+        pitches = sorted(note['note'] for note in group)
+        counts = Counter(pitches)
+        events.extend((group_index, index, pitch, group[0]['start_ticks'])
+                      for index, pitch in enumerate(pitches) if counts[pitch] == 1)
+    forward, backward = {}, {}
+    forward_scores, backward_scores = {}, {}
+    context = REPEAT_CONTEXT_BEATS * ticks_per_beat
+    for i, a in enumerate(events):
+        for j in range(i + 1, len(events)):
+            b = events[j]
+            age = b[3] - a[3]
+            if age >= context:
+                break
+            if b[0] == a[0] or age <= 0 or abs(a[2] - b[2]) > MELODIC_MAX_STEP:
+                continue
+            score = (abs(a[2] - b[2]) + 2 * age / ticks_per_beat, age)
+            if i not in forward_scores or score < forward_scores[i]:
+                forward_scores[i], forward[i] = score, j
+            if j not in backward_scores or score < backward_scores[j]:
+                backward_scores[j], backward[j] = score, i
+    incoming = [[] for _ in groups]
+    for i, j in forward.items():
+        if backward.get(j) != i:
+            continue
+        a, b = events[i], events[j]
+        weight = (1 - abs(a[2] - b[2]) / (MELODIC_MAX_STEP + 1)) * (1 - (b[3] - a[3]) / context)
+        incoming[b[0]].append(((a[0], a[1]), b[1], weight))
+    return incoming
+
+
 def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
                   second_player_bars=None, return_details=False):
     """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
@@ -456,6 +510,7 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
     group_bars = ([group[0]['start_ticks'] // bar_ticks for group in groups] if use_second_player else [])
     first_of_bar = ([index == 0 or group_bars[index] != group_bars[index - 1]
                      for index in range(len(groups))] if use_second_player else [])
+    voice_links = melodic_links(groups, ticks_per_beat) if MELODIC_CONTINUITY_COST else None
 
     beam = [{
         'pitch': [None] * hands,
@@ -465,6 +520,7 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
         'cuts': None,
         'parent': None,
         'recent': {},
+        'voice_recent': {},
         'second_player_active': False,
         'second_player_start_bar': None,
         'second_player_last_bar': None,
@@ -481,10 +537,6 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
         for cuts in cut_options(len(pitches), hands):
             bounds = (0,) + cuts + (len(pitches),)
             slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
-            if 'second_right' in HANDS[hands]:
-                upper = slices[HANDS[hands].index('second_right')]
-                if upper and upper[0] < SECOND_RIGHT_MIN_PITCH:
-                    continue
             options.append((cuts, slices))
         if limits is not None:
             fitting = [(cuts, slices) for cuts, slices in options
@@ -505,9 +557,16 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
                 else:
                     allowed = options
                 for cuts, slices in allowed:
-                    cost = split_cost(slices, onset, state, blob) + mode_cost
+                    cost = split_cost(slices, onset, state, blob, second_player_active=active) + mode_cost
                     if REPEAT_NOTE_COST:
                         cost += repeated_note_cost(slices, state['recent'], tick, context_ticks, unique_pitches)
+                    if voice_links is not None:
+                        for source, index, weight in voice_links[group_index]:
+                            if source in state['voice_recent']:
+                                previous_hand, _ = state['voice_recent'][source]
+                                hand = sum(index >= cut for cut in cuts)
+                                if hand != previous_hand:
+                                    cost += MELODIC_CONTINUITY_COST * weight
                     child = next_state(state, slices, onset, cost, cuts, state)
                     if use_second_player:
                         child['second_player_active'] = active
@@ -530,6 +589,13 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
                     if pitch in unique_pitches:
                         recent[pitch] = (sum(index >= cut for cut in state['cuts']), tick)
                 state['recent'] = recent
+        if voice_links is not None:
+            for state in beam:
+                recent = {key: value for key, value in state['parent']['voice_recent'].items()
+                          if tick - value[1] < context_ticks}
+                for index in range(len(pitches)):
+                    recent[(group_index, index)] = (sum(index >= cut for cut in state['cuts']), tick)
+                state['voice_recent'] = recent
 
     cuts_per_group = []
     state = beam[0]

@@ -140,18 +140,41 @@ class ReleaseChecks(unittest.TestCase):
                 postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
                     ['song.mid', '--set', 'split.second_right_min_pitch=' + text])
 
-    def test_second_right_minimum_pitch_is_hard_even_for_unsolved_groups(self):
-        for hands in (3, 4):
-            for limits in (None, (1, 0)):
-                groups = [[dict(note=p, start_ticks=i * 384, start_seconds=i / 2)
-                           for p in (48, 60, 71, 72, 84)] for i in range(4)]
-                with self.subTest(hands=hands, limits=limits), \
-                        patch.object(hand_split, 'SECOND_RIGHT_MIN_PITCH', 72):
-                    hand_split.assign_groups(groups, hands, [(72, 1)] * 4, 384, limits=limits)
-                    upper = [n['note'] for group in groups for n in group if n['hand'] == 'second_right']
-                    self.assertIn(72, upper)
-                    self.assertTrue(all(p >= 72 for p in upper))
-                    self.assertEqual(sum(map(len, groups)), 20)
+    def test_register_preferences_are_symmetric_soft_and_allow_small_excursions(self):
+        with patch.object(hand_split, 'SECOND_RIGHT_MIN_PITCH', 72):
+            self.assertEqual(hand_split.preferred_register_cost([[48], [71], [72]], True), 0)
+            self.assertEqual(hand_split.preferred_register_cost([[48], [72], [84]], True), 10)
+            self.assertEqual(hand_split.preferred_register_cost([[48], [90], []], False), 0)
+            self.assertEqual(hand_split.preferred_register_cost([[48], [60], [71]], True), 10)
+            self.assertGreater(hand_split.preferred_register_cost([[48], [60], [60]], True), 10)
+            groups = [[dict(note=p, start_ticks=0, start_seconds=0) for p in (48, 60, 71)]]
+            hand_split.assign_groups(groups, 3, [(72, 1)], 384, limits=(1, 0))
+            self.assertEqual(groups[0][-1]['hand'], 'second_right')
+            self.assertEqual(len(groups[0]), 3)
+
+    def test_melodic_continuity_links_adjacent_pitches_and_releases_after_rest(self):
+        def assignments(weight, spacing=384):
+            groups = [[dict(note=p, start_ticks=i * spacing, start_seconds=i * spacing / 768)
+                       for p in pitches] for i, pitches in enumerate(((60, 67), (55, 61))) ]
+            with patch.object(hand_split, 'MELODIC_CONTINUITY_COST', weight):
+                blobs = [(59, 0.1)] + [(64, 0.1)] * (spacing // 384)
+                hand_split.assign_groups(groups, 2, blobs, 384)
+            return [[n['hand'] for n in group] for group in groups]
+        baseline = assignments(0)
+        self.assertNotEqual(baseline, assignments(4))
+        self.assertEqual(assignments(4)[0][0], assignments(4)[1][1])
+        self.assertEqual(assignments(4, spacing=768), baseline)
+
+    def test_melodic_links_do_not_join_simultaneous_notes_or_duplicate_pitches(self):
+        groups = [[dict(note=p, start_ticks=i * 384) for p in pitches]
+                  for i, pitches in enumerate(((48, 60, 84), (49, 61, 83))) ]
+        links = hand_split.melodic_links(groups, 384)
+        self.assertEqual(links[0], [])
+        self.assertEqual([(source, target) for source, target, _ in links[1]],
+                         [((0, 0), 0), ((0, 1), 1), ((0, 2), 2)])
+        duplicates = [[dict(note=p, start_ticks=i * 384) for p in pitches]
+                      for i, pitches in enumerate(((60, 60), (61,))) ]
+        self.assertEqual(hand_split.melodic_links(duplicates, 384), [[], []])
 
     def test_gui_shows_processed_result_after_success(self):
         source = self.root / 'song.mid'
@@ -251,10 +274,11 @@ class ReleaseChecks(unittest.TestCase):
                 [[60], [60], []], {60: (2, 0)}, 384, 768, set()), 0)
 
     def test_repeat_cost_rejects_invalid_settings(self):
-        for value in ('-1', 'nan', 'inf'):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
-                    ['song.mid', '--set', 'split.repeat_cost=' + value])
+        for key in ('split.repeat_cost', 'split.voice_continuity_cost'):
+            for value in ('-1', 'nan', 'inf'):
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
+                        ['song.mid', '--set', key + '=' + value])
 
     def test_successful_run_publishes_report_only_on_completion(self):
         source = self.root / 'song_bpmfix.mid'
