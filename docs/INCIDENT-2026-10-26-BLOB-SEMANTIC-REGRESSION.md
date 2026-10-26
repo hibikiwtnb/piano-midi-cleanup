@@ -326,7 +326,24 @@ blob line 下方：left
 blob line 上方：right
 ```
 
-四手模式需要另行定義，不能在本次事故修復中憑直覺擴張。
+### 四手模式定義
+
+四手 topology 為：
+
+```text
+left → right → second_left → second_right
+```
+
+其中前兩隻手屬於第一位演奏者，後兩隻手屬於第二位演奏者。Blob 語義固定為：
+
+```text
+blob line 下方：left + right
+blob line 上方：second_left + second_right
+```
+
+也就是第一位演奏者的兩隻手負責 lower/middle 音團，第二位演奏者的兩隻手負責 upper 音團。`second_left` 與 `second_right` 都不可落到 blob line 下方，也不可插回第一位演奏者的 lower/middle 音團。
+
+四手仍保留 `SECOND_HAND_NOTE_COST`，避免在沒有獨立 upper 音團時濫用第二位演奏者。四手語義依「第一位演奏者 lower/middle、第二位演奏者 upper」的雙人分層定義；`second_left` 與 `second_right` 的內部順序仍由低到高決定。
 
 ---
 
@@ -338,7 +355,7 @@ blob line 上方：right
 
 > Blob line 是音高空間中的「lower/middle musical mass vs separated upper material」結構分界，不是單純的 player-1 left/right boundary。
 
-三手 topology 改名、channel 改動、performer mapping 改動都不得改變這個 invariant，除非另有獨立設計提案與驗證。
+三手、四手 topology 改名、channel 改動、performer mapping 改動都不得改變這個 invariant，除非另有獨立設計提案與驗證。
 
 ### P0：新增 synthetic regression test
 
@@ -471,6 +488,10 @@ upper_extra_hand
 3 hands:
     lower/middle blob → left + right
     upper separated blob → second_right
+
+4 hands:
+    lower/middle blob → left + right
+    upper separated blob → second_left + second_right
 ```
 
 此次事故的最大教訓是：
