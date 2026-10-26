@@ -45,8 +45,9 @@ BLOB_HIGHEST_LINE = 108
 BLOB_CONTEXT_BEATS = 1
 BLOB_MAX_GAP = 12
 BLOB_LINE_MOVE_COST = 0.5
-# Per note on the wrong side of the line for the first player's left/right split.
-# Scaled down where the empty band is narrower than BLOB_CLEAR_GAP semitones on each side.
+# Per note on the wrong side of the line: player 1 below it, player 2 above it.
+# With two hands, left stays below and right above. Scaled down where the empty band
+# is narrower than BLOB_CLEAR_GAP semitones on each side.
 BLOB_SIDE_COST = 4.0
 BLOB_CLEAR_GAP = 4
 
@@ -298,15 +299,22 @@ def blob_lines(notes, ticks_per_beat):
 
 
 def blob_cost(slices, blob):
-    """Keep the first player's left/right hands on the expected sides of the blob line.
+    """Keep player 1's two hands in the lower blob and player 2 above the line.
 
-    Extra hands belong to player 2 and are intentionally ignored here; their use is controlled
-    by hand feasibility and SECOND_HAND_NOTE_COST rather than forcing the upper blob into them.
+    Two hands still split left/right across the line. With three or four hands,
+    ``left`` and ``right`` form the first player's lower blob, while the second
+    player's hands (including ``second_right``) form the upper blob.
     """
     line, clarity = blob
-    left, right = slices[:2]
-    wrong = sum(1 for pitch in right if pitch < line)
-    wrong += sum(1 for pitch in left if pitch >= line)
+    if len(slices) == 2:
+        left, right = slices
+        wrong = sum(1 for pitch in right if pitch < line)
+        wrong += sum(1 for pitch in left if pitch >= line)
+    else:
+        first_player = slices[:2]
+        second_player = slices[2:]
+        wrong = sum(1 for pitches in first_player for pitch in pitches if pitch >= line)
+        wrong += sum(1 for pitches in second_player for pitch in pitches if pitch < line)
     return wrong * BLOB_SIDE_COST * clarity
 
 

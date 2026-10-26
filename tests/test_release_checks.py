@@ -56,6 +56,22 @@ class ReleaseChecks(unittest.TestCase):
                 pitches = sorted(n['note'] for n in group if n['start_message'].channel == channel)
                 self.assertTrue(hand_fits(pitches, 4, 12))
 
+    def test_blob_cost_keeps_three_hand_first_player_below_second_right_above(self):
+        blob = (60, 1.0)
+        self.assertEqual(hand_split.blob_cost([[48], [55], [72]], blob), 0.0)
+        self.assertEqual(hand_split.blob_cost([[48], [65], [72]], blob), 4.0)
+        self.assertEqual(hand_split.blob_cost([[48], [55], [55]], blob), 4.0)
+        self.assertEqual(hand_split.blob_cost([[65], [55], [72]], blob), 4.0)
+        self.assertEqual(hand_split.blob_cost([[48], [55], [72]], (60, 0.5)), 0.0)
+        self.assertEqual(hand_split.blob_cost([[48], [65], [72]], (60, 0.5)), 2.0)
+        self.assertEqual(hand_split.blob_cost([[48], [55], [72], [84]], blob), 0.0)
+        self.assertEqual(hand_split.blob_cost([[48], [55], [55], [84]], blob), 4.0)
+
+    def test_blob_cost_preserves_two_hand_left_right_semantics(self):
+        blob = (60, 1.0)
+        self.assertEqual(hand_split.blob_cost([[48], [72]], blob), 0.0)
+        self.assertEqual(hand_split.blob_cost([[72], [48]], blob), 8.0)
+
     def test_gui_shows_processed_result_after_success(self):
         source = self.root / 'song.mid'
         self.make_midi(source)
@@ -119,20 +135,30 @@ class ReleaseChecks(unittest.TestCase):
         self.assertEqual(len(collect_notes(mido.MidiFile(path))), 13)
 
     def test_repeated_note_continuity_is_soft_and_expires(self):
-        def assignments(weight, clarity, spacing=384):
-            groups = [[dict(note=60, start_ticks=tick, start_seconds=tick / 768)]
-                      for tick in (0, spacing, 2 * spacing)]
-            blobs = [(61, clarity)] * (2 * spacing // 384 + 1)
-            blobs[spacing // 384] = (60, clarity)
+        def assignments(weight, spacing=384):
+            groups = [
+                [dict(note=60, start_ticks=0, start_seconds=0.0),
+                 dict(note=67, start_ticks=0, start_seconds=0.0)],
+                [dict(note=55, start_ticks=spacing, start_seconds=spacing / 768),
+                 dict(note=60, start_ticks=spacing, start_seconds=spacing / 768)],
+            ]
+            blobs = [(80, 0.1)] * (2 * spacing // 384 + 1)
             with patch.object(hand_split, 'REPEAT_NOTE_COST', weight):
                 hand_split.assign_groups(groups, 3, blobs, 384)
-            return [group[0]['hand'] for group in groups]
+            return [[(note['note'], note['hand']) for note in group] for group in groups]
 
-        self.assertEqual(assignments(0, 0.1), ['left', 'right', 'left'])
-        self.assertEqual(assignments(1, 0.1), ['left', 'left', 'left'])
-        # Strong contrary evidence still permits a handoff; rests clear the preference.
-        self.assertEqual(assignments(1, 1), ['left', 'right', 'left'])
-        self.assertEqual(assignments(1, 0.1, spacing=1152), ['left', 'right', 'left'])
+        without_continuity = assignments(0)
+        with_continuity = assignments(1)
+        self.assertEqual(without_continuity, [
+            [(60, 'right'), (67, 'right')],
+            [(55, 'left'), (60, 'left')],
+        ])
+        self.assertEqual(with_continuity, [
+            [(60, 'left'), (67, 'right')],
+            [(55, 'left'), (60, 'left')],
+        ])
+        # A rest longer than the context releases the repeated note.
+        self.assertEqual(assignments(1, spacing=768), without_continuity)
 
     def test_repeated_note_continuity_keeps_hard_limits_and_ignores_duplicates(self):
         groups = [[dict(note=pitch, start_ticks=i * 384, start_seconds=i / 2)
