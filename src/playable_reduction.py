@@ -18,8 +18,8 @@ from report_utils import update_report
 # the right hand, each with at most this many notes and this span in semitones.
 DEFAULT_MAX_NOTES_PER_HAND = 4
 DEFAULT_MAX_SPAN = 12
-# In a three-hand split the first player's two hands are the lower two slices; the other player's hand is left alone.
-THREE_HAND_PLAYER = ('left', 'second_right')
+# In a three-hand split the first player owns the lower left/right pair; the second player's right hand is extra.
+THREE_HAND_PLAYER = ('left', 'right')
 # Groups that still cannot be played after removing this many notes are left as they are.
 MAX_REMOVALS_PER_GROUP = 3
 # Removal cost: a note doubled in another octave is cheapest, the top (melody) and bottom (bass) notes dearest.
@@ -205,8 +205,8 @@ def main(argv=None):
     parser.add_argument('--max-span', type=int, default=DEFAULT_MAX_SPAN,
                         help='Widest span of one hand in semitones (default: {}).'.format(DEFAULT_MAX_SPAN))
     parser.add_argument('--three-hands', action='store_true',
-                        help='The MIDI is split into three hands: reduce only the first player\'s left and second '
-                             'right hand, leaving the other player\'s right hand alone.')
+                        help='The MIDI is split into three hands: reduce only the first player\'s left and right '
+                             'hands, leaving the second player\'s right hand alone.')
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
