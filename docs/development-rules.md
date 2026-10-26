@@ -91,6 +91,16 @@ Bug fix 的目標是修正已確認的錯誤，不是重新設計相鄰演算法
 
 避免讓 `[-1]`、`[:2]`、`[2:]` 這類純位置寫法暗中承擔跨層級的業務語義。若確實使用，必須在附近註明 invariant。
 
+### 8.1 手部排列與報告（強制）
+
+手部順序是固定的音樂語義，不是報告排版細節。
+
+- 低到高固定為：2 手 `left → right`；3 手 `left → right → second_right`；4 手 `left → right → second_left → second_right`。
+- MIDI channel（1-based）：`right = 1`、`second_right = 2`、`left = 3`、`second_left = 4`。
+- 任何報告、表格、統計、log、commit message、issue 或 PR 說明，都必須按上述低到高手部順序呈現，或明確標示「低 → 高」。禁止使用 channel 順序、任意排序，或舊的 `left → second_right → right`。
+- 禁止只憑全域 min/max/平均音高推論手部排列。`second_right` 可能只在部分小節啟用，全域音域重疊是正常的；需要時應分開啟用區段與非啟用區段呈現。
+- 回報前必須驗證每個 onset group 的低到高手部切片沒有交叉；若出現交叉，必須明示為實際回退，不得當成統計排列差異。
+
 ## 9. 不得破壞歷史設計理由
 
 重要 heuristic / algorithm 的註釋與 spec 不只要記「怎麼算」，還要記：
