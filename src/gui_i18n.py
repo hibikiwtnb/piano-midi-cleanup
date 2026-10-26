@@ -222,6 +222,7 @@ _TEXT = {
         'Three hands: second player minimum bars': '三手：第二位演奏者最少小節數',
         'Second right hand: preferred lower boundary (C4 = 60, 0 = off)': '第二右手音域下界（軟限制；C4 = 60，0 關閉）',
         'Melodic hand continuity (0 = off)': '旋律換手抑制（0 關閉）',
+        'Three hands: grouping bars (0 = off, experimental)': '三手：分組觀察小節（0 關閉，實驗性）',
         'Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).': '請輸入 C5 等音名，或 0–127 的 MIDI 音高（C4 = 60）。',
         'Fast figure: onsets within (beats)': '快速音群：彈奏間隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少連續彈奏次數',
@@ -384,6 +385,7 @@ _TEXT = {
         'Three hands: second player minimum bars': '三手：第二位演奏者最少小节数',
         'Second right hand: preferred lower boundary (C4 = 60, 0 = off)': '第二右手音域下界（软限制；C4 = 60，0 关闭）',
         'Melodic hand continuity (0 = off)': '旋律换手抑制（0 关闭）',
+        'Three hands: grouping bars (0 = off, experimental)': '三手：分组观察小节（0 关闭，实验性）',
         'Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).': '请输入 C5 等音名，或 0–127 的 MIDI 音高（C4 = 60）。',
         'Fast figure: onsets within (beats)': '快速音群：弹奏间隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少连续弹奏次数',
@@ -453,6 +455,10 @@ _HELP = {
         'Prefer one hand along mutual pitch/time neighbors, looking both backward and forward.\nLinks span at most five semitones and less than two beats. Soft preference; try 1, or 0 to disable.',
         '結合前後音高與時間相近的音，傾向由同一隻手接續。\n只連結五半音內、間隔少於兩拍的音；屬軟偏好，可先試 1，0 關閉。',
         '结合前后音高与时间相近的音，倾向由同一只手接续。\n只连接五半音内、间隔少于两拍的音；属软偏好，可先试 1，0 关闭。'),
+    'split.grouping_bars': (
+        'Experimental three-hand mode: group related chords and melodic material using up to 1, 2 or 4 bars.\nPrefer assigning each group together; split it when needed. Uses material continuity instead of the two note-continuity settings. 0 keeps the existing method.',
+        '實驗性三手模式：觀察最多 1、2 或 4 小節，辨識相關和弦與旋律，優先整組分手，必要時允許拆組。\n使用分組連續性，取代另外兩項逐音換手抑制。0 沿用原方法。',
+        '实验性三手模式：观察最多 1、2 或 4 小节，识别相关和弦与旋律，优先整组分手，必要时允许拆组。\n使用分组连续性，取代另外两项逐音换手抑制。0 沿用原方法。'),
     'split.repeat_cost': (
         'Prefer the same hand for repeated pitches within two quarter-note beats.\nThe preference fades with time; 0 disables it. Try 1 first.',
         '兩拍內的重複音傾向維持同一隻手，效果隨間隔減弱。\n一拍指四分音符；0 為關閉，可先試 1。',

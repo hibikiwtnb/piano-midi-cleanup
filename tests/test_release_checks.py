@@ -213,6 +213,83 @@ class ReleaseChecks(unittest.TestCase):
                       for i, pitches in enumerate(((60, 60), (61,))) ]
         self.assertEqual(hand_split.melodic_links(duplicates, 384), [[], []])
 
+    def material_case(self, events):
+        return [[dict(note=p, start_ticks=tick, start_seconds=tick / 768) for p in pitches]
+                for tick, pitches in events]
+
+    def assign_material_case(self, groups):
+        notes = [note for group in groups for note in group]
+        with patch.object(hand_split, 'MATERIAL_GROUPING_BARS', 4), \
+                patch.object(hand_split, 'SECOND_RIGHT_MIN_PITCH', 72):
+            blobs = hand_split.blob_lines(notes, 384, hands=3)
+            hand_split.assign_groups(groups, 3, blobs, 384)
+        return groups
+
+    def test_material_groups_keep_repeated_four_note_chords_together(self):
+        groups = self.material_case([(0, (37, 49, 64, 68, 71, 75)),
+                                     (384, (49,)), (576, (49, 64, 68, 71, 75))])
+        materials = hand_split.material_groups(groups, 384)
+        self.assertIn([64, 68, 71, 75], materials[0]['clusters'])
+        self.assign_material_case(groups)
+        self.assertTrue(all(n['hand'] == 'right' for g in groups for n in g if n['note'] >= 64))
+
+    def test_material_groups_allocate_the_upper_line_over_several_bars(self):
+        events = []
+        for bar in range(5):
+            base = bar * 1536
+            events.extend([(base, (36, 48, 55, 59, 62)), (base + 192, (79,)),
+                           (base + 384, (81,)), (base + 576, (55, 59, 62, 83)),
+                           (base + 768, (84,)), (base + 960, (81,)),
+                           (base + 1152, (48, 55, 59, 62, 79)), (base + 1344, (81,))])
+        groups = self.assign_material_case(self.material_case(events))
+        self.assertTrue(all(n['hand'] == 'second_right' for g in groups for n in g if n['note'] >= 79))
+        self.assertFalse(any(n['hand'] == 'second_right' for g in groups for n in g if n['note'] <= 62))
+
+    def test_material_groups_do_not_require_a_third_hand_for_playable_chords(self):
+        groups = self.assign_material_case(self.material_case([(0, (66, 73, 78, 82, 85, 90))]))
+        self.assertEqual([n['hand'] for n in groups[0]], ['left'] * 2 + ['right'] * 4)
+
+    def test_material_groups_allow_new_roles_after_a_rest_inside_a_bar(self):
+        groups = self.material_case([(0, (68, 75, 78, 83, 87, 90)),
+                                     (1500, (47, 54, 59, 61, 66, 71, 73))])
+        self.assertEqual(len(hand_split.material_groups(groups, 384)), 2)
+        self.assign_material_case(groups)
+        self.assertFalse(any(n['hand'] == 'second_right' for g in groups for n in g))
+
+    def test_material_grouping_preserves_impossible_and_duplicate_notes(self):
+        groups = self.material_case([(0, (60,) * 14)])
+        identities = [id(note) for note in groups[0]]
+        self.assign_material_case(groups)
+        self.assertEqual([id(note) for note in groups[0]], identities)
+        self.assertEqual(len(groups[0]), 14)
+        self.assertTrue(all(note['hand'] in hand_split.HANDS[3] for note in groups[0]))
+        with patch.object(hand_split, 'MATERIAL_GROUPING_BARS', 4):
+            self.assertEqual(hand_split.search_splits([], 3, [], 384), [])
+
+    def test_material_grouping_preserves_activation_envelope_and_hand_order(self):
+        groups = self.material_case([(0, (36, 55, 62, 84, 88)),
+                                     (1536, (48,)), (3072, (48,)), (4608, (48,)), (6144, (48,))])
+        with patch.object(hand_split, 'MATERIAL_GROUPING_BARS', 4):
+            cuts, details = hand_split.search_splits(groups, 3, [(72, 1)] * 17, 384,
+                                                     second_player_bars=4, return_details=True)
+        self.assertEqual(details['second_player_active'], [True, True, True, True, False])
+        for group, (low, high) in zip(groups, cuts):
+            self.assertTrue(0 <= low <= high <= len(group))
+
+    def test_material_grouping_setting_and_two_hand_compatibility(self):
+        for value in (0, 1, 2, 4):
+            self.assertEqual(postprocess.parse_setting('split.grouping_bars=' + str(value)),
+                             ('split.grouping_bars', value))
+        for value in ('-1', '3', '5', 'nan', '1.5'):
+            with self.assertRaises(ValueError):
+                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
+                    ['song.mid', '--set', 'split.grouping_bars=' + value])
+        groups = self.material_case([(0, (48, 60, 72)), (384, (49, 61, 73))])
+        for hands in (2, 4):
+            expected = hand_split.search_splits(groups, hands, [(60, 1)] * 2, 384)
+            with patch.object(hand_split, 'MATERIAL_GROUPING_BARS', 4):
+                self.assertEqual(hand_split.search_splits(groups, hands, [(60, 1)] * 2, 384), expected)
+
     def test_gui_shows_processed_result_after_success(self):
         source = self.root / 'song.mid'
         self.make_midi(source)

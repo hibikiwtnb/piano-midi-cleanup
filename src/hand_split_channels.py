@@ -62,6 +62,13 @@ REPEAT_CONTEXT_BEATS = 2.0
 MELODIC_CONTINUITY_COST = 0.0
 MELODIC_MAX_STEP = 5
 
+# Opt-in three-hand material grouping. Zero keeps the established onset search.
+MATERIAL_GROUPING_BARS = 0
+MATERIAL_REST_BEATS = 2
+MATERIAL_MELODY_MIN_ONSETS = 3
+MATERIAL_MELODY_OVERLAP = 0.5
+MATERIAL_HANDOFF_COST = 4.0
+
 # Three-hand mode: the second player's right hand is enabled in whole-bar segments,
 # never just for single onsets. An ON segment must last at least this many bars.
 # PROJECT INVARIANT: do not turn this into per-onset activation without a separate
@@ -501,6 +508,223 @@ def melodic_links(groups, ticks_per_beat):
     return incoming
 
 
+def material_groups(groups, tpb, context_bars=4, limits=None):
+    """Cluster adjacent pitches using repeated co-onsets and local melodic motion.
+
+    Group identity is local to a bar. Context at 1/2/4 bars supplies evidence,
+    never hand labels. A group can move over more than an octave over time, but
+    must fit one hand at every actual onset. No MIDI times or notes are changed.
+    """
+    max_notes, max_span = limits or (FIRST_PLAYER_MAX_NOTES, FIRST_PLAYER_MAX_SPAN)
+    bars = defaultdict(list)
+    for index, notes in enumerate(groups):
+        bars[max(n['start_ticks'] for n in notes) // (BEATS_PER_BAR * tpb)].append(index)
+    episodes = []
+    for bar, indices in sorted(bars.items()):
+        current = []
+        for index in indices:
+            if current and groups[index][0]['start_ticks'] - groups[current[-1]][0]['start_ticks'] >= MATERIAL_REST_BEATS * tpb:
+                episodes.append((bar, current))
+                current = []
+            current.append(index)
+        episodes.append((bar, current))
+    result = []
+    for bar, indices in episodes:
+        pitches = sorted({n['note'] for i in indices for n in groups[i]})
+        evidence = defaultdict(float)
+        for width in (1, 2, 4):
+            if width > context_bars:
+                break
+            # Sliding overlapping windows avoid fixed two/four-bar block seams.
+            for first in range(bar - width + 1, bar + 1):
+                context = sorted(i for b in range(first, first + width) for i in bars.get(b, ()))
+                occurrences = {p: {i for i in context if any(n['note'] == p for n in groups[i])} for p in pitches}
+                for a, b in zip(pitches, pitches[1:]):
+                    common = len(occurrences[a] & occurrences[b])
+                    if b - a <= max_span and common:
+                        affinity = common / max(1, len(occurrences[a] | occurrences[b]))
+                        evidence[a, b] = max(evidence[a, b], affinity * common)
+                for earlier, later in zip(context, context[1:]):
+                    if groups[later][0]['start_ticks'] - groups[earlier][0]['start_ticks'] > tpb:
+                        continue
+                    left = sorted({n['note'] for n in groups[earlier]})
+                    right = sorted({n['note'] for n in groups[later]})
+                    for a in left:
+                        b = min(right, key=lambda p: (abs(p - a), p))
+                        if a == min(left, key=lambda p: (abs(p - b), p)) and 0 < abs(a - b) <= MELODIC_MAX_STEP:
+                            edge = tuple(sorted((a, b)))
+                            if edge[0] in pitches and edge[1] in pitches:
+                                evidence[edge] = max(evidence[edge], 0.5 / abs(a - b))
+        clusters = [{p} for p in pitches]
+        while True:
+            options = []
+            for j in range(len(clusters) - 1):
+                merged = clusters[j] | clusters[j + 1]
+                strength = max((evidence[a, b] for a in clusters[j] for b in clusters[j + 1]), default=0)
+                if strength <= 0:
+                    continue
+                if all(hand_fits(sorted(n['note'] for n in groups[i] if n['note'] in merged),
+                                 max_notes, max_span) for i in indices):
+                    options.append((strength, -min(abs(a - b) for a in clusters[j] for b in clusters[j + 1]), -j))
+            if not options:
+                break
+            _, _, negative_index = max(options)
+            j = -negative_index
+            clusters[j:j + 2] = [clusters[j] | clusters[j + 1]]
+        result.append(dict(bar=bar, indices=indices, clusters=[sorted(c) for c in clusters]))
+    return result
+
+
+def search_grouped_splits(groups, blobs, tpb, minimum_bars, return_details=False, limits=None):
+    """Prefer feasibility, coherent material/register, fewer third-hand bars, cost.
+
+    This changes the objective intentionally: the old note-level objective cannot
+    decide whether a third hand is needed for whole musical responsibilities.
+    Availability still has the existing minimum-bar ON/OFF envelope. A player
+    may rest inside that envelope. Blob retains its original lower/upper ownership
+    in the final cost tier; material coherence decides participation first.
+    Group ownership is soft, so individual notes can move to preserve feasibility.
+    """
+    max_notes, max_span = limits or (FIRST_PLAYER_MAX_NOTES, FIRST_PLAYER_MAX_SPAN)
+    groups = [sorted(group, key=lambda note: note['note']) for group in groups]
+    materials = material_groups(groups, tpb, MATERIAL_GROUPING_BARS, limits)
+    initial = dict(pitch=[None] * 3, onset=[None] * 3, run=[0] * 3, cost=0,
+                   second_player_active=False, second_player_start_bar=None,
+                   second_player_last_bar=None, rank=(0, 0, 0, 0), path=[], used_bar=None, last_owners={})
+    beam = [initial]
+    previous = None
+    for material in materials:
+        bar, indices, clusters = (material[k] for k in ('bar', 'indices', 'clusters'))
+        mapping = {p: j for j, cluster in enumerate(clusters) for p in cluster}
+        # One isolated onset has no temporal evidence for a particular grouping.
+        # Do not summon a player just to preserve an arbitrary chord subdivision.
+        group_weights = {j: int(sum(any(n['note'] in cluster for n in groups[i]) for i in indices) > 1)
+                         for j, cluster in enumerate(clusters)}
+        links = []
+        def melody(cluster, item):
+            hits = [(i, [n['note'] for n in groups[i] if n['note'] in cluster]) for i in item['indices']]
+            hits = [(i, ps) for i, ps in hits if ps]
+            return hits if len(hits) >= MATERIAL_MELODY_MIN_ONSETS and all(len(ps) == 1 for _, ps in hits) else []
+        if previous is not None:
+            for j, cluster in enumerate(clusters):
+                current_hits = melody(cluster, material)
+                if not current_hits:
+                    continue
+                matches = []
+                for k, old in enumerate(previous['clusters']):
+                    old_hits = melody(old, previous)
+                    if not old_hits:
+                        continue
+                    gap = groups[current_hits[0][0]][0]['start_ticks'] - groups[old_hits[-1][0]][0]['start_ticks']
+                    overlap = len(set(old) & set(cluster)) / len(set(old) | set(cluster))
+                    if 0 <= gap < MATERIAL_REST_BEATS * tpb and overlap >= MATERIAL_MELODY_OVERLAP:
+                        matches.append((overlap, -k))
+                if matches:
+                    links.append((-max(matches)[1], j))
+        plans = []
+        onset_options = {}
+        for i in indices:
+            pitches = [n['note'] for n in groups[i]]
+            options = []
+            for cuts in cut_options(len(pitches), 3):
+                bounds = (0,) + cuts + (len(pitches),)
+                slices = [pitches[bounds[h]:bounds[h + 1]] for h in range(3)]
+                excess = sum(max(0, len(part) - max_notes)
+                             + max(0, part[-1] - part[0] - max_span)
+                             for part in slices if part)
+                # A resting player does not restrict the primary right hand.
+                # In the structural tier, one squared register step equals one
+                # note departing from its material group's preferred owner.
+                debt = preferred_register_cost(slices, second_player_active=bool(slices[2])) / SECOND_RIGHT_REGISTER_COST
+                options.append((slices, excess, debt))
+            onset_options[i] = options
+        for cuts in cut_options(len(clusters), 3):
+            owners = {p: sum(j >= cut for cut in cuts) for p, j in mapping.items()}
+            allow_third = any(hand == 2 for hand in owners.values())
+            prepared = {}
+            for i in indices:
+                choices = []
+                for slices, excess, debt in onset_options[i]:
+                    if slices[2] and not allow_third:
+                        continue
+                    changed = sum(group_weights[mapping[p]] for h, part in enumerate(slices) for p in part if owners[p] != h)
+                    choices.append(((excess, changed + debt), slices))
+                best_rank = min(rank for rank, _ in choices)
+                prepared[i] = (best_rank, [slices for rank, slices in choices if rank == best_rank])
+            plans.append((owners, allow_third, prepared))
+        candidates = []
+        for state in beam:
+            first_of_bar = previous is None or previous['bar'] != bar
+            for active, start_bar, last_bar, mode_cost in second_player_modes(state, bar, first_of_bar, minimum_bars):
+                for preferred, allow_third, prepared in plans:
+                    if allow_third and not active:
+                        continue
+                    child = dict(state)
+                    child['pitch'] = list(state['pitch'])
+                    child['onset'] = list(state['onset'])
+                    child['run'] = list(state['run'])
+                    child['cost'] += mode_cost
+                    actual = {}
+                    owner_counts = defaultdict(Counter)
+                    violation = disagreements = register_debt = 0
+                    for i in indices:
+                        onset = groups[i][0]['start_seconds']
+                        blob = blobs[groups[i][0]['start_ticks'] // tpb]
+                        choices = []
+                        excess, structural = prepared[i][0]
+                        for slices in prepared[i][1]:
+                            cost = split_cost(slices, onset, child, blob, second_player_active=bool(slices[2]))
+                            choices.append((cost, slices))
+                        cost, slices = min(choices, key=lambda item: item[0])
+                        changed = sum(group_weights[mapping[p]] for h, part in enumerate(slices) for p in part if preferred[p] != h)
+                        violation += excess
+                        disagreements += changed
+                        register_debt += structural - changed
+                        position = 0
+                        for h, part in enumerate(slices):
+                            for p in part:
+                                actual[i, position] = h
+                                owner_counts[mapping[p]][h] += 1
+                                position += 1
+                        # Avoid a parent chain for every onset inside every bar candidate.
+                        updated = next_state(child, slices, onset, cost, None, None)
+                        child.update({k: updated[k] for k in ('pitch', 'onset', 'run', 'cost')})
+                    child.update(second_player_active=active, second_player_start_bar=start_bar,
+                                 second_player_last_bar=last_bar)
+                    if not active:
+                        child['pitch'][2], child['onset'][2], child['run'][2] = None, None, 0
+                    dominant = {j: counts.most_common(1)[0][0] for j, counts in owner_counts.items()}
+                    handoffs = sum(state['last_owners'].get(old) != dominant[new] for old, new in links)
+                    third = any(h == 2 for h in actual.values())
+                    child['used_bar'] = bar if third else state['used_bar']
+                    child['last_owners'] = dominant
+                    child['rank'] = (state['rank'][0] + violation,
+                                     state['rank'][1] + disagreements + register_debt + MATERIAL_HANDOFF_COST * handoffs,
+                                     state['rank'][2] + int(third and state['used_bar'] != bar), child['cost'])
+                    child['path'] = state['path'] + [(material, actual, active, violation)]
+                    candidates.append(child)
+        beam = sorted(candidates, key=lambda s: s['rank'])[:BEAM_WIDTH]
+        previous = material
+    chosen = beam[0]
+    cuts_per_group = [None] * len(groups)
+    active_per_group = [False] * len(groups)
+    bars_per_group = [None] * len(groups)
+    for material, owners, active, violation in chosen['path']:
+        for i in material['indices']:
+            hands = [owners[i, position] for position in range(len(groups[i]))]
+            cuts_per_group[i] = (hands.count(0), sum(hand <= 1 for hand in hands))
+            active_per_group[i] = active
+            bars_per_group[i] = material['bar']
+    if not return_details:
+        return cuts_per_group
+    return cuts_per_group, {
+        'group_bars': bars_per_group,
+        'second_player_active': active_per_group,
+        'material_groups': materials,
+        'grouped_rank': chosen['rank'],
+    }
+
+
 def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
                   second_player_bars=None, return_details=False):
     """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
@@ -508,6 +732,8 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
         second_player_bars = SECOND_PLAYER_MIN_BARS
     if second_player_bars < 1:
         raise ValueError('second player minimum bars must be at least 1')
+    if hands == 3 and MATERIAL_GROUPING_BARS:
+        return search_grouped_splits(groups, blobs, ticks_per_beat, second_player_bars, return_details, limits)
     use_second_player = hands == 3
     bar_ticks = ticks_per_beat * BEATS_PER_BAR
     group_bars = ([group[0]['start_ticks'] // bar_ticks for group in groups] if use_second_player else [])
@@ -771,6 +997,7 @@ def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=Non
         'wide_span_groups': wide_span_groups,
         'fast_run_chords': fast_run_chords,
         'second_player_bars': second_player_bars,
+        'material_grouping_bars': MATERIAL_GROUPING_BARS if hands == 3 else 0,
     }
     return stats
 
@@ -783,7 +1010,7 @@ def format_split_stats(stats):
         'Original notes: {}'.format(total_notes),
         'Hands: {}'.format(stats['hands']),
     ]
-    for hand in reversed(HANDS[stats['hands']]):
+    for hand in HANDS[stats['hands']]:
         lines.append('Channel {} / {} hand notes: {} ({:.2%})'.format(
             CHANNELS[hand] + 1,
             hand.replace('_', ' '),
@@ -800,6 +1027,8 @@ def format_split_stats(stats):
     ]
     if stats['hands'] == 3:
         lines.append('Second player minimum active bars: {}'.format(stats['second_player_bars']))
+    if stats.get('material_grouping_bars'):
+        lines.append('Material grouping context: up to {} bars (experimental)'.format(stats['material_grouping_bars']))
     return '\n'.join(lines)
 
 

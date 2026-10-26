@@ -62,6 +62,8 @@ PARAMETERS = (
               ((hand_split_channels, 'REPEAT_NOTE_COST'),)),
     Parameter('split.voice_continuity_cost', 'Melodic hand continuity (0 = off)', float,
               ((hand_split_channels, 'MELODIC_CONTINUITY_COST'),)),
+    Parameter('split.grouping_bars', 'Three hands: grouping bars (0 = off, experimental)', int,
+              ((hand_split_channels, 'MATERIAL_GROUPING_BARS'),)),
     Parameter('split.second_player_bars', 'Three hands: second player minimum bars', int,
               ((hand_split_channels, 'SECOND_PLAYER_MIN_BARS'),)),
     Parameter('split.second_right_min_pitch', 'Second right hand: preferred lower boundary (C4 = 60, 0 = off)',
@@ -93,6 +95,8 @@ def parse_setting(text):
             raise argparse.ArgumentTypeError('{} must be finite and nonnegative.'.format(key))
         if key == 'split.second_player_bars' and number < 1:
             raise argparse.ArgumentTypeError('split.second_player_bars must be at least 1.')
+        if key == 'split.grouping_bars' and number not in (0, 1, 2, 4):
+            raise argparse.ArgumentTypeError('split.grouping_bars must be 0, 1, 2 or 4.')
         return key, number
     except ValueError as error:
         if key == 'split.second_right_min_pitch':
