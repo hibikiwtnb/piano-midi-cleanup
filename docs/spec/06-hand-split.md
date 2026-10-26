@@ -58,8 +58,11 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 | `GROUP_START_WINDOW_SECONDS` | 0.05 | `split.group_window`（分手、可彈性清理、截斷共用） |
 | `COMFORT_SPAN` | 12 | `split.comfort_span` |
 | `HARD_SPAN` | 14 | `split.hard_span` |
+| `REPEAT_NOTE_COST` | 0（關閉） | `split.repeat_cost`（實驗性；可先試 1） |
 
 其餘成本權重為程式常數，見上表。
+
+`split.repeat_cost` 是選用的同音換手成本。同一音高在兩拍（四分音符拍）內換手時，依距上次起音的時間線性遞減加收成本，兩拍後歸零；同時重複的同音無法判斷連續性，不作為證據。此項只疊加在既有成本與手部限制之上，屬實驗性，不保證修正結果。
 
 ## 報告
 

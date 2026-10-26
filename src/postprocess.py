@@ -56,6 +56,8 @@ PARAMETERS = (
               ((hand_split_channels, 'GROUP_START_WINDOW_SECONDS'),)),
     Parameter('split.comfort_span', 'Free hand span (semitones)', int, ((hand_split_channels, 'COMFORT_SPAN'),)),
     Parameter('split.hard_span', 'Heavily penalized beyond (semitones)', int, ((hand_split_channels, 'HARD_SPAN'),)),
+    Parameter('split.repeat_cost', 'Repeated-note hand continuity (experimental, 0 = off)', float,
+              ((hand_split_channels, 'REPEAT_NOTE_COST'),)),
     Parameter('trim.fast_figure_beats', 'Fast figure: onsets within (beats)', float,
               ((trim_overlaps, 'FAST_FIGURE_BEATS'),)),
     Parameter('trim.fast_figure_onsets', 'Fast figure: at least onset groups', int,
@@ -78,7 +80,10 @@ def parse_setting(text):
     if not separator or key not in PARAMETER_BY_KEY:
         raise argparse.ArgumentTypeError('expected key=value with a key from --list-parameters: {}'.format(text))
     try:
-        return key, PARAMETER_BY_KEY[key].kind(value)
+        number = PARAMETER_BY_KEY[key].kind(value)
+        if key == 'split.repeat_cost' and (not math.isfinite(number) or number < 0):
+            raise argparse.ArgumentTypeError('split.repeat_cost must be finite and nonnegative.')
+        return key, number
     except ValueError:
         raise argparse.ArgumentTypeError('not a number: {}'.format(text))
 

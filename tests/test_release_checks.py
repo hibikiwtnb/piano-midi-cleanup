@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import mido
 import postprocess
+import hand_split_channels as hand_split
 from postprocess_panel import Panel, PanelArgumentParser
 from hand_split_channels import collect_notes, group_notes, hand_fits, split_hands_in_place
 from transcribe import CHECKPOINT_NAME, ensure_checkpoint
@@ -116,6 +117,37 @@ class ReleaseChecks(unittest.TestCase):
         self.make_midi(path, pitches=tuple(range(48, 61)))
         split_hands_in_place(path, limits=(4, 12))
         self.assertEqual(len(collect_notes(mido.MidiFile(path))), 13)
+
+    def test_repeated_note_continuity_is_soft_and_expires(self):
+        def assignments(weight, clarity, spacing=384):
+            groups = [[dict(note=60, start_ticks=tick, start_seconds=tick / 768)]
+                      for tick in (0, spacing, 2 * spacing)]
+            blobs = [(61, clarity)] * (2 * spacing // 384 + 1)
+            blobs[spacing // 384] = (60, clarity)
+            with patch.object(hand_split, 'REPEAT_NOTE_COST', weight):
+                hand_split.assign_groups(groups, 3, blobs, 384)
+            return [group[0]['hand'] for group in groups]
+
+        self.assertEqual(assignments(0, 0.1), ['left', 'right', 'left'])
+        self.assertEqual(assignments(1, 0.1), ['left', 'left', 'left'])
+        # Strong contrary evidence still permits a handoff; rests clear the preference.
+        self.assertEqual(assignments(1, 1), ['left', 'right', 'left'])
+        self.assertEqual(assignments(1, 0.1, spacing=1152), ['left', 'right', 'left'])
+
+    def test_repeated_note_continuity_keeps_hard_limits_and_ignores_duplicates(self):
+        groups = [[dict(note=pitch, start_ticks=i * 384, start_seconds=i / 2)
+                   for pitch in pitches] for i, pitches in enumerate(((60,), (48, 60, 72), (60,)))]
+        with patch.object(hand_split, 'REPEAT_NOTE_COST', 100):
+            hand_split.assign_groups(groups, 3, [(60, 0.1)] * 3, 384, limits=(1, 12))
+            self.assertEqual(len({note['hand'] for note in groups[1]}), 3)
+            self.assertEqual(hand_split.repeated_note_cost(
+                [[60], [60], []], {60: (2, 0)}, 384, 768, set()), 0)
+
+    def test_repeat_cost_rejects_invalid_settings(self):
+        for value in ('-1', 'nan', 'inf'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
+                    ['song.mid', '--set', 'split.repeat_cost=' + value])
 
     def test_successful_run_publishes_report_only_on_completion(self):
         source = self.root / 'song_bpmfix.mid'

@@ -218,6 +218,7 @@ _TEXT = {
         'Onset group window, all steps (s)': '視為同時彈奏的時間差（秒，共用）',
         'Free hand span (semitones)': '單手舒適跨度（半音）',
         'Heavily penalized beyond (semitones)': '盡量避免的單手跨度（半音）',
+        'Repeated-note hand continuity (experimental, 0 = off)': '同音換手抑制（實驗性，0 為關閉）',
         'Fast figure: onsets within (beats)': '快速音群：彈奏間隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少連續彈奏次數',
         'Harmony change: at least pitch classes': '和聲判定：最少不同音名數',
@@ -375,6 +376,7 @@ _TEXT = {
         'Onset group window, all steps (s)': '视为同时弹奏的时间差（秒，共用）',
         'Free hand span (semitones)': '单手舒适跨度（半音）',
         'Heavily penalized beyond (semitones)': '尽量避免的单手跨度（半音）',
+        'Repeated-note hand continuity (experimental, 0 = off)': '同音换手抑制（实验性，0 为关闭）',
         'Fast figure: onsets within (beats)': '快速音群：弹奏间隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少连续弹奏次数',
         'Harmony change: at least pitch classes': '和声判定：最少不同音名数',
@@ -431,6 +433,10 @@ _HELP = {
         'Prefer other hand assignments when a hand exceeds this span.\nLower values encourage narrower groups; this setting does not delete notes.',
         '單手跨度超過此值時，程式會傾向改用其他分配。\n調小會更積極拆開寬音群，不會因此刪音。',
         '单手跨度超过此值时，程序会倾向改用其他分配。\n调小会更积极拆开宽音群，不会因此删音。'),
+    'split.repeat_cost': (
+        'Prefer the same hand for repeated pitches within two quarter-note beats.\nThe preference fades with time; 0 disables it. Try 1 first.',
+        '兩拍內的重複音傾向維持同一隻手，效果隨間隔減弱。\n一拍指四分音符；0 為關閉，可先試 1。',
+        '两拍内的重复音倾向维持同一只手，效果随间隔减弱。\n一拍指四分音符；0 为关闭，可先试 1。'),
     'split.hard_span': (
         'Strongly discourage wider hand assignments, without forbidding them.\nOverlap trimming also uses this limit to shorten old notes when out of reach.',
         '分手時盡量避免超過此跨度，但並非絕對禁止。\n重疊清理也沿用此限制，跨度超限時嘗試截短前音。',

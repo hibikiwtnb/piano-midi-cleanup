@@ -4,7 +4,7 @@ import itertools
 import os
 import sys
 import tkinter as tk
-from collections import defaultdict
+from collections import Counter, defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
@@ -52,6 +52,10 @@ BLOB_CLEAR_GAP = 4
 
 # With three or four hands, each note given to a second hand costs this, so they are used only when needed.
 SECOND_HAND_NOTE_COST = 1.0
+
+# Optional repeated-note continuity experiment; zero preserves the established split.
+REPEAT_NOTE_COST = 0.0
+REPEAT_CONTEXT_BEATS = 2.0
 
 RIGHT_HAND_CHANNEL = 0
 SECOND_RIGHT_HAND_CHANNEL = 1
@@ -332,6 +336,22 @@ def hand_fits(pitches, max_notes, max_span):
     return len(pitches) <= max_notes and (not pitches or pitches[-1] - pitches[0] <= max_span)
 
 
+def repeated_note_cost(slices, recent, tick, context_ticks, unique_pitches):
+    """Soft cost for changing a recent repeated pitch's hand, fading over two beats.
+
+    Simultaneous duplicate pitches are ambiguous and provide no continuity evidence.
+    """
+    cost = 0.0
+    for hand, pitches in enumerate(slices):
+        for pitch in pitches:
+            if pitch not in unique_pitches or pitch not in recent:
+                continue
+            previous_hand, previous_tick = recent[pitch]
+            if hand != previous_hand:
+                cost += REPEAT_NOTE_COST * max(0.0, 1.0 - (tick - previous_tick) / context_ticks)
+    return cost
+
+
 def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
     """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
     beam = [{
@@ -341,11 +361,15 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
         'cost': 0.0,
         'cuts': None,
         'parent': None,
+        'recent': {},
     }]
 
     for group in groups:
         pitches = sorted(note['note'] for note in group)
         onset = group[0]['start_seconds']
+        tick = group[0]['start_ticks']
+        context_ticks = REPEAT_CONTEXT_BEATS * ticks_per_beat
+        unique_pitches = {pitch for pitch, count in Counter(pitches).items() if count == 1}
         blob = blobs[group[0]['start_ticks'] // ticks_per_beat]
         options = []
         for cuts in cut_options(len(pitches), hands):
@@ -362,9 +386,20 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
         for state in beam:
             for cuts, slices in options:
                 cost = split_cost(slices, onset, state, blob)
+                if REPEAT_NOTE_COST:
+                    cost += repeated_note_cost(slices, state['recent'], tick, context_ticks, unique_pitches)
                 candidates.append(next_state(state, slices, onset, cost, cuts, state))
         candidates.sort(key=lambda item: item['cost'])
         beam = candidates[:BEAM_WIDTH]
+        if REPEAT_NOTE_COST:
+            for state in beam:
+                # Only copy history for retained candidates, not every proposed split.
+                recent = {pitch: previous for pitch, previous in state['parent']['recent'].items()
+                          if tick - previous[1] < context_ticks and pitch not in pitches}
+                for index, pitch in enumerate(pitches):
+                    if pitch in unique_pitches:
+                        recent[pitch] = (sum(index >= cut for cut in state['cuts']), tick)
+                state['recent'] = recent
 
     cuts_per_group = []
     state = beam[0]
