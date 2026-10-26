@@ -17,6 +17,7 @@ from gui_i18n import LANGUAGES, get_language, set_language, setting_help, tr, tr
 import postprocess
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
+from hand_split_channels import PRIMO_ACTIVATION_BARS
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
 from app_info import APP_NAME, VERSION, LICENSE_ID, PROJECT_URL, ISSUES_URL, BUNDLED_COMPONENTS
 
@@ -47,11 +48,24 @@ def default_preset():
     return {
         'switches': {name: default for name, _, default in SWITCHES},
         'hands': 2,
+        'primo_activation_bars': PRIMO_ACTIVATION_BARS,
         'fast_figure_hands': list(DEFAULT_FAST_FIGURE_HANDS),
         'protect_pedal': False,
         'snapshot': '',
         'parameters': {key: str(value) for key, value in postprocess.PARAMETER_DEFAULTS.items()},
     }
+
+
+def normalize_preset(preset):
+    """A three-hand preset always runs the integrated playable decision; four hands never use it."""
+    preset = dict(default_preset(), **preset)
+    switches = dict(default_preset()['switches'], **preset.get('switches', {}))
+    if preset['hands'] == 3:
+        switches['playable'] = True
+    elif preset['hands'] == 4:
+        switches['playable'] = False
+    preset['switches'] = switches
+    return preset
 
 
 def load_settings():
@@ -145,6 +159,7 @@ class Panel:
         self.audio = tk.StringVar(value=self.settings.get('audio', ''))
         self.switches = {name: tk.BooleanVar() for name, _, _ in SWITCHES}
         self.hands = tk.StringVar()
+        self.primo_activation_bars = tk.StringVar()
         self.fast_figure = {hand: tk.BooleanVar() for hand in HAND_ORDER}
         self.protect_pedal = tk.BooleanVar()
         self.snapshot = tk.StringVar()
@@ -428,8 +443,21 @@ class Panel:
                 entry.grid(row=0, column=1, sticky='w')
                 SettingTooltip(label, 'hands')
                 SettingTooltip(entry, 'hands')
+                primo_label = ttk.Label(tab, text=tr('Minimum Primo activation (bars)'))
+                primo_label.grid(row=1, column=0, sticky='w', pady=(8, 0))
+                self.primo_entry = ttk.Combobox(tab, textvariable=self.primo_activation_bars,
+                                                values=('2', '4', '8'), width=4, state='readonly')
+                self.primo_entry.grid(row=1, column=1, sticky='w', pady=(8, 0))
+                SettingTooltip(primo_label, 'primo_activation_bars')
+                SettingTooltip(self.primo_entry, 'primo_activation_bars')
+                self.hands_note = ttk.Label(
+                    tab, wraplength=340, foreground='#555555',
+                    text=tr('Three-hand mode automatically compares deleting a few minor notes with enabling '
+                            'Primo; playable reduction is enabled automatically.'))
+                self.hands_note.grid(row=2, column=0, columnspan=2, sticky='w', pady=(8, 0))
+                self.hands_note.grid_remove()
                 parameter_frame = ttk.Frame(tab)
-                parameter_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=(12, 0))
+                parameter_frame.grid(row=3, column=0, columnspan=2, sticky='w', pady=(12, 0))
             elif prefix == 'trim':
                 pedal = ttk.Checkbutton(tab, text=tr('Protect pedal sustain'), variable=self.protect_pedal)
                 pedal.grid(row=0, column=0, columnspan=2, sticky='w')
@@ -606,16 +634,30 @@ class Panel:
             self.step_checks[name].configure(state='disabled' if source == 'reuse' else 'normal')
 
     def update_hand_options(self, *_):
-        """Playable reduction covers two hands, or the first player's two hands of three; not four hands."""
-        supported = self.hands.get() != '4'
-        if not supported:
+        """Three hands always use the integrated playable decision; four hands never do."""
+        hands = self.hands.get()
+        if hands == '3':
+            self.switches['playable'].set(True)
+            playable_state = 'disabled'
+        elif hands == '4':
             self.switches['playable'].set(False)
-        self.step_checks['playable'].configure(state='normal' if supported else 'disabled')
+            playable_state = 'disabled'
+        else:
+            playable_state = 'normal'
+        self.step_checks['playable'].configure(state=playable_state)
+        self.primo_entry.configure(state='readonly' if hands == '3' else 'disabled')
+        note = getattr(self, 'hands_note', None)
+        if note is not None:
+            if hands == '3':
+                note.grid()
+            else:
+                note.grid_remove()
 
     def current_preset(self):
         return {
             'switches': {name: variable.get() for name, variable in self.switches.items()},
             'hands': int(self.hands.get()),
+            'primo_activation_bars': int(self.primo_activation_bars.get() or PRIMO_ACTIVATION_BARS),
             'fast_figure_hands': [hand for hand in HAND_ORDER if self.fast_figure[hand].get()],
             'protect_pedal': self.protect_pedal.get(),
             'snapshot': self.snapshot_values.get(self.snapshot.get(), self.snapshot.get()),
@@ -623,10 +665,11 @@ class Panel:
         }
 
     def show_preset(self, preset):
-        preset = dict(default_preset(), **preset)
+        preset = normalize_preset(preset)
         for name, variable in self.switches.items():
             variable.set(preset['switches'].get(name, dict((n, d) for n, _, d in SWITCHES)[name]))
         self.hands.set(str(preset['hands']))
+        self.primo_activation_bars.set(str(preset['primo_activation_bars']))
         self.protect_pedal.set(preset['protect_pedal'])
         for hand, variable in self.fast_figure.items():
             variable.set(hand in preset['fast_figure_hands'])
@@ -664,6 +707,7 @@ class Panel:
 
     def argv(self, preset):
         """The postprocess.py command line for the panel's choices."""
+        preset = normalize_preset(preset)
         args = [self.midi.get().strip()]
         source = self.source.get()
         if source == 'bpm':
@@ -679,6 +723,8 @@ class Panel:
             if switches[name]:
                 args.append(flag)
         args += ['--hands', str(preset['hands'])]
+        if preset['hands'] == 3:
+            args += ['--primo-activation-bars', str(preset['primo_activation_bars'])]
         if switches['trim']:
             if not preset['protect_pedal']:
                 args.append('--no-pedal-protection')

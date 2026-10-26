@@ -16,6 +16,31 @@
 
 聲道：右手 1、第二右手 2、左手 3、第二左手 4。
 
+## 三手 Primo 區段
+
+三手時最高音域的 `second_right` 由第二位演奏者（Primo）負責。它不是逐個起音自由加入，而是以整小節的 Primo 區段啟用：
+
+- 只有每個小節的第一個起音組能切換 Primo ON／OFF；同一小節內維持不變。
+- Primo OFF 時 `second_right` 必須為空，該起音組只能由 `left + right` 分配。
+- Primo ON 時三隻手都可使用，但仍受既有跨度、手指數、移動、音區、快速音群與 `SECOND_HAND_NOTE_COST` 限制；ON 不會強迫第三手彈音。
+- OFF → ON 收一次 `PRIMO_ACTIVATION_COST`；ON 期間每小節收 `PRIMO_BAR_COST`。
+- ON 至少持續 `PRIMO_ACTIVATION_BARS` 小節（預設 4，`--primo-activation-bars`），期間不能 OFF。
+- 最短區段結束後可繼續 ON（不重新收 activation cost），也可在小節邊界 OFF；再次 OFF → ON 重新收 activation cost。
+- ON → OFF 時重設 `second_right` 的移動與快速音群歷史；`left`、`right` 的歷史連續保留。
+- 小節以 `start_ticks // (ticks_per_beat * 4)` 計算；本專案固定 4/4。
+
+維持成本讓 Primo 只在實際值得時保持啟用；沒有維持成本時，最佳解一旦 ON 就不會再 OFF，無法形成多個區段。
+
+## 三手與可彈性精簡的聯合決策
+
+三手模式一律啟用下列三個候選，在同一個束搜尋中比較；不再先分手再獨立清理：
+
+1. **Primo OFF／完整**：全部音符由 `left + right` 承擔，使用既有兩手 assignment cost。
+2. **Primo OFF／精簡**：用既有 playable reduction 規則（每手最多音數、最大跨度、每組最多刪除數、重複音／內聲部／外聲部優先級）找出最少且最低成本的刪音，再由 `left + right` 承擔；成本加上刪音 loss。
+3. **Primo ON**：全部音符可用 `left + right + second_right`，成本加 Primo activation／upkeep 與 `SECOND_HAND_NOTE_COST`。
+
+`--hands 3` 會自動啟用此決策；`--playable` 可省略，寫了也不另跑一次清理。刪音 loss 直接使用 `playable_reduction.removal_cost` 的既有數值（重複音 1、一般內聲部 3、外聲部再加 5，另加 velocity/1000），不是「刪除數 × 常數」。選中的刪音會從輸出 MIDI 移除，記為 playable 變更，報告列出位置。
+
 ## 方法
 
 ### 1. 起音組
@@ -37,6 +62,8 @@
 
 束搜尋可接受每手最多音數與最大跨度的限制（`limits`）：套用時，每組只考慮兩手都符合限制的切法；若該組沒有符合的切法，該組全部原本不受限制的候選切法仍然可用，由一般束搜尋成本決定分配；保留全部音符，不中斷也不刪音。未解決的組由可彈性清理列在報告中。統一執行器在 `--playable` 且兩手時，以 `playable.max_notes`、`playable.max_span` 作為此限制。
 
+三手時，OFF 候選包含「完整」與「精簡」兩種；精簡候選使用同一組 playable reduction 限制與刪音排序。Primo ON 候選不套用可彈性精簡的限制，維持既有三手 assignment cost。三手不再使用獨立 playable step。
+
 | 成本 | 計算 | 參數 |
 |---|---|---|
 | 跨度 | 每手跨度超過 12 半音，每半音 3；超過 14 半音，每半音 20 | `COMFORT_SPAN = 12`、`HARD_SPAN = 14` |
@@ -46,6 +73,7 @@
 | 快速音群中的和弦 | 連續 3 個以上單音、每個間隔 < 0.25 秒時，該手多彈的每個音 3 ×（1 − 間隔 ÷ 0.25） | `FAST_RUN_*` |
 | 分界線 | 第一位演奏者左右手中，每個落在分界線錯誤一側的音 4 × clarity | `BLOB_SIDE_COST = 4` |
 | 第二位演奏者 | 三、四手時，每個分給第二右手或第二左手的音 1，只在需要時使用 | `SECOND_HAND_NOTE_COST = 1` |
+| Primo 區段 | 三手時，OFF → ON 一次 8；ON 期間每小節 1 | `PRIMO_ACTIVATION_COST = 8`、`PRIMO_BAR_COST = 1` |
 
 ### 4. 踏板映射
 
@@ -56,12 +84,13 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 
 ## 參數
 
-| 參數 | 預設 | `--set` |
+| 參數 | 預設 | 設定 |
 |---|---|---|
 | `GROUP_START_WINDOW_SECONDS` | 0.05 | `split.group_window`（分手、可彈性清理、截斷共用） |
 | `COMFORT_SPAN` | 12 | `split.comfort_span` |
 | `HARD_SPAN` | 14 | `split.hard_span` |
 | `REPEAT_NOTE_COST` | 0（關閉） | `split.repeat_cost`（實驗性；可先試 1） |
+| `PRIMO_ACTIVATION_BARS` | 4 | `--primo-activation-bars`（正式 CLI，僅三手；正整數，至少 1） |
 
 其餘成本權重為程式常數，見上表。
 
@@ -69,10 +98,11 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 
 ## 報告
 
-`MIDI provisional hand split stats`：各手音數與比例、起音組數、手跨度超過 12 半音的組數、快速音群中多音的次數。
+`MIDI provisional hand split stats`：各手音數與比例、起音組數、手跨度超過 12 半音的組數、快速音群中多音的次數。三手時另有 Primo 最短小節數、ON 區段數與各區段的小節範圍、各區段第二右手音數、Primo 成本與同起點的最佳純二手替代成本、因精簡而刪除的音數與位置。
 
 ## 已知限制
 
 - 結果是初步分配；快速交錯、交叉手、不按常規的編曲可能需要人工修正。
 - 同一時刻手不交叉，無法表示交叉手。
 - 手指數與跨度只看同一組起音的音，不考慮前面仍按著的音；不使用音長。
+- Primo 區段以 4/4 小節計算；變拍號、自由速度或小節線偏移時，區段界線會失準。

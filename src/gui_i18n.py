@@ -31,6 +31,8 @@ _TEXT = {
         'most notes sounding': 'Max simultaneous keys (before → after)',
         'most keys held': 'Max simultaneous keys (before → after)',
         'Item': 'Item', 'Value': 'Value', 'Details': 'Details',
+        'Primo activation bars (minimum)': 'Minimum Primo activation (bars)',
+        'Primo ON segments': 'Primo ON segments', 'Primo ON ranges': 'Primo ON bar ranges',
         'Processing': 'Processing', 'Detailed report': 'Detailed report',
         'Ready': 'Ready', 'Processing...': 'Processing...',
         'Choose a MIDI file to view its report.': 'Choose a MIDI file to view its report.',
@@ -51,7 +53,8 @@ _TEXT = {
         'MIDI Output': 'Playback output device',
         'Reuse song_bpmfix.mid': 'Keep corrected tempo', 'Known BPM': 'Set tempo (BPM)',
         'Detect from audio': 'Detect tempo from audio', 'Steps': 'Processing steps', 'Thresholds': 'Detailed settings',
-        'Hands': 'Number of hands', 'Fast figure hands': 'Trim rapid-note overlaps', 'Preset': 'Settings preset',
+        'Hands': 'Number of hands', 'Minimum Primo activation (bars)': 'Minimum Primo activation (bars)',
+        'Fast figure hands': 'Trim rapid-note overlaps', 'Preset': 'Settings preset',
         'Save as...': 'Save preset...', 'Delete': 'Delete preset', 'Defaults': 'Restore defaults', 'Run': 'Start processing',
         'Key signatures': 'Key signatures', 'Rule cleaning': 'Clean suspect notes', 'Playable': 'Two-hand playability',
         'Hand split': 'Assign hands', 'Overlap trim': 'Trim overlapping notes', 'default {}': 'default {}',
@@ -139,6 +142,8 @@ _TEXT = {
         'Shift ticks': '音符時間位移（MIDI 刻度）', 'Padding bars': '前方補入的小節數',
         'Phrase': '樂句與轉調判定', 'Accidental notes': '需臨時記號的音符',
         'Rule removals': '各清理規則刪除數', 'Onset groups': '同時彈奏的音群數',
+        'Primo activation bars (minimum)': 'Primo 最短啟用小節數',
+        'Primo ON segments': 'Primo 啟用區段數', 'Primo ON ranges': 'Primo 啟用小節範圍',
         'Fast figure': '快速音群重疊截斷設定',
         'Notes shortened within sustain tolerance': '在延音容差內截短的音符數',
         'Notes kept to avoid ending the sound early': '為避免聲音提前結束而保留的音符數',
@@ -196,6 +201,7 @@ _TEXT = {
         'Playable reduction (one player, 2 hands)': '精簡為一人雙手可彈的音符', 'Hand split': '左右手分配',
         'Overlap trim': '重疊清理',
         'Steps': '處理步驟', 'Thresholds': '細部設定', 'Hands': '演奏手數',
+        'Minimum Primo activation (bars)': 'Primo 最短參與區段（小節）',
         'Fast figure hands': '截斷快速音群重疊', 'Snapshots': '輸出音符圖', 'Preset': '設定範本',
         'No image': '不輸出圖片',
         'Save as...': '儲存範本…', 'Delete': '刪除範本', 'Defaults': '還原預設值', 'Run': '開始處理',
@@ -297,6 +303,8 @@ _TEXT = {
         'Shift ticks': '音符时间位移（MIDI 刻度）', 'Padding bars': '前方补入的小节数',
         'Phrase': '乐句与转调判定', 'Accidental notes': '需临时记号的音符',
         'Rule removals': '各清理规则删除数', 'Onset groups': '同时弹奏的音群数',
+        'Primo activation bars (minimum)': 'Primo 最短启用小节数',
+        'Primo ON segments': 'Primo 启用区段数', 'Primo ON ranges': 'Primo 启用小节范围',
         'Fast figure': '快速音群重叠截断设置',
         'Notes shortened within sustain tolerance': '在延音容差内截短的音符数',
         'Notes kept to avoid ending the sound early': '为避免声音提前结束而保留的音符数',
@@ -354,6 +362,7 @@ _TEXT = {
         'Playable reduction (one player, 2 hands)': '精简为一人双手可弹的音符', 'Hand split': '左右手分配',
         'Overlap trim': '重叠清理',
         'Steps': '处理步骤', 'Thresholds': '详细设置', 'Hands': '演奏手数',
+        'Minimum Primo activation (bars)': 'Primo 最短参与区段（小节）',
         'Fast figure hands': '截断快速音群重叠', 'Snapshots': '输出音符图', 'Preset': '设置模板',
         'No image': '不输出图片',
         'Save as...': '保存模板…', 'Delete': '删除模板', 'Defaults': '恢复默认值', 'Run': '开始处理',
@@ -399,6 +408,13 @@ _TEXT = {
     },
 }
 
+_TEXT['en']['Three-hand mode automatically compares deleting a few minor notes with enabling Primo; playable reduction is enabled automatically.'] = (
+    'Three-hand mode automatically compares deleting a few minor notes with enabling Primo; playable reduction is enabled automatically.')
+_TEXT['zh_TW']['Three-hand mode automatically compares deleting a few minor notes with enabling Primo; playable reduction is enabled automatically.'] = (
+    '三手模式會自動比較「刪除少量次要音維持一人雙手」與「啟用 Primo」，因此可彈性精簡會自動啟用。')
+_TEXT['zh_CN']['Three-hand mode automatically compares deleting a few minor notes with enabling Primo; playable reduction is enabled automatically.'] = (
+    '三手模式会自动比较「删除少量次要音维持一人双手」与「启用 Primo」，因此可弹性精简会自动启用。')
+
 
 _HELP = {
     'clean.min_seconds': (
@@ -425,6 +441,10 @@ _HELP = {
         'Choose how many hands share the notes. In three-hand mode, one player\nhandles the lower parts and another player uses their right hand for the top part.',
         '指定將音符分配給幾隻手。三手模式中，一人負責低音\n與中聲部，另一人的右手負責最高聲部。',
         '指定将音符分配给几只手。三手模式中，一人负责低音\n与中声部，另一人的右手负责最高声部。'),
+    'primo_activation_bars': (
+        'Three hands: after the second player joins, keep Primo active for at least this many bars.\nLonger passages reduce repeated short entries; only an enabled passage uses the extra hand.',
+        '三手時，第二位演奏者加入後至少連續參與的小節數。\n區段較長可避免頻繁進出；只有啟用的區段才會使用第三手。',
+        '三手时，第二位演奏者加入后至少连续参与的小节数。\n区段较长可避免频繁进出；只有启用的区段才会使用第三手。'),
     'split.group_window': (
         'Group notes whose starts fall within this interval of the first note.\nHigher values merge more starts. Shared by hand split, reduction and trimming.',
         '與同組第一個音的起音時間差不超過此值，就視為同時彈奏。\n調大會合併更多起音；分手、可彈性與重疊清理共用此設定。',

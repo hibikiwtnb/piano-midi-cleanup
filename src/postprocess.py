@@ -88,6 +88,17 @@ def parse_setting(text):
         raise argparse.ArgumentTypeError('not a number: {}'.format(text))
 
 
+def positive_bars(text):
+    """Whole number of bars, at least 1."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError('expected a positive whole number: {}'.format(text))
+    if value < 1:
+        raise argparse.ArgumentTypeError('expected a positive whole number: {}'.format(text))
+    return value
+
+
 def apply_parameters(settings):
     """Set every threshold to its override or default, so earlier runs in the same process leave nothing behind."""
     values = dict(PARAMETER_DEFAULTS, **dict(settings))
@@ -128,8 +139,8 @@ def plan_steps(args):
     if args.playable and args.hands == 4:
         raise ValueError('Playable reduction works on two hands, or on the first player\'s two hands with --hands 3; '
                          'four hands are not supported.')
-    if args.playable and args.hands == 3 and not args.split:
-        raise ValueError('Playable reduction with --hands 3 needs the hand split to find the first player\'s hands.')
+    if args.hands == 3 and not args.split:
+        raise ValueError('Three-hand mode needs the hand split.')
     if args.trim and not args.split:
         raise ValueError('Overlap trimming works per hand; it needs the hand split.')
     steps = []
@@ -146,10 +157,9 @@ def plan_steps(args):
     if args.playable and args.hands == 2:
         steps.append(('playable', 'Playable reduction'))
     if args.split:
-        steps.append(('split', 'Hand split ({} hands)'.format(args.hands)))
-    if args.playable and args.hands == 3:
-        steps.append(('playable', 'Playable reduction ({})'.format(
-            ', '.join(hand.replace('_', ' ') for hand in playable_reduction.THREE_HAND_PLAYER))))
+        label = 'Hand split ({} hands{}'.format(
+            args.hands, ', integrated playable reduction' if args.hands == 3 else '')
+        steps.append(('split', label + ')'))
     if args.trim:
         steps.append(('trim', 'Overlap trim (fast figure: {})'.format(', '.join(args.fast_figure_hands))))
     if args.snapshot:
@@ -196,7 +206,7 @@ def _run_postprocess(args, stats_path):
     changes = []
     for name in names:
         before = None
-        if name in ('clean', 'playable', 'trim'):
+        if name in ('clean', 'playable', 'trim') or (name == 'split' and args.hands == 3):
             before = note_snapshot(bpmfix_path if name == 'clean' else cleaned_path)
         if name == 'bpmfix':
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm)
@@ -215,9 +225,15 @@ def _run_postprocess(args, stats_path):
                                      max_span=playable_reduction.DEFAULT_MAX_SPAN,
                                      hands=playable_reduction.THREE_HAND_PLAYER if args.hands == 3 else None)
         elif name == 'split':
-            limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN) \
-                if args.playable and args.hands == 2 else None
-            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands, limits=limits)
+            if args.hands == 3:
+                limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN)
+            elif args.playable and args.hands == 2:
+                limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN)
+            else:
+                limits = None
+            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands, limits=limits,
+                             primo_activation_bars=args.primo_activation_bars,
+                             integrated=args.hands == 3)
         elif name == 'trim':
             apply_overlap_trim(cleaned_path, report_path=stats_path, fast_figure_hands=tuple(args.fast_figure_hands),
                                protect_pedal=not args.no_pedal_protection)
@@ -225,7 +241,8 @@ def _run_postprocess(args, stats_path):
             write_snapshots(cleaned_path, layouts=SNAPSHOT_LAYOUTS[args.snapshot])
 
         if before is not None:
-            changes.extend(stage_changes(before, note_snapshot(cleaned_path), name))
+            stage = 'playable' if name == 'split' else name
+            changes.extend(stage_changes(before, note_snapshot(cleaned_path), stage))
 
     save_changes(cleaned_path, changes)
 
@@ -254,10 +271,16 @@ def build_parser(parser_class=argparse.ArgumentParser):
     parser.add_argument('--semitone-pairs', action='store_true',
                         help='Also remove the softer note of semitone pairs in rule cleaning.')
     parser.add_argument('--playable', action='store_true',
-                        help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
-                             'player\'s left and right hands, after the split.')
+                        help='Reduce every onset group to what two hands can play. With --hands 3 this is always '
+                             'enabled and compared with Primo at the same time; the flag is accepted for compatibility.')
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
-    parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
+    parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2,
+                        help='Hands for the split (default: 2). Three hands automatically compare playable '
+                             'reduction with Primo.')
+    parser.add_argument('--primo-activation-bars', type=positive_bars,
+                        default=hand_split_channels.PRIMO_ACTIVATION_BARS, metavar='N',
+                        help='Three hands: keep Primo (the second player\'s right hand) active for at least N bars '
+                             '(default: %(default)s).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')
     parser.add_argument('--no-pedal-protection', action='store_true', help='Trim without checking pedal sustain.')
     parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=list(DEFAULT_FAST_FIGURE_HANDS),
