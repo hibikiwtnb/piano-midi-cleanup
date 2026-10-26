@@ -16,6 +16,14 @@
 
 聲道：右手 1、第二右手 2、左手 3、第二左手 4。
 
+> **本程式特性，不要改：** 以下是本專案固定的音樂語義 invariant，不是可順手重構的實作細節。除非另立設計變更並補上行為回歸測試，不得因為 hand naming、channel、ownership、topology 或資料結構調整而修改。
+>
+> - 三手 topology：`left → right → second_right`。
+> - 四手 topology：`left → right → second_left → second_right`。
+> - Blob line 是「lower/middle musical mass vs separated upper material」的結構分界，不是第一位演奏者的 left/right 分界。
+> - 三手：`left + right` 在 blob line 下方，`second_right` 在上方。
+> - 四手：`left + right` 在下方，`second_left + second_right` 在上方。
+
 ## 方法
 
 ### 1. 起音組
@@ -24,12 +32,18 @@
 
 ### 2. 高低兩團的分界線
 
-每拍求一條音高分界線，下方的音傾向給第一位演奏者的左手，上方傾向給第一位演奏者的右手：
+每拍求一條音高分界線：
+
+- 兩手時，下方給 `left`、上方給 `right`。
+- 三手時，下方給第一位演奏者的 `left + right`，上方給第二位演奏者的 `second_right`。
+- 四手時，下方給第一位演奏者的 `left + right`，上方給第二位演奏者的 `second_left + second_right`。
+
+分界線的求法：
 
 - 每拍取前後各一拍內的起音，在每個候選音高計算「空白音區的半寬」（上下最近音的距離，上限 12 半音）。
 - 以 Viterbi 沿時間選分界線，總空白最大，分界線每移動一個半音扣 0.5。
 - 空白音區越窄，分界線的約束越弱（clarity：空白半寬達 4 半音為完整約束，`BLOB_CLEAR_GAP`）。
-- 三、四手時，第二位演奏者的手不參與這個左右手分界成本；是否使用第二位演奏者由單手跨度／手指數／移動成本與額外演奏者成本決定，避免把整個高音團強制交給第三隻手。
+- 三、四手時，第二位演奏者的手是 upper blob 的承擔者；不可把 blob 改回只約束第一位演奏者的 `left/right`。
 
 ### 3. 束搜尋
 
@@ -44,7 +58,7 @@
 | 音區 | 第一位演奏者左手高於 62（D4）、右手低於 55（G3），每半音 1 | `LEFT_COMFORT_MAX`、`RIGHT_COMFORT_MIN` |
 | 移動 | 0.01 × 該手中心音高變化 ÷ 距上次起音的秒數（最少 0.05 秒） | `MOVE_COST_WEIGHT`、`MIN_MOVE_SECONDS` |
 | 快速音群中的和弦 | 連續 3 個以上單音、每個間隔 < 0.25 秒時，該手多彈的每個音 3 ×（1 − 間隔 ÷ 0.25） | `FAST_RUN_*` |
-| 分界線 | 第一位演奏者左右手中，每個落在分界線錯誤一側的音 4 × clarity | `BLOB_SIDE_COST = 4` |
+| 分界線 | 兩手時 `left` 在線下、`right` 在線上；三、四手時第一位演奏者的 `left/right` 在線下、第二位演奏者的手在線上。每個錯側音 4 × clarity | `BLOB_SIDE_COST = 4` |
 | 第二位演奏者 | 三、四手時，每個分給第二右手或第二左手的音 1，只在需要時使用 | `SECOND_HAND_NOTE_COST = 1` |
 
 ### 4. 踏板映射

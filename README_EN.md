@@ -180,7 +180,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **Playback environments**: native synth libraries ship for Windows x64 and macOS; systematic playback validation across platforms and Remote Desktop sessions remains outstanding.
 - **4/4 and one tempo only**: tempo changes, free tempo and 3/4 will make bar lines drift.
 - **Not a finished score**: the output is still MIDI, not engraved notation or MusicXML. Wrong and missing notes still need human review.
-- **Three and four hands**: splitting supports 2 to 4 hands. Playable reduction handles every note with two hands; with three hands it must run after the split, and only the first player's left and second_right are reduced while the top right is left alone. Four-hand splitting is supported, but playable reduction is not.
+- **Three and four hands**: splitting supports 2 to 4 hands. Playable reduction handles every note with two hands; with three hands it must run after the split, and only the first player's left and right hands are reduced while the second player's second_right is left alone. Four-hand splitting is supported, but playable reduction is not.
 - **Different trim defaults**: the GUI's pedal-aware trim protection is **off** by default; the command line defaults to **on** and can disable it with `--no-pedal-protection`.
 
 ## Advanced docs and command line

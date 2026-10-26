@@ -65,6 +65,8 @@ LEFT_HAND_CHANNEL = 2
 SECOND_LEFT_HAND_CHANNEL = 3
 # Hands from low to high; each onset group gives each hand a contiguous slice of its sorted pitches.
 # Player 1 occupies the lower two slices; player 2, when present, sits to the right and occupies higher slices.
+# PROJECT INVARIANT: this order and player ownership are fixed musical semantics, not refactoring details.
+# Do not change them without a separate design change and regression tests.
 HANDS = {
     2: ('left', 'right'),
     3: ('left', 'right', 'second_right'),
@@ -304,6 +306,9 @@ def blob_cost(slices, blob):
     Two hands still split left/right across the line. With three or four hands,
     ``left`` and ``right`` form the first player's lower blob, while the second
     player's hands (including ``second_right``) form the upper blob.
+
+    PROJECT INVARIANT: do not reduce this to a player-1 left/right boundary or
+    change the player ownership without a separate design change and regression tests.
     """
     line, clarity = blob
     if len(slices) == 2:
