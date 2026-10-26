@@ -117,6 +117,8 @@ spec 中標示「本程式特性，不要改」的內容是設計契約，不得
 ## 10. 測試資料與實驗
 
 - MIDI 測試資料放在獨立 private sibling repo `../piano-midi-cleanup-data/`。
+- 所有測試輸入、臨時測試目錄、測試腳本、中間檔案與比較結果，都必須在此資料倉庫內管理，可按需要建立子資料夾。本機位置為 `/Users/keinan/Music/piano-midi-cleanup-data`；其他開發機使用同名 sibling repo。
+- 禁止把測試資料或結果寫到主程式倉庫、系統暫存目錄（如 `/tmp`、`/private/tmp`）或其他位置。使用 `TemporaryDirectory` 等工具時，也必須明確將暫存位置指定在資料倉庫內，不得使用系統預設位置。
 - 原始 / baseline MIDI 不得被實驗直接覆寫；實驗使用副本或臨時輸出。
 - 重新處理資料前，記錄應用程式 revision 與處理參數。
 - 臨時 debug script、比較輸出、render、installer、machine-specific shortcut 不得提交到主 repo。
