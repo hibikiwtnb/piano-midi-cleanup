@@ -59,6 +59,15 @@ SECOND_HAND_NOTE_COST = 1.0
 REPEAT_NOTE_COST = 0.0
 REPEAT_CONTEXT_BEATS = 2.0
 
+# Three-hand mode: the second player's right hand is enabled in whole-bar segments,
+# never just for single onsets. An ON segment must last at least this many bars.
+# PROJECT INVARIANT: do not turn this into per-onset activation without a separate
+# design change and regression tests.
+SECOND_PLAYER_MIN_BARS = 4
+SECOND_PLAYER_ACTIVATION_COST = 8.0
+SECOND_PLAYER_BAR_COST = 1.0
+BEATS_PER_BAR = 4
+
 RIGHT_HAND_CHANNEL = 0
 SECOND_RIGHT_HAND_CHANNEL = 1
 LEFT_HAND_CHANNEL = 2
@@ -373,8 +382,43 @@ def repeated_note_cost(slices, recent, tick, context_ticks, unique_pitches):
     return cost
 
 
-def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
+def second_player_modes(state, bar, first_of_bar, minimum_bars):
+    """ON/OFF choices for the second player at a three-hand bar boundary.
+
+    A bar keeps the state chosen at its first onset. Turning ON pays activation
+    and the first bar's upkeep; staying ON pays one bar at a time. An ON segment
+    cannot turn OFF until it has lasted at least ``minimum_bars`` bars.
+    """
+    active = state['second_player_active']
+    if not first_of_bar:
+        return ((active, state['second_player_start_bar'], state['second_player_last_bar'], 0.0),)
+    if not active:
+        return (
+            (False, None, None, 0.0),
+            (True, bar, bar, SECOND_PLAYER_ACTIVATION_COST + SECOND_PLAYER_BAR_COST),
+        )
+    start = state['second_player_start_bar']
+    last = state['second_player_last_bar']
+    modes = [(True, start, bar, SECOND_PLAYER_BAR_COST * (bar - last))]
+    if bar - start >= minimum_bars:
+        # Turning OFF here still owes upkeep for bars up to the one before it.
+        modes.append((False, None, None, SECOND_PLAYER_BAR_COST * max(0, bar - 1 - last)))
+    return tuple(modes)
+
+
+def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
+                  second_player_bars=None, return_details=False):
     """Beam search over onset groups; each group cuts its sorted pitches into one slice per hand, low to high."""
+    if second_player_bars is None:
+        second_player_bars = SECOND_PLAYER_MIN_BARS
+    if second_player_bars < 1:
+        raise ValueError('second player minimum bars must be at least 1')
+    use_second_player = hands == 3
+    bar_ticks = ticks_per_beat * BEATS_PER_BAR
+    group_bars = ([group[0]['start_ticks'] // bar_ticks for group in groups] if use_second_player else [])
+    first_of_bar = ([index == 0 or group_bars[index] != group_bars[index - 1]
+                     for index in range(len(groups))] if use_second_player else [])
+
     beam = [{
         'pitch': [None] * hands,
         'onset': [None] * hands,
@@ -383,9 +427,12 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
         'cuts': None,
         'parent': None,
         'recent': {},
+        'second_player_active': False,
+        'second_player_start_bar': None,
+        'second_player_last_bar': None,
     }]
 
-    for group in groups:
+    for group_index, group in enumerate(groups):
         pitches = sorted(note['note'] for note in group)
         onset = group[0]['start_seconds']
         tick = group[0]['start_ticks']
@@ -405,11 +452,31 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
                 options = fitting
         candidates = []
         for state in beam:
-            for cuts, slices in options:
-                cost = split_cost(slices, onset, state, blob)
-                if REPEAT_NOTE_COST:
-                    cost += repeated_note_cost(slices, state['recent'], tick, context_ticks, unique_pitches)
-                candidates.append(next_state(state, slices, onset, cost, cuts, state))
+            modes = (second_player_modes(state, group_bars[group_index], first_of_bar[group_index],
+                                         second_player_bars)
+                     if use_second_player else ((None, None, None, 0.0),))
+            for active, start_bar, last_bar, mode_cost in modes:
+                if use_second_player and not active:
+                    allowed = [(cuts, slices) for cuts, slices in options if not slices[2]]
+                    if not allowed:
+                        continue
+                else:
+                    allowed = options
+                for cuts, slices in allowed:
+                    cost = split_cost(slices, onset, state, blob) + mode_cost
+                    if REPEAT_NOTE_COST:
+                        cost += repeated_note_cost(slices, state['recent'], tick, context_ticks, unique_pitches)
+                    child = next_state(state, slices, onset, cost, cuts, state)
+                    if use_second_player:
+                        child['second_player_active'] = active
+                        child['second_player_start_bar'] = start_bar
+                        child['second_player_last_bar'] = last_bar
+                        if not active:
+                            # OFF segments must not carry stale movement or fast-run evidence.
+                            child['pitch'][2] = None
+                            child['onset'][2] = None
+                            child['run'][2] = 0
+                    candidates.append(child)
         candidates.sort(key=lambda item: item['cost'])
         beam = candidates[:BEAM_WIDTH]
         if REPEAT_NOTE_COST:
@@ -428,12 +495,24 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None):
         cuts_per_group.append(state['cuts'])
         state = state['parent']
     cuts_per_group.reverse()
-    return cuts_per_group
+    if not return_details:
+        return cuts_per_group
+    states = []
+    state = beam[0]
+    while state is not None:
+        states.append(state)
+        state = state['parent']
+    states.reverse()
+    return cuts_per_group, {
+        'group_bars': group_bars,
+        'second_player_active': [state['second_player_active'] for state in states[1:]],
+    }
 
 
-def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None):
+def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None, second_player_bars=None):
     names = HANDS[hands]
-    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat, limits=limits)):
+    for group, cuts in zip(groups, search_splits(groups, hands, blobs, ticks_per_beat, limits=limits,
+                                                 second_player_bars=second_player_bars)):
         ordered = sorted(group, key=lambda note: note['note'])
         for index, note in enumerate(ordered):
             note['hand'] = names[sum(1 for cut in cuts if index >= cut)]
@@ -524,12 +603,15 @@ def apply_channels(notes):
         note['end_message'].channel = channel
 
 
-def split_hands_in_place(midi_path, hands=2, limits=None):
+def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=None):
+    if second_player_bars is None:
+        second_player_bars = SECOND_PLAYER_MIN_BARS
     midi_file = mido.MidiFile(midi_path)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
     blobs = blob_lines(notes, midi_file.ticks_per_beat)
-    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits)
+    assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits,
+                  second_player_bars=second_player_bars)
     map_pedal_channels(midi_file, notes)
     apply_channels(notes)
     midi_file.save(midi_path)
@@ -544,6 +626,7 @@ def split_hands_in_place(midi_path, hands=2, limits=None):
         'onset_groups': len(groups),
         'wide_span_groups': wide_span_groups,
         'fast_run_chords': fast_run_chords,
+        'second_player_bars': second_player_bars,
     }
     return stats
 
@@ -571,6 +654,8 @@ def format_split_stats(stats):
             stats['fast_run_chords'],
         ),
     ]
+    if stats['hands'] == 3:
+        lines.append('Second player minimum active bars: {}'.format(stats['second_player_bars']))
     return '\n'.join(lines)
 
 
@@ -584,8 +669,10 @@ def write_split_report(stats, report_path=None, append=False):
         print('Updating hand split report: {}'.format(report_path))
 
 
-def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None):
-    stats = split_hands_in_place(midi_path, hands=hands, limits=limits)
+def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None,
+                     second_player_bars=None):
+    stats = split_hands_in_place(midi_path, hands=hands, limits=limits,
+                                 second_player_bars=second_player_bars)
     write_split_report(stats, report_path=report_path, append=append_report)
     return stats
 
@@ -602,6 +689,13 @@ def choose_midi():
     )
 
 
+def positive_int(text):
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError('must be at least 1')
+    return value
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Mark provisional piano hand split by MIDI channel.')
     parser.add_argument('input_midi', nargs='?', help='Input MIDI file to modify in place.')
@@ -611,6 +705,9 @@ def main(argv=None):
     parser.add_argument('--hands', type=int, choices=sorted(HANDS), default=2,
                         help='Number of hands: 3 adds a second right hand on channel 2, 4 also a second left hand on channel 4 '
                              '(default: 2).')
+    parser.add_argument('--second-player-bars', type=positive_int, default=SECOND_PLAYER_MIN_BARS,
+                        metavar='N', help='Three hands: keep the second player active for at least N bars '
+                                          '(default: {}).'.format(SECOND_PLAYER_MIN_BARS))
     args = parser.parse_args(argv)
 
     midi_path = args.input_midi or choose_midi()
@@ -622,7 +719,8 @@ def main(argv=None):
         return 1
 
     try:
-        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report, hands=args.hands)
+        apply_hand_split(midi_path, report_path=args.report, append_report=args.append_report, hands=args.hands,
+                         second_player_bars=args.second_player_bars)
     except Exception as error:
         messagebox.showerror('Hand Split failed', str(error))
         raise

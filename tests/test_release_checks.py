@@ -72,6 +72,41 @@ class ReleaseChecks(unittest.TestCase):
         self.assertEqual(hand_split.blob_cost([[48], [72]], blob), 0.0)
         self.assertEqual(hand_split.blob_cost([[72], [48]], blob), 8.0)
 
+    def test_second_player_activation_waits_for_bar_boundary_and_minimum(self):
+        off = {'second_player_active': False, 'second_player_start_bar': None, 'second_player_last_bar': None}
+        self.assertEqual(hand_split.second_player_modes(off, 3, False, 4),
+                         ((False, None, None, 0.0),))
+        self.assertEqual(hand_split.second_player_modes(off, 3, True, 4), (
+            (False, None, None, 0.0),
+            (True, 3, 3, hand_split.SECOND_PLAYER_ACTIVATION_COST + hand_split.SECOND_PLAYER_BAR_COST),
+        ))
+        on = {'second_player_active': True, 'second_player_start_bar': 3, 'second_player_last_bar': 3}
+        self.assertEqual(hand_split.second_player_modes(on, 6, True, 4), ((True, 3, 6, 3.0),))
+        self.assertEqual(hand_split.second_player_modes(on, 7, True, 4), (
+            (True, 3, 7, 4.0), (False, None, None, 3.0)))
+
+    def test_three_hand_second_player_segments_follow_bar_units(self):
+        bar_ticks = 384 * hand_split.BEATS_PER_BAR
+        pitches_per_bar = ([(48, 55, 72, 84, 88)] * 2 + [(48, 55)] * 6)
+        groups = [[dict(note=pitch, start_ticks=index * bar_ticks, start_seconds=index)
+                   for pitch in pitches] for index, pitches in enumerate(pitches_per_bar)]
+        blobs = [(60, 1.0)] * (len(groups) * hand_split.BEATS_PER_BAR + 1)
+        for minimum_bars, expected in ((4, [True, True, True, True, False, False, False, False]),
+                                       (1, [True, True, False, False, False, False, False, False])):
+            with self.subTest(minimum_bars=minimum_bars):
+                cuts, details = hand_split.search_splits(
+                    groups, 3, blobs, 384, second_player_bars=minimum_bars, return_details=True)
+                self.assertEqual(details['second_player_active'], expected)
+                for group, cut, active in zip(groups, cuts, expected):
+                    if not active:
+                        self.assertEqual(cut[1], len(group))
+
+    def test_second_player_bars_rejects_invalid_settings(self):
+        for value in ('0', '-1', 'nan', 'inf', '1.5'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
+                    ['song.mid', '--set', 'split.second_player_bars=' + value])
+
     def test_gui_shows_processed_result_after_success(self):
         source = self.root / 'song.mid'
         self.make_midi(source)

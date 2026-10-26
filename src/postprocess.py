@@ -58,6 +58,8 @@ PARAMETERS = (
     Parameter('split.hard_span', 'Heavily penalized beyond (semitones)', int, ((hand_split_channels, 'HARD_SPAN'),)),
     Parameter('split.repeat_cost', 'Repeated-note hand continuity (experimental, 0 = off)', float,
               ((hand_split_channels, 'REPEAT_NOTE_COST'),)),
+    Parameter('split.second_player_bars', 'Three hands: second player minimum bars', int,
+              ((hand_split_channels, 'SECOND_PLAYER_MIN_BARS'),)),
     Parameter('trim.fast_figure_beats', 'Fast figure: onsets within (beats)', float,
               ((trim_overlaps, 'FAST_FIGURE_BEATS'),)),
     Parameter('trim.fast_figure_onsets', 'Fast figure: at least onset groups', int,
@@ -83,6 +85,8 @@ def parse_setting(text):
         number = PARAMETER_BY_KEY[key].kind(value)
         if key == 'split.repeat_cost' and (not math.isfinite(number) or number < 0):
             raise argparse.ArgumentTypeError('split.repeat_cost must be finite and nonnegative.')
+        if key == 'split.second_player_bars' and number < 1:
+            raise argparse.ArgumentTypeError('split.second_player_bars must be at least 1.')
         return key, number
     except ValueError:
         raise argparse.ArgumentTypeError('not a number: {}'.format(text))

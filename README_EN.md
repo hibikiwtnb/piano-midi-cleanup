@@ -11,7 +11,7 @@ Scripts are provided to create a Windows shortcut or macOS app. Set up the Pytho
 - Fixes the song BPM and aligns the first beat to a bar line.
 - Writes key signatures so score view changes key at modulations.
 - Removes obvious transcription noise with conservative rules.
-- Splits notes into 2 to 4 hands, marked by MIDI channel.
+- Splits notes into 2 to 4 hands, marked by MIDI channel; in three-hand mode the second player joins in whole-bar segments (default: at least 4 bars).
 - Shortens overlaps inside one hand that were caused by sustain-pedal tails.
 - Provides a piano roll, note text review, piano roll PNGs and other inspection tools.
 - Includes a piano-audio transcription entrypoint built on ByteDance's `piano_transcription_inference`.

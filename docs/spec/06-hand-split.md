@@ -23,6 +23,7 @@
 > - Blob line 是「lower/middle musical mass vs separated upper material」的結構分界，不是第一位演奏者的 left/right 分界。
 > - 三手：`left + right` 在 blob line 下方，`second_right` 在上方。
 > - 四手：`left + right` 在下方，`second_left + second_right` 在上方。
+> - 三手第二演奏者以整小節的 n 小節區段啟用，不可改成逐個 onset 自由加入；四手不受這個開關影響。
 
 ## 方法
 
@@ -45,6 +46,19 @@
 - 空白音區越窄，分界線的約束越弱（clarity：空白半寬達 4 半音為完整約束，`BLOB_CLEAR_GAP`）。
 - 三、四手時，第二位演奏者的手是 upper blob 的承擔者；不可把 blob 改回只約束第一位演奏者的 `left/right`。
 
+### 2.1 三手第二演奏者的 n 小節區段
+
+三手時，`second_right` 不是逐個起音自由加入，而是以整小節為單位決定是否啟用：
+
+- 每個小節第一個起音組決定 ON／OFF；同一小節內維持不變。
+- OFF：`second_right` 必須為空，該組只能由 `left + right` 分配。
+- ON：`second_right` 可用，但不強迫；仍受跨度、手指數、移動、音區、快速音群與 `SECOND_HAND_NOTE_COST` 限制。
+- OFF → ON 付一次 `SECOND_PLAYER_ACTIVATION_COST`；ON 期間每小節付 `SECOND_PLAYER_BAR_COST`。
+- ON 至少持續 `SECOND_PLAYER_MIN_BARS` 小節（預設 4）；未滿不得 OFF，期滿可繼續 ON 而不重收 activation。
+- OFF 後再 ON 重新收 activation；ON → OFF 時清除 `second_right` 的移動與快速音群歷史，`left`、`right` 的歷史保留。
+- 小節以 `start_ticks // (ticks_per_beat * 4)` 計算；本程式固定 4/4。
+- 四手模式不使用這個開關。
+
 ### 3. 束搜尋
 
 依時間逐組考慮所有切法，保留成本最低的 32 個狀態（`BEAM_WIDTH`），最後回溯成本最低的路徑。每組每種切法的成本是下列各項之和：
@@ -60,6 +74,7 @@
 | 快速音群中的和弦 | 連續 3 個以上單音、每個間隔 < 0.25 秒時，該手多彈的每個音 3 ×（1 − 間隔 ÷ 0.25） | `FAST_RUN_*` |
 | 分界線 | 兩手時 `left` 在線下、`right` 在線上；三、四手時第一位演奏者的 `left/right` 在線下、第二位演奏者的手在線上。每個錯側音 4 × clarity | `BLOB_SIDE_COST = 4` |
 | 第二位演奏者 | 三、四手時，每個分給第二右手或第二左手的音 1，只在需要時使用 | `SECOND_HAND_NOTE_COST = 1` |
+| 第二演奏者區段 | 三手時 OFF → ON 一次 8；ON 期間每小節 1；至少 N 小節 | `SECOND_PLAYER_ACTIVATION_COST = 8`、`SECOND_PLAYER_BAR_COST = 1`、`SECOND_PLAYER_MIN_BARS = 4` |
 
 ### 4. 踏板映射
 
@@ -76,6 +91,7 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 | `COMFORT_SPAN` | 12 | `split.comfort_span` |
 | `HARD_SPAN` | 14 | `split.hard_span` |
 | `REPEAT_NOTE_COST` | 0（關閉） | `split.repeat_cost`（實驗性；可先試 1） |
+| `SECOND_PLAYER_MIN_BARS` | 4 | `split.second_player_bars`（三手；正整數，最小 1） |
 
 其餘成本權重為程式常數，見上表。
 
@@ -83,10 +99,11 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 
 ## 報告
 
-`MIDI provisional hand split stats`：各手音數與比例、起音組數、手跨度超過 12 半音的組數、快速音群中多音的次數。
+`MIDI provisional hand split stats`：各手音數與比例、起音組數、手跨度超過 12 半音的組數、快速音群中多音的次數。三手時另列第二位演奏者的最短啟用小節數。
 
 ## 已知限制
 
 - 結果是初步分配；快速交錯、交叉手、不按常規的編曲可能需要人工修正。
 - 同一時刻手不交叉，無法表示交叉手。
 - 手指數與跨度只看同一組起音的音，不考慮前面仍按著的音；不使用音長。
+- 三手第二演奏者區段以 4/4 小節計算；變拍號、自由速度或小節線偏移時，區段界線會失準。

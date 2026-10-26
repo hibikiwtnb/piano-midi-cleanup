@@ -219,6 +219,7 @@ _TEXT = {
         'Free hand span (semitones)': '單手舒適跨度（半音）',
         'Heavily penalized beyond (semitones)': '盡量避免的單手跨度（半音）',
         'Repeated-note hand continuity (experimental, 0 = off)': '同音換手抑制（實驗性，0 為關閉）',
+        'Three hands: second player minimum bars': '三手：第二位演奏者最少小節數',
         'Fast figure: onsets within (beats)': '快速音群：彈奏間隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少連續彈奏次數',
         'Harmony change: at least pitch classes': '和聲判定：最少不同音名數',
@@ -377,6 +378,7 @@ _TEXT = {
         'Free hand span (semitones)': '单手舒适跨度（半音）',
         'Heavily penalized beyond (semitones)': '尽量避免的单手跨度（半音）',
         'Repeated-note hand continuity (experimental, 0 = off)': '同音换手抑制（实验性，0 为关闭）',
+        'Three hands: second player minimum bars': '三手：第二位演奏者最少小节数',
         'Fast figure: onsets within (beats)': '快速音群：弹奏间隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少连续弹奏次数',
         'Harmony change: at least pitch classes': '和声判定：最少不同音名数',
@@ -425,6 +427,10 @@ _HELP = {
         'Choose how many hands share the notes. In three-hand mode, one player\nhandles the lower parts and another player uses their right hand for the top part.',
         '指定將音符分配給幾隻手。三手模式中，一人負責低音\n與中聲部，另一人的右手負責最高聲部。',
         '指定将音符分配给几只手。三手模式中，一人负责低音\n与中声部，另一人的右手负责最高声部。'),
+    'split.second_player_bars': (
+        'Three hands: keep the second player active for at least this many bars.\nThe second player can start or stop only at bar boundaries.',
+        '三手時，第二位演奏者至少連續啟用這麼多小節。\n第二位演奏者只能在小節邊界開始或停止。',
+        '三手时，第二位演奏者至少连续启用这么多小节。\n第二位演奏者只能在小节边界开始或停止。'),
     'split.group_window': (
         'Group notes whose starts fall within this interval of the first note.\nHigher values merge more starts. Shared by hand split, reduction and trimming.',
         '與同組第一個音的起音時間差不超過此值，就視為同時彈奏。\n調大會合併更多起音；分手、可彈性與重疊清理共用此設定。',
