@@ -45,12 +45,13 @@ BLOB_HIGHEST_LINE = 108
 BLOB_CONTEXT_BEATS = 1
 BLOB_MAX_GAP = 12
 BLOB_LINE_MOVE_COST = 0.5
-# Per note on the wrong side of the line: upper hand below it, other hands above it.
+# Per note on the wrong side of the line for the first player's left/right split.
 # Scaled down where the empty band is narrower than BLOB_CLEAR_GAP semitones on each side.
 BLOB_SIDE_COST = 4.0
 BLOB_CLEAR_GAP = 4
 
-# With three or four hands, each note given to a second hand costs this, so they are used only when needed.
+# With three or four hands, each note given to the second player's hands costs this,
+# so the additional player is used only when needed.
 SECOND_HAND_NOTE_COST = 1.0
 
 # Optional repeated-note continuity experiment; zero preserves the established split.
@@ -62,10 +63,11 @@ SECOND_RIGHT_HAND_CHANNEL = 1
 LEFT_HAND_CHANNEL = 2
 SECOND_LEFT_HAND_CHANNEL = 3
 # Hands from low to high; each onset group gives each hand a contiguous slice of its sorted pitches.
+# Player 1 occupies the lower two slices; player 2, when present, sits to the right and occupies higher slices.
 HANDS = {
     2: ('left', 'right'),
-    3: ('left', 'second_right', 'right'),
-    4: ('left', 'second_left', 'second_right', 'right'),
+    3: ('left', 'right', 'second_right'),
+    4: ('left', 'right', 'second_left', 'second_right'),
 }
 CHANNELS = {
     'left': LEFT_HAND_CHANNEL,
@@ -296,17 +298,23 @@ def blob_lines(notes, ticks_per_beat):
 
 
 def blob_cost(slices, blob):
+    """Keep the first player's left/right hands on the expected sides of the blob line.
+
+    Extra hands belong to player 2 and are intentionally ignored here; their use is controlled
+    by hand feasibility and SECOND_HAND_NOTE_COST rather than forcing the upper blob into them.
+    """
     line, clarity = blob
-    wrong = sum(1 for pitch in slices[-1] if pitch < line)
-    wrong += sum(1 for pitches in slices[:-1] for pitch in pitches if pitch >= line)
+    left, right = slices[:2]
+    wrong = sum(1 for pitch in right if pitch < line)
+    wrong += sum(1 for pitch in left if pitch >= line)
     return wrong * BLOB_SIDE_COST * clarity
 
 
 def split_cost(slices, onset, state, blob):
     cost = sum(hand_cost(pitches, onset, state['pitch'][hand], state['onset'][hand], state['run'][hand])
                for hand, pitches in enumerate(slices))
-    cost += register_cost(slices[0], slices[-1])
-    cost += sum(len(pitches) for pitches in slices[1:-1]) * SECOND_HAND_NOTE_COST
+    cost += register_cost(slices[0], slices[1])
+    cost += sum(len(pitches) for pitches in slices[2:]) * SECOND_HAND_NOTE_COST
     return cost + blob_cost(slices, blob)
 
 
