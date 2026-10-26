@@ -71,6 +71,9 @@ SECOND_PLAYER_ACTIVATION_COST = 8.0
 SECOND_PLAYER_BAR_COST = 1.0
 SECOND_RIGHT_MIN_PITCH = 0
 SECOND_RIGHT_REGISTER_COST = 10.0
+SECOND_PLAYER_SPARSE_NOTES = 2
+FIRST_PLAYER_MAX_NOTES = 4
+FIRST_PLAYER_MAX_SPAN = 12
 BEATS_PER_BAR = 4
 
 RIGHT_HAND_CHANNEL = 0
@@ -624,6 +627,36 @@ def assign_groups(groups, hands, blobs, ticks_per_beat, limits=None, second_play
         ordered = sorted(group, key=lambda note: note['note'])
         for index, note in enumerate(ordered):
             note['hand'] = names[sum(1 for cut in cuts if index >= cut)]
+    if hands == 3:
+        consolidate_sparse_player_bars(groups, ticks_per_beat)
+
+
+def consolidate_sparse_player_bars(groups, ticks_per_beat):
+    """Let player two rest for an entire sparse bar if player one's chords cover it.
+
+    The ON envelope remains available across the phrase; actual participation in
+    this bar is unnecessary only when every extra note fits an existing right-hand
+    chord. Never absorb solo upper-voice notes or change just part of a bar.
+    """
+    bars = defaultdict(list)
+    for group in groups:
+        bars[group[0]['start_ticks'] // (ticks_per_beat * BEATS_PER_BAR)].append(group)
+    rested = []
+    for bar, bar_groups in bars.items():
+        upper = [note for group in bar_groups for note in group if note['hand'] == 'second_right']
+        if not 0 < len(upper) <= SECOND_PLAYER_SPARSE_NOTES:
+            continue
+        affected = [group for group in bar_groups if any(note['hand'] == 'second_right' for note in group)]
+        for group in affected:
+            right = [note for note in group if note['hand'] == 'right']
+            pitches = sorted(note['note'] for note in group if note['hand'] in ('right', 'second_right'))
+            if len(right) < 2 or not hand_fits(pitches, FIRST_PLAYER_MAX_NOTES, FIRST_PLAYER_MAX_SPAN):
+                break
+        else:
+            for note in upper:
+                note['hand'] = 'right'
+            rested.append(bar + 1)
+    return rested
 
 
 def summarize_groups(groups):

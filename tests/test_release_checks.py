@@ -129,6 +129,28 @@ class ReleaseChecks(unittest.TestCase):
                 postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
                     ['song.mid', '--set', 'split.second_player_bars=' + value])
 
+    def test_sparse_second_player_rests_when_the_whole_bar_fits_right_chords(self):
+        group = [dict(note=p, hand=hand, start_ticks=24 * 384)
+                 for p, hand in ((49, 'left'), (64, 'right'), (68, 'right'), (71, 'right'), (75, 'second_right'))]
+        self.assertEqual(hand_split.consolidate_sparse_player_bars([group], 384), [7])
+        self.assertEqual([n['note'] for n in group if n['hand'] == 'right'], [64, 68, 71, 75])
+        self.assertEqual(len(group), 5)
+
+    def test_sparse_bar_decision_is_all_or_nothing_and_keeps_independent_upper_voice(self):
+        def group(tick, right, upper):
+            return [dict(note=p, hand=hand, start_ticks=tick)
+                    for hand, pitches in (('right', right), ('second_right', upper)) for p in pitches]
+        for groups in (
+                [group(0, (64, 68, 71), (75,)), group(384, (48, 60), (84,))],
+                [group(0, (64, 68, 71), (75,)) for _ in range(3)],
+                [group(0, (), (84,))],
+                [group(0, (64, 68, 71, 72), (75,))]):
+            before = [[n['hand'] for n in g] for g in groups]
+            self.assertEqual(hand_split.consolidate_sparse_player_bars(groups, 384), [])
+            self.assertEqual([[n['hand'] for n in g] for g in groups], before)
+        with patch.object(hand_split, 'FIRST_PLAYER_MAX_SPAN', 10):
+            self.assertEqual(hand_split.consolidate_sparse_player_bars([group(0, (64, 68, 71), (75,))], 384), [])
+
     def test_second_right_minimum_pitch_accepts_note_names_and_validates_range(self):
         for text, expected in (('C4', 60), ('C5', 72), ('c#5', 73), ('Db5', 73), ('72', 72), ('0', 0), ('127', 127)):
             with self.subTest(text=text):
