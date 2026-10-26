@@ -151,6 +151,21 @@ class ReleaseChecks(unittest.TestCase):
         with patch.object(hand_split, 'FIRST_PLAYER_MAX_SPAN', 10):
             self.assertEqual(hand_split.consolidate_sparse_player_bars([group(0, (64, 68, 71), (75,))], 384), [])
 
+    def test_sparse_participation_counts_a_straddling_chord_in_the_new_bar(self):
+        boundary = 24 * 384
+        preceding = [dict(note=p, hand='second_right', start_ticks=boundary - 384) for p in (83, 87, 90)]
+        straddling = [dict(note=p, hand=hand, start_ticks=boundary + offset)
+                      for p, hand, offset in ((75, 'second_right', -5), (64, 'right', -2),
+                                              (68, 'right', -2), (71, 'right', 1), (49, 'left', 6))]
+        later = [dict(note=p, hand=hand, start_ticks=boundary + 576)
+                 for p, hand in ((64, 'right'), (68, 'right'), (71, 'right'), (75, 'second_right'))]
+        groups = [preceding, straddling, later]
+        before = [[n['start_ticks'] for n in group] for group in groups]
+        self.assertEqual(hand_split.consolidate_sparse_player_bars(groups, 384), [7])
+        self.assertTrue(all(n['hand'] == 'second_right' for n in preceding))
+        self.assertFalse(any(n['hand'] == 'second_right' for group in (straddling, later) for n in group))
+        self.assertEqual([[n['start_ticks'] for n in group] for group in groups], before)
+
     def test_second_right_minimum_pitch_accepts_note_names_and_validates_range(self):
         for text, expected in (('C4', 60), ('C5', 72), ('c#5', 73), ('Db5', 73), ('72', 72), ('0', 0), ('127', 127)):
             with self.subTest(text=text):

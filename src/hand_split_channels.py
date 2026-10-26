@@ -640,7 +640,10 @@ def consolidate_sparse_player_bars(groups, ticks_per_beat):
     """
     bars = defaultdict(list)
     for group in groups:
-        bars[group[0]['start_ticks'] // (ticks_per_beat * BEATS_PER_BAR)].append(group)
+        # A grouped chord straddling a barline belongs to the new bar even if
+        # its highest note was played a few ticks early. Do not quantize notes.
+        bar = max(note['start_ticks'] for note in group) // (ticks_per_beat * BEATS_PER_BAR)
+        bars[bar].append(group)
     rested = []
     for bar, bar_groups in bars.items():
         upper = [note for group in bar_groups for note in group if note['hand'] == 'second_right']
