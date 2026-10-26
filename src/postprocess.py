@@ -60,6 +60,8 @@ PARAMETERS = (
               ((hand_split_channels, 'REPEAT_NOTE_COST'),)),
     Parameter('split.second_player_bars', 'Three hands: second player minimum bars', int,
               ((hand_split_channels, 'SECOND_PLAYER_MIN_BARS'),)),
+    Parameter('split.second_right_min_pitch', 'Second right hand: lowest note (C4 = 60, 0 = unrestricted)',
+              hand_split_channels.parse_midi_pitch, ((hand_split_channels, 'SECOND_RIGHT_MIN_PITCH'),)),
     Parameter('trim.fast_figure_beats', 'Fast figure: onsets within (beats)', float,
               ((trim_overlaps, 'FAST_FIGURE_BEATS'),)),
     Parameter('trim.fast_figure_onsets', 'Fast figure: at least onset groups', int,
@@ -88,7 +90,9 @@ def parse_setting(text):
         if key == 'split.second_player_bars' and number < 1:
             raise argparse.ArgumentTypeError('split.second_player_bars must be at least 1.')
         return key, number
-    except ValueError:
+    except ValueError as error:
+        if key == 'split.second_right_min_pitch':
+            raise argparse.ArgumentTypeError(str(error))
         raise argparse.ArgumentTypeError('not a number: {}'.format(text))
 
 

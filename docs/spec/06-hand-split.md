@@ -59,6 +59,15 @@
 - 小節以 `start_ticks // (ticks_per_beat * 4)` 計算；本程式固定 4/4。
 - 四手模式不使用這個開關。
 
+### 2.2 第二右手最低音高
+
+`split.second_right_min_pitch` 是三、四手時 `second_right` 的硬性下限（含等於）：低於此音高的音不得分給 `second_right`。此過濾在可彈性 fallback 之前套用，因此即使後續限制找不到合適切法，也不會把低音改派給 `second_right`。
+
+- 預設 0 表示不限制。
+- 可輸入音名（如 `C5`）或 MIDI 數字（如 `72`）；中央 C 為 `C4 = 60`。
+- 此限制只重新分配音符，不會刪除任何音。
+- GUI 會自動列在分手分頁；這是使用者可設定的額外限制，不改變 Blob 分界線的語義或手部順序。
+
 ### 3. 束搜尋
 
 依時間逐組考慮所有切法，保留成本最低的 32 個狀態（`BEAM_WIDTH`），最後回溯成本最低的路徑。每組每種切法的成本是下列各項之和：
@@ -92,6 +101,7 @@ CC64 是逐聲道的控制。改寫音符聲道之前，先把來源聲道的踏
 | `HARD_SPAN` | 14 | `split.hard_span` |
 | `REPEAT_NOTE_COST` | 0（關閉） | `split.repeat_cost`（實驗性；可先試 1） |
 | `SECOND_PLAYER_MIN_BARS` | 4 | `split.second_player_bars`（三手；正整數，最小 1） |
+| `SECOND_RIGHT_MIN_PITCH` | 0（不限制） | `split.second_right_min_pitch`（三、四手；音名或 MIDI，中央 C 為 C4 = 60） |
 
 其餘成本權重為程式常數，見上表。
 

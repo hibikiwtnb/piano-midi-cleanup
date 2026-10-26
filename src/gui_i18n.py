@@ -220,6 +220,8 @@ _TEXT = {
         'Heavily penalized beyond (semitones)': '盡量避免的單手跨度（半音）',
         'Repeated-note hand continuity (experimental, 0 = off)': '同音換手抑制（實驗性，0 為關閉）',
         'Three hands: second player minimum bars': '三手：第二位演奏者最少小節數',
+        'Second right hand: lowest note (C4 = 60, 0 = unrestricted)': '第二右手最低音（C4 = 60，0 不限制）',
+        'Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).': '請輸入 C5 等音名，或 0–127 的 MIDI 音高（C4 = 60）。',
         'Fast figure: onsets within (beats)': '快速音群：彈奏間隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少連續彈奏次數',
         'Harmony change: at least pitch classes': '和聲判定：最少不同音名數',
@@ -379,6 +381,8 @@ _TEXT = {
         'Heavily penalized beyond (semitones)': '尽量避免的单手跨度（半音）',
         'Repeated-note hand continuity (experimental, 0 = off)': '同音换手抑制（实验性，0 为关闭）',
         'Three hands: second player minimum bars': '三手：第二位演奏者最少小节数',
+        'Second right hand: lowest note (C4 = 60, 0 = unrestricted)': '第二右手最低音（C4 = 60，0 不限制）',
+        'Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).': '请输入 C5 等音名，或 0–127 的 MIDI 音高（C4 = 60）。',
         'Fast figure: onsets within (beats)': '快速音群：弹奏间隔上限（拍）',
         'Fast figure: at least onset groups': '快速音群：最少连续弹奏次数',
         'Harmony change: at least pitch classes': '和声判定：最少不同音名数',
@@ -439,6 +443,10 @@ _HELP = {
         'Prefer other hand assignments when a hand exceeds this span.\nLower values encourage narrower groups; this setting does not delete notes.',
         '單手跨度超過此值時，程式會傾向改用其他分配。\n調小會更積極拆開寬音群，不會因此刪音。',
         '单手跨度超过此值时，程序会倾向改用其他分配。\n调小会更积极拆开宽音群，不会因此删音。'),
+    'split.second_right_min_pitch': (
+        'Second right hand may only receive notes at or above this pitch.\nEnter C5 or 72; middle C is C4 = 60. Set 0 for no restriction. Applies to 3/4 hands.',
+        '第二右手只可分配此音高或以上的音，不會因此刪音。\n可輸入 C5 或 72；中央 C 為 C4 = 60。0 不限制，適用三手與四手。',
+        '第二右手只可分配此音高或以上的音，不会因此删音。\n可输入 C5 或 72；中央 C 为 C4 = 60。0 不限制，适用三手与四手。'),
     'split.repeat_cost': (
         'Prefer the same hand for repeated pitches within two quarter-note beats.\nThe preference fades with time; 0 disables it. Try 1 first.',
         '兩拍內的重複音傾向維持同一隻手，效果隨間隔減弱。\n一拍指四分音符；0 為關閉，可先試 1。',

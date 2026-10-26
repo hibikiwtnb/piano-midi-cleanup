@@ -107,6 +107,30 @@ class ReleaseChecks(unittest.TestCase):
                 postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
                     ['song.mid', '--set', 'split.second_player_bars=' + value])
 
+    def test_second_right_minimum_pitch_accepts_note_names_and_validates_range(self):
+        for text, expected in (('C4', 60), ('C5', 72), ('c#5', 73), ('Db5', 73), ('72', 72), ('0', 0), ('127', 127)):
+            with self.subTest(text=text):
+                args = postprocess.build_parser().parse_args(
+                    ['song.mid', '--set', 'split.second_right_min_pitch=' + text])
+                self.assertIn(('split.second_right_min_pitch', expected), args.settings)
+        for text in ('-1', '128', 'H5', 'C10', '72.5', ''):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                postprocess.build_parser(parser_class=PanelArgumentParser).parse_args(
+                    ['song.mid', '--set', 'split.second_right_min_pitch=' + text])
+
+    def test_second_right_minimum_pitch_is_hard_even_for_unsolved_groups(self):
+        for hands in (3, 4):
+            for limits in (None, (1, 0)):
+                groups = [[dict(note=p, start_ticks=i * 384, start_seconds=i / 2)
+                           for p in (48, 60, 71, 72, 84)] for i in range(4)]
+                with self.subTest(hands=hands, limits=limits), \
+                        patch.object(hand_split, 'SECOND_RIGHT_MIN_PITCH', 72):
+                    hand_split.assign_groups(groups, hands, [(72, 1)] * 4, 384, limits=limits)
+                    upper = [n['note'] for group in groups for n in group if n['hand'] == 'second_right']
+                    self.assertIn(72, upper)
+                    self.assertTrue(all(p >= 72 for p in upper))
+                    self.assertEqual(sum(map(len, groups)), 20)
+
     def test_gui_shows_processed_result_after_success(self):
         source = self.root / 'song.mid'
         self.make_midi(source)

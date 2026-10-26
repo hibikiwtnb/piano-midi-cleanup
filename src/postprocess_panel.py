@@ -692,6 +692,8 @@ class Panel:
             try:
                 value = parameter.kind(text)
             except ValueError:
+                if parameter.key == 'split.second_right_min_pitch':
+                    raise ValueError(tr('Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).'))
                 raise ValueError(tr('{} is not a number: {}').format(tr(parameter.label), text))
             if value != postprocess.PARAMETER_DEFAULTS[parameter.key]:
                 args += ['--set', '{}={}'.format(parameter.key, value)]

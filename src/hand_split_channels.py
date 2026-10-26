@@ -2,6 +2,7 @@ import argparse
 import bisect
 import itertools
 import os
+import re
 import sys
 import tkinter as tk
 from collections import Counter, defaultdict
@@ -66,6 +67,7 @@ REPEAT_CONTEXT_BEATS = 2.0
 SECOND_PLAYER_MIN_BARS = 4
 SECOND_PLAYER_ACTIVATION_COST = 8.0
 SECOND_PLAYER_BAR_COST = 1.0
+SECOND_RIGHT_MIN_PITCH = 0
 BEATS_PER_BAR = 4
 
 RIGHT_HAND_CHANNEL = 0
@@ -87,6 +89,23 @@ CHANNELS = {
     'second_right': SECOND_RIGHT_HAND_CHANNEL,
     'right': RIGHT_HAND_CHANNEL,
 }
+
+
+def parse_midi_pitch(value):
+    """Accept MIDI 0-127 or scientific pitch notation with middle C = C4."""
+    text = str(value).strip()
+    try:
+        pitch = int(text)
+    except ValueError:
+        match = re.fullmatch(r'([A-Ga-g])([#b]?)(-?\d+)', text)
+        if not match:
+            raise ValueError('Enter a note such as C5 or a MIDI pitch from 0 to 127 (C4 = 60).')
+        name, accidental, octave = match.groups()
+        pitch = (int(octave) + 1) * 12 + {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}[name.upper()]
+        pitch += {'': 0, '#': 1, 'b': -1}[accidental]
+    if not 0 <= pitch <= 127:
+        raise ValueError('MIDI pitch must be between 0 and 127 (C4 = 60).')
+    return pitch
 
 
 def collect_tempo_changes(midi_file):
@@ -443,6 +462,10 @@ def search_splits(groups, hands, blobs, ticks_per_beat, limits=None,
         for cuts in cut_options(len(pitches), hands):
             bounds = (0,) + cuts + (len(pitches),)
             slices = [pitches[bounds[hand]:bounds[hand + 1]] for hand in range(hands)]
+            if 'second_right' in HANDS[hands]:
+                upper = slices[HANDS[hands].index('second_right')]
+                if upper and upper[0] < SECOND_RIGHT_MIN_PITCH:
+                    continue
             options.append((cuts, slices))
         if limits is not None:
             fitting = [(cuts, slices) for cuts, slices in options
