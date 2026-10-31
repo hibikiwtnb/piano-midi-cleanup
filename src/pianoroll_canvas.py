@@ -29,9 +29,7 @@ from compare_answer import answer_path
 from note_changes import changes_path, load_changes, save_changes, shift_changes
 from note_edit import edit_notes, paired_notes
 from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
-from version_sidebar import (
-    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, LENGTHENED_OUTLINE, SHORTENED_FILL,
-    SHORTENED_OUTLINE, VersionSidebar, draw_swatch)
+from version_sidebar import SIDE_COLORS, VersionSidebar, draw_swatch
 
 
 KEYS_WIDTH = 44
@@ -60,6 +58,8 @@ PEDAL_FILL = '#8a94a6'
 PLAYHEAD = '#e53935'
 BAR_LINE, BEAT_LINE, SIXTEENTH_LINE = '#8996a5', '#d3d9e0', '#eef1f4'
 RULER_TICK, RULER_TEXT = '#b8c0ca', '#435365'
+ANSWER_ERROR = '#d32f2f'  # Used by the offline video renderer's answer comparison.
+HALO = 2  # How far the current file's own differences reach out from under its notes.
 # Toolbar legend: hand chips toggle playback, comparison swatches only explain colours.
 LEGEND_HEIGHT = 26
 LEGEND_HOVER = '#e4e7ec'
@@ -579,7 +579,6 @@ class PianoRollView(ttk.Frame):
                                                 outline=SELECTION_OUTLINE if selected else '',
                                                 width=1.5 if selected else 1, tags='note')
             self.note_items[item] = (pitch, velocity, channel, index)
-        self.canvas.tag_raise('above')
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
             y = row * PEDAL_ROW_HEIGHT
@@ -868,7 +867,11 @@ class PianoRollView(ttk.Frame):
             self.play()
 
     def draw_changes(self):
-        """What only the reference has is a ghost under the notes; the shown file's own differences are outlined."""
+        """Blocks under the notes in the colour of the side that has the sound.
+
+        The reference's notes and tails are not in the shown file, so their block stands alone; the shown file's
+        own extra notes and tails are drawn over, so their block reaches HALO pixels out around the note.
+        """
         self.canvas.delete('change')
         pps = self.pixels_per_second
         self.change_items.clear()
@@ -879,20 +882,15 @@ class PianoRollView(ttk.Frame):
                 continue
             y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
             box = (change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3), y + ROW_HEIGHT - 1)
-            if kind == 'reference_only':
-                item = self.canvas.create_rectangle(*box, fill=DELETED_FILL, outline=DELETED_OUTLINE,
-                                                    stipple='gray50', dash=(3, 2), tags='change')
-            elif kind == 'reference_longer':
-                item = self.canvas.create_rectangle(*box, fill=SHORTENED_FILL, outline=SHORTENED_OUTLINE,
-                                                    stipple='gray50', tags='change')
+            if kind.startswith('reference'):
+                fill, outline = SIDE_COLORS['reference']
             else:
-                item = self.canvas.create_rectangle(
-                    *box, outline=ANSWER_ERROR if kind == 'shown_only' else LENGTHENED_OUTLINE, width=2,
-                    tags=('change', 'above'))
+                fill, outline = SIDE_COLORS['shown'][0], ''
+                box = (box[0] - HALO, box[1] - HALO, box[2] + HALO, box[3] + HALO)
+            item = self.canvas.create_rectangle(*box, fill=fill, outline=outline, tags='change')
             self.change_items[item] = change
         if self.canvas.find_withtag('note'):
             self.canvas.tag_lower('change', 'note')
-        self.canvas.tag_raise('above')
         if getattr(self, 'playhead', None):
             self.canvas.tag_raise(self.playhead)
 

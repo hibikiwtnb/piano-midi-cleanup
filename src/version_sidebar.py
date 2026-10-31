@@ -14,11 +14,9 @@ PRIMARY_TEXT = '#1f2937'
 SECONDARY_TEXT = '#6b7685'
 DISABLED_TEXT = '#a3abb6'
 DIVIDER = '#dfe3e8'
-# Comparison colours, shared with the roll's overlay and legend.
-DELETED_FILL, DELETED_OUTLINE = '#f4b8b8', '#bd6262'
-SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
-LENGTHENED_OUTLINE = '#2f9483'
-ANSWER_ERROR = '#d32f2f'
+# Comparison colours, shared with the roll's overlay and legend. One colour per side, one shape for all:
+# whatever only that side has (whole notes or the longer part of a tail) is a plain filled block.
+SIDE_COLORS = {'reference': ('#f4b8b8', '#c96a6a'), 'shown': ('#f5d76e', '#c9a227')}
 
 STAGE_LABELS = (('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
 PADDING = 12
@@ -28,21 +26,10 @@ KIND_HEIGHT = 26
 
 
 def draw_swatch(canvas, kind, x, middle, enabled=True, tags=()):
-    """A small note-shaped sample of how the roll draws one comparison kind.
-
-    The shown file's own notes and tails are outlined; what only the reference has is a pale ghost.
-    """
-    top, bottom = middle - 4, middle + 4
-    if not enabled:
-        return canvas.create_rectangle(x, top, x + 14, bottom, outline=DISABLED_TEXT, tags=tags)
-    if kind == 'reference_only':
-        return canvas.create_rectangle(x, top, x + 14, bottom, fill=DELETED_FILL, outline=DELETED_OUTLINE,
-                                       dash=(3, 2), tags=tags)
-    if kind == 'reference_longer':
-        return canvas.create_rectangle(x, top, x + 14, bottom, fill=SHORTENED_FILL, outline=SHORTENED_OUTLINE,
-                                       tags=tags)
-    color = ANSWER_ERROR if kind == 'shown_only' else LENGTHENED_OUTLINE
-    return canvas.create_rectangle(x + 1, top, x + 13, bottom, outline=color, width=2, tags=tags)
+    """A sample of how the roll marks one comparison kind: the colour says which side has the sound."""
+    side = 'reference' if kind.startswith('reference') else 'shown'
+    fill, outline = SIDE_COLORS[side] if enabled else ('', DISABLED_TEXT)
+    return canvas.create_rectangle(x, middle - 4, x + 14, middle + 4, fill=fill, outline=outline, tags=tags)
 
 
 def rounded_rect(canvas, x0, y0, x1, y1, radius, **options):
