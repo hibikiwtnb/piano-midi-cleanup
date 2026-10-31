@@ -58,6 +58,16 @@ RULER_TICK, RULER_TEXT = '#b8c0ca', '#435365'
 DELETED_FILL, DELETED_OUTLINE = '#f4b8b8', '#bd6262'
 SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
 ANSWER_ERROR = '#d32f2f'
+# Toolbar legend: hand chips toggle playback, overlay swatches only explain colours.
+LEGEND_HEIGHT = 26
+LEGEND_HOVER = '#e4e7ec'
+LEGEND_MUTED_TEXT = '#9aa3af'
+LEGEND_DIVIDER = '#d5dae0'
+MUTED_NOTE_STRENGTH = 0.22
+OVERLAY_KINDS = {'none': (), 'deleted': ('deleted',), 'shortened': ('shortened',),
+                 'all': ('deleted', 'shortened'), 'extra': ('extra',), 'missed': ('missed',),
+                 'answer': ('extra', 'missed')}
+OVERLAY_LABELS = {'deleted': 'Deleted', 'shortened': 'Shortened', 'extra': 'Extra', 'missed': 'Missed'}
 ANSWER_MODES = ('extra', 'missed', 'answer')
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
 
@@ -120,6 +130,18 @@ def shade(color, velocity):
     strength = 0.35 + 0.65 * velocity / 127
     channels = [int(color[index:index + 2], 16) for index in (1, 3, 5)]
     return '#' + ''.join('{:02x}'.format(round(255 - (255 - value) * strength)) for value in channels)
+
+
+def blend(color, background, strength):
+    """Mix a hex colour into a hex background; strength 1 keeps the colour."""
+    pairs = [(int(color[index:index + 2], 16), int(background[index:index + 2], 16)) for index in (1, 3, 5)]
+    return '#' + ''.join('{:02x}'.format(round(back + (value - back) * strength)) for value, back in pairs)
+
+
+def rounded_rect(canvas, x0, y0, x1, y1, radius, **options):
+    points = (x0 + radius, y0, x1 - radius, y0, x1, y0, x1, y0 + radius, x1, y1 - radius, x1, y1,
+              x1 - radius, y1, x0 + radius, y1, x0, y1, x0, y1 - radius, x0, y0 + radius, x0, y0)
+    return canvas.create_polygon(points, smooth=True, **options)
 
 
 class PianoRollView(ttk.Frame):
@@ -211,23 +233,28 @@ class PianoRollView(ttk.Frame):
         selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=22, state='readonly')
         selector.pack(side='left')
         selector.bind('<<ComboboxSelected>>', self.change_output)
-        for hand in HAND_ORDER:
-            ttk.Checkbutton(play, text=tr(hand.replace('_', ' ')), variable=self.hand_enabled[hand],
-                            command=self.apply_mix).pack(side='left', padx=(8, 0))
-        ttk.Checkbutton(play, text=tr('Velocity shading'), variable=self.shading,
-                        command=self.update_shading).pack(side='left', padx=(12, 0))
-        ttk.Checkbutton(play, text=tr('Chords'), variable=self.show_chords,
-                        command=self.layout_chord_track).pack(side='left', padx=(12, 0))
-        ttk.Label(play, text=tr('Change overlay')).pack(side='left', padx=(12, 4))
         self.change_modes = {tr(label): mode for label, mode in (
             ('Hide changes', 'none'), ('Deleted notes', 'deleted'),
             ('Shortened tails', 'shortened'), ('All changes', 'all'),
             ('Extra notes (vs answer)', 'extra'), ('Missed notes (vs answer)', 'missed'),
             ('Answer errors', 'answer'))}
-        selector = ttk.Combobox(play, textvariable=self.change_mode, values=tuple(self.change_modes),
-                                width=14, state='readonly')
-        selector.pack(side='left')
-        selector.bind('<<ComboboxSelected>>', lambda _event: self.draw_changes())
+        # Rarely changed view options live in one menu; the legend beside it shows what the colours mean.
+        view = ttk.Menubutton(play, text=tr('View'))
+        menu = tk.Menu(view, tearoff=False)
+        menu.add_checkbutton(label=tr('Velocity shading'), variable=self.shading, command=self.recolor_notes)
+        menu.add_checkbutton(label=tr('Chord track'), variable=self.show_chords, command=self.layout_chord_track)
+        overlay = tk.Menu(menu, tearoff=False)
+        for label in self.change_modes:
+            overlay.add_radiobutton(label=label, variable=self.change_mode, value=label,
+                                    command=self.change_overlay_selected)
+        menu.add_cascade(label=tr('Change overlay'), menu=overlay)
+        view['menu'] = menu
+        view.pack(side='right')
+        background = ttk.Style(self).lookup('TFrame', 'background') or self.winfo_toplevel().cget('background')
+        self.legend_background = background
+        self.legend = tk.Canvas(play, width=1, height=LEGEND_HEIGHT, background=background, highlightthickness=0)
+        self.legend.pack(side='right', padx=(0, 10))
+        self.legend_font = tkfont.nametofont('TkDefaultFont')
 
         roll = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
@@ -491,6 +518,7 @@ class PianoRollView(ttk.Frame):
         self.change_tooltip.geometry('+{}+{}'.format(x, y))
 
     def draw(self):
+        self.draw_legend()
         width = self.width()
         height = PITCHES * ROW_HEIGHT
         rows = max(1, len(self.pedal_rows))
@@ -520,14 +548,10 @@ class PianoRollView(ttk.Frame):
         self.note_items.clear()
         self.draw_changes()
         for start, end, pitch, channel, velocity in self.notes:
-            base_color = HAND_COLORS.get(channel, (OTHER_COLOR,))[0]
-            color = base_color
-            if self.shading.get():
-                color = shade(color, velocity)
             y = (PITCHES - 1 - pitch) * ROW_HEIGHT + 1
             item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
-                                                fill=color, outline='', tags='note')
-            self.note_items[item] = (pitch, velocity, base_color)
+                                                fill=self.note_color(channel, velocity), outline='', tags='note')
+            self.note_items[item] = (pitch, velocity, channel)
         self.canvas.tag_raise('answer')
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
@@ -547,10 +571,83 @@ class PianoRollView(ttk.Frame):
         self.draw_grid()
         self.move_playhead(self.position_seconds())
 
-    def update_shading(self):
-        for item, (_, velocity, base_color) in self.note_items.items():
-            color = shade(base_color, velocity) if self.shading.get() else base_color
-            self.canvas.itemconfigure(item, fill=color)
+    def note_color(self, channel, velocity):
+        """Hand colour, lighter for soft notes when shading is on and faded when the hand is muted."""
+        color = HAND_COLORS.get(channel, (OTHER_COLOR,))[0]
+        if self.shading.get():
+            color = shade(color, velocity)
+        hand = HAND_BY_CHANNEL.get(channel)
+        if hand is not None and not self.hand_enabled[hand].get():
+            color = blend(color, ROLL_BACKGROUND, MUTED_NOTE_STRENGTH)
+        return color
+
+    def recolor_notes(self):
+        for item, (_, velocity, channel) in self.note_items.items():
+            self.canvas.itemconfigure(item, fill=self.note_color(channel, velocity))
+
+    # Toolbar legend.
+    def draw_legend(self):
+        """Chips for the hands in this song, then swatches for the change overlay that is showing."""
+        canvas = self.legend
+        canvas.delete('all')
+        present = {channel for _, _, _, channel, _ in self.notes}
+        middle = LEGEND_HEIGHT / 2
+        x = 0
+        for hand in HAND_ORDER:
+            if CHANNELS[hand] not in present:
+                continue
+            enabled = self.hand_enabled[hand].get()
+            color = HAND_COLORS[CHANNELS[hand]][0]
+            text = tr(hand.replace('_', ' '))
+            width = 8 + 10 + 6 + self.legend_font.measure(text) + 10
+            tag = 'hand_' + hand
+            rounded_rect(canvas, x, 2, x + width, LEGEND_HEIGHT - 2, 9, fill=self.legend_background,
+                         outline='', tags=(tag, 'chip'))
+            canvas.create_oval(x + 8, middle - 5, x + 18, middle + 5, fill=color if enabled else '',
+                               outline=color, width=1.5, tags=tag)
+            canvas.create_text(x + 24, middle, text=text, anchor='w', font=self.legend_font,
+                               fill=LABEL_TEXT if enabled else LEGEND_MUTED_TEXT, tags=tag)
+            canvas.tag_bind(tag, '<Enter>', lambda _event, hand=hand: self.hover_hand(hand, True))
+            canvas.tag_bind(tag, '<Leave>', lambda _event, hand=hand: self.hover_hand(hand, False))
+            canvas.tag_bind(tag, '<Button-1>', lambda _event, hand=hand: self.toggle_hand(hand))
+            x += width + 2
+        kinds = OVERLAY_KINDS[self.change_modes[self.change_mode.get()]]
+        if kinds and x:
+            canvas.create_line(x + 6, 6, x + 6, LEGEND_HEIGHT - 6, fill=LEGEND_DIVIDER)
+            x += 12
+        for kind in kinds:
+            x += 8
+            top, bottom = middle - 4, middle + 4
+            if kind in ('deleted', 'shortened'):
+                deleted = kind == 'deleted'
+                canvas.create_rectangle(x, top, x + 14, bottom, fill=DELETED_FILL if deleted else SHORTENED_FILL,
+                                        outline=DELETED_OUTLINE if deleted else SHORTENED_OUTLINE,
+                                        dash=(3, 2) if deleted else ())
+            else:
+                canvas.create_rectangle(x + 1, top, x + 13, bottom, outline=ANSWER_ERROR, width=2,
+                                        dash=() if kind == 'extra' else (3, 2))
+            text = tr(OVERLAY_LABELS[kind])
+            canvas.create_text(x + 20, middle, text=text, anchor='w', font=self.legend_font, fill=LABEL_TEXT)
+            x += 20 + self.legend_font.measure(text) + 4
+        canvas.configure(width=max(1, x))
+
+    def hover_hand(self, hand, inside):
+        self.legend.itemconfigure('chip&&hand_' + hand, fill=LEGEND_HOVER if inside else self.legend_background)
+        self.legend.configure(cursor='hand2' if inside else '')
+        if inside:
+            self.set_status(tr('{}: click to mute or unmute in playback').format(tr(hand.replace('_', ' '))))
+
+    def toggle_hand(self, hand):
+        self.hand_enabled[hand].set(not self.hand_enabled[hand].get())
+        self.apply_mix()
+        self.recolor_notes()
+        self.draw_legend()
+        self.hover_hand(hand, True)
+        self.focus_roll()
+
+    def change_overlay_selected(self):
+        self.draw_changes()
+        self.draw_legend()
 
     def draw_changes(self):
         self.canvas.delete('change')

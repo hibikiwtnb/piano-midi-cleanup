@@ -11,6 +11,9 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'View': 'View', 'Chord track': 'Chord track', 'Deleted': 'Deleted', 'Shortened': 'Shortened',
+        'Extra': 'Extra', 'Missed': 'Missed',
+        '{}: click to mute or unmute in playback': '{}: click to mute or unmute in playback',
         'Deletion reason:': 'Deletion reason:', 'Trimming reason:': 'Trimming reason:',
         '{} | Velocity {}': '{} | Velocity {}',
         'Change overlay': 'Change overlay',
@@ -90,6 +93,9 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'View': '顯示', 'Chord track': '和弦軌道', 'Deleted': '已刪除', 'Shortened': '已截短',
+        'Extra': '多出', 'Missed': '漏掉',
+        '{}: click to mute or unmute in playback': '{}：點擊以在試聽時靜音／取消靜音',
         'About': '關於', 'Version: {}': '版本：{}',
         'Prepare piano transcription MIDI for reading and editing.': '將鋼琴轉譜 MIDI 整理成更容易閱讀、編輯的版本。',
         'Project home': '專案首頁', 'Report an issue': '問題回報',
@@ -261,6 +267,9 @@ _TEXT = {
         'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
+        'View': '显示', 'Chord track': '和弦轨道', 'Deleted': '已删除', 'Shortened': '已截短',
+        'Extra': '多出', 'Missed': '漏掉',
+        '{}: click to mute or unmute in playback': '{}：点击以在试听时静音／取消静音',
         'About': '关于', 'Version: {}': '版本：{}',
         'Prepare piano transcription MIDI for reading and editing.': '将钢琴转谱 MIDI 整理成更容易阅读、编辑的版本。',
         'Project home': '项目首页', 'Report an issue': '问题反馈',
