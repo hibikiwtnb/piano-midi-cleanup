@@ -142,8 +142,8 @@ If the original MIDI with the audio's base name already exists, the transcriptio
 ### First beat, preview and reruns
 
 - The roll initially shows the file you selected. After successful processing, it automatically shows the latest result.
-- **When the processed result is shown**, **Save first beat** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and then previews the tempo-corrected file.
-- **When the original MIDI is shown**, **Save first beat** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
+- **When the processed result is shown**, **Save** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and then previews the tempo-corrected file.
+- **When the original MIDI is shown**, **Save** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
 - If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
 - On later runs, choose **Keep corrected tempo** to retain manual alignment. Recomputing from the original MIDI with automatic first-beat alignment can replace it.
 - Every run rebuilds and overwrites the processed result from the tempo-corrected file. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.

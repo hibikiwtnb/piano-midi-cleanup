@@ -73,12 +73,11 @@ PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to
 
 
 def first_beat_target(midi_path):
-    """The corrected output to edit, or create from a selected original MIDI."""
+    """The corrected song_bpmfix.mid to edit; saving creates it when it does not exist yet."""
     base = os.path.splitext(midi_path)[0]
     for suffix in ('_bpmfix_cleaned', '_bpmfix'):
         if base.endswith(suffix):
-            target = bpmfix_path_for(base[:-len(suffix)] + '.mid')
-            return target if os.path.isfile(target) else None
+            return bpmfix_path_for(base[:-len(suffix)] + '.mid')
     return bpmfix_path_for(midi_path)
 
 
@@ -399,9 +398,8 @@ class PianoRollView(ttk.Frame):
         self.offset.set('0')
         self.start_chord_analysis(midi_path, mtime)
         self.target = first_beat_target(midi_path)
-        self.set_editable(self.target is not None)
-        self.target_text.set(tr('First beat is saved to {}').format(self.first_beat_files()) if self.target
-                             else tr('First beat editing needs song_bpmfix.mid'))
+        self.set_editable(True)
+        self.target_text.set(tr('First beat is saved to {}').format(self.first_beat_files()))
         self.draw()
         if same_file:
             self.xview('moveto', view[0])
@@ -1034,8 +1032,9 @@ class PianoRollView(ttk.Frame):
         shared = os.path.splitext(shown)[0].endswith('_bpmfix_cleaned')
         changes = load_changes(shown) if shared else None
         try:
-            if shown != self.target and not shared:
-                # Explicit edits of an original always start from that original, not an old output.
+            if shown != self.target and (not shared or not os.path.isfile(self.target)):
+                # Explicit edits of an original always start from that original, not an old output;
+                # a cleaned MIDI without its song_bpmfix.mid creates one from itself.
                 shutil.copyfile(shown, self.target)
             result = build_bpm_fixed_midi(self.target, bpm, offset)
             append_first_beat_stats(self.target, result)
