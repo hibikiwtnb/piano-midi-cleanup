@@ -34,6 +34,7 @@ KINDS = ('shown_only', 'reference_only', 'shown_longer', 'reference_longer')
 class Version:
     role: str
     path: str
+    name: str  # What the GUI calls it: the suffix ('bpmfix', 'bpmfix_cleaned'), else the file's own stem.
 
 
 def song_versions(midi_path):
@@ -43,15 +44,19 @@ def song_versions(midi_path):
         if base.endswith(SUFFIXES[role]):
             base = base[:-len(SUFFIXES[role])]
             break
-    versions = [Version(role, path) for role, path in (
-        ('original', base + ext), ('bpmfix', base + SUFFIXES['bpmfix'] + ext),
-        ('cleaned', base + SUFFIXES['cleaned'] + ext)) if os.path.isfile(path)]
+    versions = [Version(role, path, name or stem(path)) for role, path, name in (
+        ('original', base + ext, None), ('bpmfix', base + SUFFIXES['bpmfix'] + ext, 'bpmfix'),
+        ('cleaned', base + SUFFIXES['cleaned'] + ext, 'bpmfix_cleaned')) if os.path.isfile(path)]
     answer = answer_alignment(versions)
     if answer is not None:
-        versions.append(Version('answer', answer[0]))
+        versions.append(Version('answer', answer[0], stem(answer[0])))
     if not any(os.path.samefile(version.path, midi_path) for version in versions):
-        versions.append(Version('other', midi_path))
+        versions.append(Version('other', midi_path, stem(midi_path)))
     return versions
+
+
+def stem(path):
+    return os.path.splitext(os.path.basename(path))[0]
 
 
 def answer_alignment(versions):

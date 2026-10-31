@@ -30,7 +30,7 @@ from note_changes import changes_path, load_changes, save_changes, shift_changes
 from note_edit import edit_notes, paired_notes
 from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
 from version_sidebar import (
-    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, LENGTHENED_OUTLINE, ROLE_LABELS, SHORTENED_FILL,
+    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, LENGTHENED_OUTLINE, SHORTENED_FILL,
     SHORTENED_OUTLINE, VersionSidebar, draw_swatch)
 
 
@@ -714,8 +714,7 @@ class PianoRollView(ttk.Frame):
         if not self.selected:
             return False
         if self.shown_role in READ_ONLY_ROLES:
-            self.set_status(tr('{} is not edited here. Show the tempo corrected file or the result.').format(
-                self.role_label(self.shown_role)))
+            self.set_status(tr('The original MIDI and the answer are not edited here; show bpmfix or bpmfix_cleaned.'))
             return False
         return True
 
@@ -809,7 +808,12 @@ class PianoRollView(ttk.Frame):
                                  stages, self.diff_enabled, self.diff_message)
 
     def role_label(self, role):
-        return tr(ROLE_LABELS[role]) if role else ''
+        """The shown file is the current file; any other version goes by its own name, never a nickname."""
+        if role is None:
+            return ''
+        if role == self.shown_role:
+            return tr('Current file')
+        return next(version.name for version in self.versions if version.role == role)
 
     def kind_label(self, kind):
         """Names the side, e.g. 'Only in Processed result' or 'Tempo corrected tail longer'."""

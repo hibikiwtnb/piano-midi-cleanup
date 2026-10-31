@@ -20,8 +20,6 @@ SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
 LENGTHENED_OUTLINE = '#2f9483'
 ANSWER_ERROR = '#d32f2f'
 
-ROLE_LABELS = {'original': 'Original', 'bpmfix': 'Tempo corrected', 'cleaned': 'Processed result',
-               'answer': 'Answer', 'other': 'Other file'}
 # Comparison table: one row per difference type, one column per side. No side is assumed right.
 TABLE_ROWS = (('Only here', ('shown_only', 'reference_only')), ('Longer tail', ('shown_longer', 'reference_longer')))
 STAGE_LABELS = (('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
@@ -140,8 +138,8 @@ class VersionSidebar(tk.Frame):
                                    fill='white' if selected else SECONDARY_TEXT, tags=badge)
                 self.bind_area(badge, lambda role=version.role: self.on_reference(role))
             text_width = right - text_left - badge_width - 6
-            canvas.create_text(text_left, y + 6, text=self.elide(tr(ROLE_LABELS[version.role]), self.role_font,
-                                                                  text_width),
+            canvas.create_text(text_left, y + 6, text=self.elide(version.name, self.role_font, text_width,
+                                                                  keep_end=True),
                                anchor='nw', font=self.role_font, fill=PRIMARY_TEXT, tags=row)
             name = version.path.replace('\\', '/').rsplit('/', 1)[-1]
             canvas.create_text(text_left, y + 23, text=self.elide(name, self.small_font, text_width, keep_end=True), anchor='nw',
@@ -178,8 +176,10 @@ class VersionSidebar(tk.Frame):
         label_width = max(self.small_font.measure(tr(title)) for title, _ in TABLE_ROWS) + 10
         cell_width = (right - PADDING - label_width) / 2
         lefts = [PADDING + label_width + column * cell_width for column in range(2)]
-        for left, role in zip(lefts, (shown_role, reference_role)):
-            canvas.create_text(left + 2, y, text=self.elide(tr(ROLE_LABELS[role]), self.role_font, cell_width - 6),
+        # The shown side is only ever called the current file; the other side goes by its own name.
+        reference_name = next(version.name for version in versions if version.role == reference_role)
+        for left, name in zip(lefts, (tr('Current file'), reference_name)):
+            canvas.create_text(left + 2, y, text=self.elide(name, self.role_font, cell_width - 6, keep_end=True),
                                anchor='nw', font=self.role_font, fill=PRIMARY_TEXT)
         y += self.role_font.metrics('linespace') + 6
         for title, kinds in TABLE_ROWS:
