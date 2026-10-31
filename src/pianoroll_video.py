@@ -4,7 +4,9 @@ Frames are drawn offline with PIL and piped to ffmpeg, so every frame time comes
 from the MIDI clock and the picture cannot drift from audio bounced from the
 same MIDI. The roll looks like the panel's roll (pianoroll_canvas.py) scaled to
 the frame height: same colours, grid, hand colours, velocity shading, pedal
-lane and page turn rule. Chords and the change overlay are not drawn.
+lane and page turn rule. Chords and the cleaning change overlay are not drawn;
+with --answer the answer comparison errors (compare_answer.py) are drawn as in
+the roll's overlay, with a running error counter.
 
     python pianoroll_video.py song_bpmfix_cleaned.mid --bars 9-20 --audio bounce.wav --out section.mp4
 """
@@ -19,13 +21,14 @@ from collections import defaultdict
 
 from PIL import Image, ImageDraw, ImageFont
 
-from gui_i18n import tr
+from compare_answer import load_record
+from gui_i18n import set_language, tr
 from midi_stats import note_name
 from pianoroll_canvas import (
     BAR_LINE, BEAT_LINE, BLACK_KEY_ROW, DEFAULT_PIXELS_PER_SECOND, HAND_BY_CHANNEL, HAND_ORDER, KEY_BLACK,
     KEY_OUTLINE, KEY_WHITE, KEYS_WIDTH, LABEL_TEXT, OCTAVE_LINE, PAGE_MARGIN, PEDAL_BACKGROUND, PEDAL_FILL,
     PEDAL_ROW_HEIGHT, PLAYHEAD, ROLL_BACKGROUND, ROW_HEIGHT, RULER_BACKGROUND, RULER_HEIGHT, RULER_TEXT,
-    RULER_TICK, SIXTEENTH_LINE, read_roll, shade)
+    RULER_TICK, SIXTEENTH_LINE, ANSWER_ERROR, read_roll, shade)
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 
 PITCH_PADDING = 2
@@ -90,7 +93,20 @@ def pedal_label(rows, channels):
     return '/'.join(tr(hand.replace('_', ' ')) for hand in names) or tr('Pedal')
 
 
-def draw_page(layout, left, notes, rows, bpm, key_signatures, end_seconds):
+def dashed_rectangle(draw, box, color, width, dash):
+    left, top, right, bottom = box
+    for x0, y0, x1, y1 in ((left, top, right, top), (left, bottom, right, bottom),
+                           (left, top, left, bottom), (right, top, right, bottom)):
+        length = max(abs(x1 - x0), abs(y1 - y0))
+        position = 0.0
+        while position < length:
+            a, b = position / length if length else 0, min(position + dash, length) / length if length else 1
+            draw.line((x0 + (x1 - x0) * a, y0 + (y1 - y0) * a, x0 + (x1 - x0) * b, y0 + (y1 - y0) * b),
+                      fill=color, width=width)
+            position += 2 * dash
+
+
+def draw_page(layout, left, notes, rows, bpm, key_signatures, end_seconds, errors=()):
     """Everything that does not move while the page is shown; left is in seconds."""
     L = layout
     s = L.scale
@@ -145,6 +161,17 @@ def draw_page(layout, left, notes, rows, bpm, key_signatures, end_seconds):
         color = shade(HAND_COLORS.get(channel, (OTHER_COLOR,))[0], velocity)
         draw.rectangle((x_of(start), y + s, max(x_of(end), x_of(start) + 3 * s), y + L.row - s), fill=color)
 
+    # Answer errors above the notes: an extra outlines the transcribed note, a missed note is a dashed box.
+    for item in errors:
+        if item['end'] < left or item['start'] > right or not L.low <= item['pitch'] <= L.high:
+            continue
+        y = L.pitch_y(item['pitch'])
+        box = (x_of(item['start']), y + s, max(x_of(item['end']), x_of(item['start']) + 3 * s), y + L.row - s)
+        if item['kind'] == 'extra':
+            draw.rectangle(box, outline=ANSWER_ERROR, width=max(2, round(2 * s)))
+        else:
+            dashed_rectangle(draw, box, ANSWER_ERROR, max(2, round(2 * s)), 3 * s)
+
     draw.rectangle((L.keys, L.pedal_top, L.width, L.height), fill=PEDAL_BACKGROUND)
     label_font = load_font(round(12 * s))
     draw.rectangle((0, L.pedal_top, L.keys - 1, L.height), fill=KEY_WHITE)
@@ -171,7 +198,26 @@ def draw_page(layout, left, notes, rows, bpm, key_signatures, end_seconds):
     return image
 
 
-def draw_frame(page, layout, left, seconds, notes, highlight):
+def draw_counter(draw, layout, record, seconds):
+    """Errors so far: an extra counts at its onset, a missed note at the answer note's onset."""
+    L = layout
+    s = L.scale
+    counts = {'extra': 0, 'missed': 0}
+    for item in record['items']:
+        if item['start'] <= seconds:
+            counts[item['kind']] += 1
+    text = tr('Extra {}   Missed {}   Errors {}').format(counts['extra'], counts['missed'], sum(counts.values()))
+    font = load_font(round(16 * s))
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    pad = 8 * s
+    x1, y0 = L.width - 12 * s, L.ruler + 10 * s
+    x0 = x1 - (right - left) - 2 * pad
+    draw.rectangle((x0, y0, x1, y0 + (bottom - top) + 2 * pad), fill='white', outline=ANSWER_ERROR,
+                   width=max(2, round(2 * s)))
+    draw.text((x0 + pad - left, y0 + pad - top), text, font=font, fill=ANSWER_ERROR)
+
+
+def draw_frame(page, layout, left, seconds, notes, highlight, record=None):
     L = layout
     s = L.scale
     image = page.copy()
@@ -186,10 +232,14 @@ def draw_frame(page, layout, left, seconds, notes, highlight):
                                width=max(1, round(s)))
     x = x_of(seconds)
     draw.line((x, L.ruler, x, L.height), fill=PLAYHEAD, width=max(2, round(2 * s)))
+    if record is not None:
+        draw_counter(draw, L, record, seconds)
     return image
 
 
 def section_seconds(args, bpm):
+    if args.bars is None and args.start is None:
+        return None
     if args.bars:
         first, _, last = args.bars.partition('-')
         bar = 240.0 / bpm
@@ -200,7 +250,7 @@ def section_seconds(args, bpm):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('midi')
-    where = parser.add_mutually_exclusive_group(required=True)
+    where = parser.add_mutually_exclusive_group()
     where.add_argument('--bars', help='bar range as numbered on the roll ruler, e.g. 9-20 (end bar included)')
     where.add_argument('--start', type=float, help='section start in MIDI seconds (use with --end)')
     parser.add_argument('--end', type=float, help='section end in MIDI seconds')
@@ -212,15 +262,25 @@ def main(argv=None):
     parser.add_argument('--fps', type=int, default=60)
     parser.add_argument('--zoom', type=float, default=1.0, help='horizontal zoom relative to the panel default')
     parser.add_argument('--no-highlight', action='store_true', help='do not outline notes while they sound')
+    parser.add_argument('--answer', action='store_true',
+                        help='draw <midi>.answer.json errors and a counter; without a range, record its window')
+    parser.add_argument('--language', default='zh_TW', choices=('zh_TW', 'zh_CN', 'en'), help='label language')
     args = parser.parse_args(argv)
     if args.start is not None and args.end is None:
         parser.error('--start needs --end')
     ffmpeg = shutil.which('ffmpeg')
     if ffmpeg is None:
         parser.error('ffmpeg not found on PATH')
+    set_language(args.language)
+    record = load_record(args.midi) if args.answer else None
+    if args.answer and record is None:
+        parser.error('no answer comparison matching this MIDI; run compare_answer.py first')
 
     notes, pedals, duration, bpm, key_signatures = read_roll(args.midi)
-    start, end = section_seconds(args, bpm)
+    section = section_seconds(args, bpm)
+    if section is None and record is None:
+        parser.error('give --bars or --start/--end')
+    start, end = section if section is not None else (max(0.0, record['window'][0]), record['window'][1])
     if not 0 <= start < end:
         parser.error('empty section')
     width, height = (int(value) for value in args.size.lower().split('x'))
@@ -228,7 +288,9 @@ def main(argv=None):
     notes = [note for note in notes if note[1] > start and note[0] < end]
     rows = pedal_rows({channel: [(max(down, start), min(up, end)) for down, up in intervals
                                  if up > start and down < end] for channel, intervals in pedals.items()})
-    layout = Layout(width, height, *pitch_range(notes), len(rows), args.zoom)
+    errors = [item for item in record['items'] if item['end'] > start and item['start'] < end] if record else []
+    missed = [(item['start'], item['end'], item['pitch'], None, 0) for item in errors if item['kind'] == 'missed']
+    layout = Layout(width, height, *pitch_range(notes + missed), len(rows), args.zoom)
 
     command = [ffmpeg, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24',
                '-s', '{}x{}'.format(width, height), '-r', str(args.fps), '-i', '-']
@@ -249,9 +311,9 @@ def main(argv=None):
         if page is None or x > layout.roll_width - layout.margin or x < 0:
             if page is not None:
                 left = seconds - layout.margin / layout.pps
-            page = draw_page(layout, left, notes, rows, bpm, key_signatures, duration)
+            page = draw_page(layout, left, notes, rows, bpm, key_signatures, duration, errors)
             pages += 1
-        encoder.stdin.write(draw_frame(page, layout, left, seconds, notes, not args.no_highlight).tobytes())
+        encoder.stdin.write(draw_frame(page, layout, left, seconds, notes, not args.no_highlight, record).tobytes())
     encoder.stdin.close()
     if encoder.wait() != 0:
         sys.exit('ffmpeg failed')
