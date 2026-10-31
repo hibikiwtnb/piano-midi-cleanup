@@ -5,7 +5,7 @@ from tkinter import font as tkfont
 
 from gui_i18n import tr
 
-SIDEBAR_WIDTH = 252
+SIDEBAR_WIDTH = 290
 SIDEBAR_BACKGROUND = '#f4f5f7'
 SELECTED_ROW = '#dde6f5'
 HOVER_ROW = '#e8ebef'
@@ -20,8 +20,6 @@ SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
 LENGTHENED_OUTLINE = '#2f9483'
 ANSWER_ERROR = '#d32f2f'
 
-# Comparison table: one row per difference type, one column per side. No side is assumed right.
-TABLE_ROWS = (('Only here', ('shown_only', 'reference_only')), ('Longer tail', ('shown_longer', 'reference_longer')))
 STAGE_LABELS = (('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
 PADDING = 12
 ROW_HEIGHT = 42
@@ -172,36 +170,53 @@ class VersionSidebar(tk.Frame):
                                anchor='nw', font=self.small_font, fill=SECONDARY_TEXT, width=right - PADDING)
             return
 
-        # Header row: the two sides by name, the shown one first.
-        label_width = max(self.small_font.measure(tr(title)) for title, _ in TABLE_ROWS) + 10
-        cell_width = (right - PADDING - label_width) / 2
-        lefts = [PADDING + label_width + column * cell_width for column in range(2)]
-        # The shown side is only ever called the current file; the other side goes by its own name.
+        # One sentence per difference, so a row reads on its own without the roll: a checkbox marks it
+        # on the roll, the swatch is how the roll draws it, and Next jumps to the next one.
         reference_name = next(version.name for version in versions if version.role == reference_role)
-        for left, name in zip(lefts, (tr('Current file'), reference_name)):
-            canvas.create_text(left + 2, y, text=self.elide(name, self.role_font, cell_width - 6, keep_end=True),
-                               anchor='nw', font=self.role_font, fill=PRIMARY_TEXT)
-        y += self.role_font.metrics('linespace') + 6
-        for title, kinds in TABLE_ROWS:
+        current = tr('Current file')
+        canvas.create_text(PADDING, y, text=tr('{} against {}').format(current, reference_name), anchor='nw',
+                           font=self.small_font, fill=SECONDARY_TEXT, width=right - PADDING)
+        y += self.small_font.metrics('linespace') + 10
+        canvas.create_text(PADDING, y, text=tr('Mark on the roll:'), anchor='nw', font=self.role_font,
+                           fill=PRIMARY_TEXT)
+        y += self.role_font.metrics('linespace') + 4
+        sentences = (('reference_only', tr('Only in {}').format(reference_name)),
+                     ('shown_only', tr('Only in {}').format(current)),
+                     ('reference_longer', tr('{} tail longer').format(reference_name)),
+                     ('shown_longer', tr('{} tail longer').format(current)))
+        next_label = tr('Next')
+        next_width = self.small_font.measure(next_label) + 12
+        count_right = right - next_width - 8
+        for kind, sentence in sentences:
             middle = y + (KIND_HEIGHT - 2) / 2
-            canvas.create_text(PADDING, middle, text=tr(title), anchor='w', font=self.small_font, fill=SECONDARY_TEXT)
-            for left, kind in zip(lefts, kinds):
-                tag = 'kind_' + kind
-                on = enabled[kind]
-                cell_right = left + cell_width - 4
-                rounded_rect(canvas, left - 2, y, cell_right, y + KIND_HEIGHT - 2, 7,
-                             fill=SIDEBAR_BACKGROUND, outline='', tags=(tag, 'hover'))
-                draw_swatch(canvas, kind, left + 4, middle, on, tags=tag)
-                canvas.create_text(left + 24, middle, text=str(counts[kind]), anchor='w', font=self.text_font,
-                                   fill=PRIMARY_TEXT if on else DISABLED_TEXT, tags=tag)
+            present = counts[kind] > 0
+            on = enabled[kind] and present
+            tag = 'kind_' + kind
+            text_color = PRIMARY_TEXT if present else DISABLED_TEXT
+            rounded_rect(canvas, 6, y, count_right + 4, y + KIND_HEIGHT - 2, 7, fill=SIDEBAR_BACKGROUND,
+                         outline='', tags=(tag, 'hover') if present else ())
+            box = (PADDING, middle - 7, PADDING + 14, middle + 7)
+            if on:
+                rounded_rect(canvas, *box, 3, fill=ACCENT, outline=ACCENT, tags=tag)
+                canvas.create_line(box[0] + 3, middle, box[0] + 6, middle + 3, box[0] + 11, middle - 3,
+                                   fill='white', width=2, tags=tag)
+            else:
+                rounded_rect(canvas, *box, 3, fill='white', outline=DISABLED_TEXT if not present else '#9aa3af',
+                             tags=tag)
+            draw_swatch(canvas, kind, PADDING + 22, middle, tags=tag)
+            count_text = str(counts[kind])
+            label_width = count_right - self.text_font.measure(count_text) - 8 - (PADDING + 42)
+            canvas.create_text(PADDING + 42, middle, text=self.elide(sentence, self.text_font, label_width),
+                               anchor='w', font=self.text_font, fill=text_color, tags=tag)
+            canvas.create_text(count_right, middle, text=count_text, anchor='e', font=self.text_font,
+                               fill=text_color, tags=tag)
+            if present:
                 self.bind_area(tag, lambda kind=kind: self.on_toggle(kind))
-                if counts[kind] and on:
-                    jump = 'next_' + kind
-                    rounded_rect(canvas, cell_right - 18, y + 3, cell_right, y + KIND_HEIGHT - 5, 5,
-                                 fill=SIDEBAR_BACKGROUND, outline='', tags=(jump, 'hover'))
-                    canvas.create_text(cell_right - 9, middle, text='›', font=self.title_font, fill=ACCENT, tags=jump)
-                    self.bind_area(jump, lambda kind=kind: self.on_next(kind))
+            if on:
+                jump = 'next_' + kind
+                rounded_rect(canvas, right - next_width, y + 3, right, y + KIND_HEIGHT - 5, 6, fill='white',
+                             outline='#c3cad3', tags=(jump,))
+                canvas.create_text(right - next_width / 2, middle, text=next_label, font=self.small_font,
+                                   fill=ACCENT, tags=jump)
+                self.bind_area(jump, lambda kind=kind: self.on_next(kind))
             y += KIND_HEIGHT
-        y += 6
-        canvas.create_text(PADDING, y, text=tr('Click a cell to show or hide it · › next'),
-                           anchor='nw', font=self.small_font, fill=DISABLED_TEXT, width=right - PADDING)
