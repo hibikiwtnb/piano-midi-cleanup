@@ -11,6 +11,13 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        '{} notes selected': '{} notes selected',
+        'D delete\nC change hand': 'D delete\nC change hand',
+        '{} is not edited here. Show the tempo corrected file or the result.': '{} is not edited here. Show the tempo corrected file or the result.',
+        'Edit failed: {}': 'Edit failed: {}',
+        'Deleted {} notes. Cmd/Ctrl+Z undoes.': 'Deleted {} notes. Cmd/Ctrl+Z undoes.',
+        'Moved {} notes to {}. Press C again for the next hand.': 'Moved {} notes to {}. Press C again for the next hand.',
+        'Undid the last edit.': 'Undid the last edit.',
         'Arrow keys\nstep 0.1': 'Arrow keys\nstep 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 s\n←→ 5 ms',
         'Only here': 'Only on this side',
         'Longer tail': 'Longer tail',
@@ -103,6 +110,13 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        '{} notes selected': '已選 {} 個音',
+        'D delete\nC change hand': 'D 刪除\nC 換手',
+        '{} is not edited here. Show the tempo corrected file or the result.': '{}不在這裡編輯，請切到速度修正或處理結果。',
+        'Edit failed: {}': '編輯失敗：{}',
+        'Deleted {} notes. Cmd/Ctrl+Z undoes.': '已刪除 {} 個音。Cmd／Ctrl+Z 復原。',
+        'Moved {} notes to {}. Press C again for the next hand.': '已把 {} 個音改為{}，再按 C 換下一隻手。',
+        'Undid the last edit.': '已復原上一步編輯。',
         'Arrow keys\nstep 0.1': '方向鍵\n微調 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',
         'Only here': '獨有音符',
         'Longer tail': '音尾較長',
@@ -286,6 +300,13 @@ _TEXT = {
         'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
+        '{} notes selected': '已选 {} 个音',
+        'D delete\nC change hand': 'D 删除\nC 换手',
+        '{} is not edited here. Show the tempo corrected file or the result.': '{}不在这里编辑，请切到速度修正或处理结果。',
+        'Edit failed: {}': '编辑失败：{}',
+        'Deleted {} notes. Cmd/Ctrl+Z undoes.': '已删除 {} 个音。Cmd／Ctrl+Z 撤销。',
+        'Moved {} notes to {}. Press C again for the next hand.': '已把 {} 个音改为{}，再按 C 换下一只手。',
+        'Undid the last edit.': '已撤销上一步编辑。',
         'Arrow keys\nstep 0.1': '方向键\n微调 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',
         'Only here': '独有音符',
         'Longer tail': '音尾较长',

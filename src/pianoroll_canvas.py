@@ -27,6 +27,7 @@ from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
 from compare_answer import answer_path
 from note_changes import changes_path, load_changes, save_changes, shift_changes
+from note_edit import edit_notes, paired_notes
 from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
 from version_sidebar import (
     ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, LENGTHENED_OUTLINE, ROLE_LABELS, SHORTENED_FILL,
@@ -65,6 +66,11 @@ LEGEND_HOVER = '#e4e7ec'
 LEGEND_MUTED_TEXT = '#9aa3af'
 LEGEND_DIVIDER = '#d5dae0'
 MUTED_NOTE_STRENGTH = 0.22
+SELECTION_OUTLINE = '#111827'
+SELECTION_BOX = '#2f6fdb'
+DRAG_THRESHOLD = 4
+UNDO_LIMIT = 20
+READ_ONLY_ROLES = ('original', 'answer')  # Editing never touches the source MIDI or the answer.
 STAGE_REASONS = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
@@ -83,23 +89,16 @@ def read_roll(midi_path):
     """Read notes, pedal intervals, duration, BPM and timed key signatures."""
     midi = mido.MidiFile(midi_path)
     seconds = tick_seconds(midi)
-    notes = []
+    # The list order is what note_edit.edit_notes indexes into.
+    notes = [(seconds(note.start_tick), seconds(note.end_tick), note.pitch, note.channel, note.velocity)
+             for note in paired_notes(midi)]
     pedal_events = defaultdict(list)
     key_signatures = []
     for track in midi.tracks:
-        active = defaultdict(list)
         tick = 0
         for message in track:
             tick += message.time
-            if message.type == 'note_on' and message.velocity > 0:
-                active[message.channel, message.note].append((tick, message.velocity))
-            elif message.type in ('note_on', 'note_off'):
-                starts = active[message.channel, message.note]
-                if starts:
-                    # Match the post-processing note pairing, including repeated pitches.
-                    start, velocity = starts.pop()
-                    notes.append((seconds(start), seconds(tick), message.note, message.channel, velocity))
-            elif message.type == 'control_change' and message.control == 64:
+            if message.type == 'control_change' and message.control == 64:
                 pedal_events[message.channel].append((tick, message.value >= 64))
             elif message.type == 'key_signature':
                 key_signatures.append((seconds(tick), message.key))
@@ -177,6 +176,9 @@ class PianoRollView(ttk.Frame):
         self.change_tooltip = None
         self.tooltip_item = None
         self.hint = None
+        self.selected = set()
+        self.drag_start = None
+        self.undo_stack = []
         self.chord_segments = []
         self.chord_message = ''
         self.chord_items = {}
@@ -294,13 +296,24 @@ class PianoRollView(ttk.Frame):
         roll.rowconfigure(2, weight=1)
         roll.columnconfigure(1, weight=1)
 
-        for widget in (self.canvas, self.ruler, self.chords, self.pedal):
+        for widget in (self.ruler, self.chords, self.pedal):
             widget.bind('<Button-1>', self.seek_click)
+        # In the roll a click still seeks; dragging draws a selection box instead.
+        self.canvas.bind('<Button-1>', self.press_roll)
+        self.canvas.bind('<B1-Motion>', self.drag_roll)
+        self.canvas.bind('<ButtonRelease-1>', self.release_roll)
         self.keys.bind('<Button-1>', lambda _event: self.focus_roll())
         for widget in (self.canvas, self.keys, self.ruler, self.chords, self.pedal):
             widget.bind('<MouseWheel>', self.wheel)
             # Only the roll canvases take Space, so text in the entries is never affected.
             widget.bind('<space>', self.space_toggle)
+            for key in ('d', 'D', '<Delete>', '<BackSpace>'):
+                widget.bind(key, lambda _event: self.edit_selected())
+            for key in ('c', 'C'):
+                widget.bind(key, lambda _event: self.cycle_hand())
+            for key in ('<Command-z>', '<Control-z>'):
+                widget.bind(key, lambda _event: self.undo_edit())
+            widget.bind('<Escape>', lambda _event: self.set_selection(set()))
         self.set_editable(False)
 
     # Scrolling and zoom keep every canvas on the same time or pitch axis.
@@ -379,6 +392,8 @@ class PianoRollView(ttk.Frame):
                 self.draw()
             return
         same_file = midi_path == self.path
+        # Indices change with the file; edits reselect their notes after reloading.
+        self.selected = set()
         view = (self.canvas.xview()[0], self.canvas.yview()[0])
         self.stop()
         self.notes, pedals, self.duration, bpm, self.key_signatures = read_roll(midi_path)
@@ -453,7 +468,7 @@ class PianoRollView(ttk.Frame):
         note = self.note_items.get(current[0]) if current else None
         if note is not None:
             self.hide_change_tooltip()
-            pitch, velocity, _ = note
+            pitch, velocity, _, _ = note
             self.set_status(tr('{} | Velocity {}').format(note_name(pitch), velocity))
             return
         change = self.change_items.get(current[0]) if current else None
@@ -480,14 +495,18 @@ class PianoRollView(ttk.Frame):
         widget.bind('<FocusOut>', lambda _event: self.hide_hint(), add='+')
 
     def show_hint(self, widget, text):
-        self.hide_hint()
         if str(widget.cget('state')) == 'disabled':
+            self.hide_hint()
             return
+        self.show_hint_at(text, widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height() + 4)
+
+    def show_hint_at(self, text, x, y):
+        self.hide_hint()
         self.hint = tk.Toplevel(self)
         self.hint.overrideredirect(True)
         tk.Label(self.hint, text=text, justify='left', background='#ffffe1', foreground='#202020',
                  relief='solid', borderwidth=1, padx=6, pady=3).pack()
-        self.hint.geometry('+{}+{}'.format(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height() + 4))
+        self.hint.geometry('+{}+{}'.format(x, y))
 
     def hide_hint(self):
         if self.hint is not None:
@@ -552,11 +571,14 @@ class PianoRollView(ttk.Frame):
         pps = self.pixels_per_second
         self.note_items.clear()
         self.draw_changes()
-        for start, end, pitch, channel, velocity in self.notes:
+        for index, (start, end, pitch, channel, velocity) in enumerate(self.notes):
             y = (PITCHES - 1 - pitch) * ROW_HEIGHT + 1
+            selected = index in self.selected
             item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
-                                                fill=self.note_color(channel, velocity), outline='', tags='note')
-            self.note_items[item] = (pitch, velocity, channel)
+                                                fill=self.note_color(channel, velocity),
+                                                outline=SELECTION_OUTLINE if selected else '',
+                                                width=1.5 if selected else 1, tags='note')
+            self.note_items[item] = (pitch, velocity, channel, index)
         self.canvas.tag_raise('above')
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
@@ -587,7 +609,7 @@ class PianoRollView(ttk.Frame):
         return color
 
     def recolor_notes(self):
-        for item, (_, velocity, channel) in self.note_items.items():
+        for item, (_, velocity, channel, _) in self.note_items.items():
             self.canvas.itemconfigure(item, fill=self.note_color(channel, velocity))
 
     # Toolbar legend.
@@ -643,6 +665,121 @@ class PianoRollView(ttk.Frame):
         self.draw_legend()
         self.hover_hand(hand, True)
         self.focus_roll()
+
+    # Note editing: drag to select, D deletes, C moves to the next hand, Cmd/Ctrl+Z undoes.
+    def press_roll(self, event):
+        self.focus_roll()
+        self.hide_hint()
+        self.drag_start = (self.canvas.canvasx(event.x), self.canvas.canvasy(event.y), False)
+
+    def drag_roll(self, event):
+        if self.drag_start is None:
+            return
+        x0, y0, dragging = self.drag_start
+        x1, y1 = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        if not dragging and max(abs(x1 - x0), abs(y1 - y0)) < DRAG_THRESHOLD:
+            return
+        self.drag_start = (x0, y0, True)
+        self.canvas.delete('selbox')
+        self.canvas.create_rectangle(x0, y0, x1, y1, outline=SELECTION_BOX, dash=(4, 2), tags='selbox')
+
+    def release_roll(self, event):
+        if self.drag_start is None:
+            return
+        x0, y0, dragging = self.drag_start
+        self.drag_start = None
+        if not dragging:
+            self.set_selection(set())
+            self.seek_click(event)
+            return
+        x1, y1 = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        self.canvas.delete('selbox')
+        found = {self.note_items[item][3] for item in self.canvas.find_overlapping(x0, y0, x1, y1)
+                 if item in self.note_items}
+        # Shift adds to the current selection.
+        self.set_selection(self.selected | found if event.state & 0x0001 else found)
+        if self.selected:
+            self.set_status(tr('{} notes selected').format(len(self.selected)))
+            self.show_hint_at(tr('D delete\nC change hand'), event.x_root + 12, event.y_root + 12)
+
+    def set_selection(self, indices):
+        self.hide_hint()
+        self.selected = set(indices)
+        for item, (_, _, _, index) in self.note_items.items():
+            selected = index in self.selected
+            self.canvas.itemconfigure(item, outline=SELECTION_OUTLINE if selected else '',
+                                      width=1.5 if selected else 1)
+
+    def editable(self):
+        if not self.selected:
+            return False
+        if self.shown_role in READ_ONLY_ROLES:
+            self.set_status(tr('{} is not edited here. Show the tempo corrected file or the result.').format(
+                self.role_label(self.shown_role)))
+            return False
+        return True
+
+    def edit_selected(self, channel=None):
+        """Delete the selection, or move it to channel; the selection stays on moved notes."""
+        if not self.editable():
+            return 'break'
+        path = self.path
+        keep = {self.notes[index][:3] for index in self.selected} if channel is not None else set()
+        position = self.position_seconds()
+        self.stop()
+        try:
+            with open(path, 'rb') as source:
+                backup = source.read()
+            edit_notes(path, sorted(self.selected), channel)
+        except (OSError, ValueError, IndexError, EOFError) as error:
+            self.set_status(tr('Edit failed: {}').format(error))
+            return 'break'
+        self.undo_stack = (self.undo_stack + [(path, backup)])[-UNDO_LIMIT:]
+        count = len(self.selected)
+        self.reload_after_edit(position, keep)
+        if channel is None:
+            self.set_status(tr('Deleted {} notes. Cmd/Ctrl+Z undoes.').format(count))
+        else:
+            self.set_status(tr('Moved {} notes to {}. Press C again for the next hand.').format(
+                count, tr(HAND_BY_CHANNEL[channel].replace('_', ' '))))
+        return 'break'
+
+    def cycle_hand(self):
+        """Move the selection to the hand after its most common one, among the song's hands."""
+        if not self.editable():
+            return 'break'
+        present = {HAND_BY_CHANNEL.get(channel) for _, _, _, channel, _ in self.notes} | {'left', 'right'}
+        hands = [hand for hand in HAND_ORDER if hand in present]
+        current = [HAND_BY_CHANNEL.get(self.notes[index][3]) for index in self.selected]
+        common = max(hands, key=current.count)
+        target = hands[(hands.index(common) + 1) % len(hands)] if common in current else hands[0]
+        return self.edit_selected(CHANNELS[target])
+
+    def undo_edit(self):
+        if not self.undo_stack:
+            return 'break'
+        path, backup = self.undo_stack.pop()
+        position = self.position_seconds()
+        self.stop()
+        try:
+            with open(path, 'wb') as target:
+                target.write(backup)
+        except OSError as error:
+            self.set_status(tr('Edit failed: {}').format(error))
+            return 'break'
+        if path == self.path:
+            self.reload_after_edit(position, set())
+        self.set_status(tr('Undid the last edit.'))
+        return 'break'
+
+    def reload_after_edit(self, position, keep):
+        """Reload the edited file in place, keeping the playhead and reselecting kept (start, end, pitch) notes."""
+        self.selected = set()
+        self.show(self.path)
+        self.selected = {index for index, note in enumerate(self.notes) if note[:3] in keep}
+        self.set_selection(self.selected)
+        self.play_start_seconds = min(position, self.duration)
+        self.move_playhead(self.play_start_seconds)
 
     # Versions and comparison.
     def version_stamp(self, midi_path):
