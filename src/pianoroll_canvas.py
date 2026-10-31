@@ -25,6 +25,7 @@ from midi_playback import MidiPlayback, default_output_name, display_port_name, 
 from midi_stats import note_name
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
+from compare_answer import answer_path, load_record
 from note_changes import changes_path, load_changes, save_changes, shift_changes
 
 
@@ -56,6 +57,8 @@ BAR_LINE, BEAT_LINE, SIXTEENTH_LINE = '#8996a5', '#d3d9e0', '#eef1f4'
 RULER_TICK, RULER_TEXT = '#b8c0ca', '#435365'
 DELETED_FILL, DELETED_OUTLINE = '#f4b8b8', '#bd6262'
 SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
+ANSWER_ERROR = '#d32f2f'
+ANSWER_MODES = ('extra', 'missed', 'answer')
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
 
 
@@ -141,6 +144,7 @@ class PianoRollView(ttk.Frame):
         self.center_pending = False
         self.changes = None
         self.changes_mtime = None
+        self.answer = None
         self.change_items = {}
         self.note_items = {}
         self.label_images = {}
@@ -217,7 +221,9 @@ class PianoRollView(ttk.Frame):
         ttk.Label(play, text=tr('Change overlay')).pack(side='left', padx=(12, 4))
         self.change_modes = {tr(label): mode for label, mode in (
             ('Hide changes', 'none'), ('Deleted notes', 'deleted'),
-            ('Shortened tails', 'shortened'), ('All changes', 'all'))}
+            ('Shortened tails', 'shortened'), ('All changes', 'all'),
+            ('Extra notes (vs answer)', 'extra'), ('Missed notes (vs answer)', 'missed'),
+            ('Answer errors', 'answer'))}
         selector = ttk.Combobox(play, textvariable=self.change_mode, values=tuple(self.change_modes),
                                 width=14, state='readonly')
         selector.pack(side='left')
@@ -318,7 +324,7 @@ class PianoRollView(ttk.Frame):
         self.xview('moveto', left * self.pixels_per_second / self.width())
 
     def width(self):
-        end = max([self.duration] + [item['end'] for item in self.changes or []])
+        end = max([self.duration] + [item['end'] for item in (self.changes or []) + self.answer_items()])
         return max(800.0, end * self.pixels_per_second + 80)
 
     # Loading.
@@ -330,6 +336,7 @@ class PianoRollView(ttk.Frame):
             self.path = None
             self.changes = None
             self.changes_mtime = None
+            self.answer = None
             self.notes, self.pedal_rows, self.duration = [], [], 0.0
             self.key_signatures = []
             self.chord_segments, self.chord_message, self.chord_job = [], '', None
@@ -339,11 +346,12 @@ class PianoRollView(ttk.Frame):
             self.set_status(tr('Choose a MIDI file first.'))
             return
         mtime = os.path.getmtime(midi_path)
-        record_path = changes_path(midi_path)
-        record_mtime = record_path.stat().st_mtime_ns if record_path.is_file() else None
+        record_mtime = tuple(path.stat().st_mtime_ns if path.is_file() else None
+                             for path in (changes_path(midi_path), answer_path(midi_path)))
         if midi_path == self.path and mtime == self.loaded_mtime:
             if record_mtime != self.changes_mtime:
                 self.changes = load_changes(midi_path)
+                self.answer = load_record(midi_path)
                 self.changes_mtime = record_mtime
                 self.draw()
             return
@@ -353,6 +361,7 @@ class PianoRollView(ttk.Frame):
         self.notes, pedals, self.duration, bpm, self.key_signatures = read_roll(midi_path)
         self.path, self.loaded_mtime = midi_path, mtime
         self.changes = load_changes(midi_path)
+        self.answer = load_record(midi_path)
         self.changes_mtime = record_mtime
         streams = defaultdict(list)
         for channel, intervals in sorted(pedals.items()):
@@ -410,6 +419,12 @@ class PianoRollView(ttk.Frame):
         mode = self.change_modes[self.change_mode.get()]
         if mode == 'none':
             return
+        elif mode in ANSWER_MODES:
+            if self.answer is None:
+                text = tr('No matching answer comparison. Run compare_answer.py first.')
+            else:
+                text = tr('Red outline: extra notes   Red dashed: missed notes   Extra {} / Missed {}').format(
+                    self.answer['counts']['extra'], self.answer['counts']['missed'])
         elif self.changes is None:
             text = tr('No matching change record. Run processing to record changes.')
         elif not self.changes:
@@ -435,6 +450,11 @@ class PianoRollView(ttk.Frame):
         change = self.change_items.get(current[0]) if current else None
         if change is None:
             self.reset_change_hint()
+            return
+        if change['kind'] in ('extra', 'missed'):
+            self.set_status(note_name(change['pitch']))
+            self.place_tooltip(self.canvas, current[0], tr('Extra note: not in the answer') if change['kind'] == 'extra'
+                               else tr('Missed note: in the answer, not transcribed'))
             return
         stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}[change['stage']]
@@ -508,6 +528,7 @@ class PianoRollView(ttk.Frame):
             item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
                                                 fill=color, outline='', tags='note')
             self.note_items[item] = (pitch, velocity, base_color)
+        self.canvas.tag_raise('answer')
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
             y = row * PEDAL_ROW_HEIGHT
@@ -550,6 +571,22 @@ class PianoRollView(ttk.Frame):
             self.change_items[item] = change
         if self.canvas.find_withtag('note'):
             self.canvas.tag_lower('change', 'note')
+        # Answer errors sit above the notes: an extra outlines the model's own note.
+        for item_data in self.answer_items():
+            if mode not in ('answer', item_data['kind']):
+                continue
+            extra = item_data['kind'] == 'extra'
+            y = (PITCHES - 1 - item_data['pitch']) * ROW_HEIGHT + 1
+            item = self.canvas.create_rectangle(
+                item_data['start'] * pps, y, max(item_data['end'] * pps, item_data['start'] * pps + 3),
+                y + ROW_HEIGHT - 1, outline=ANSWER_ERROR, width=2, dash=() if extra else (3, 2), tags=('change', 'answer'))
+            self.change_items[item] = item_data
+        self.canvas.tag_raise('answer')
+        if getattr(self, 'playhead', None):
+            self.canvas.tag_raise(self.playhead)
+
+    def answer_items(self):
+        return self.answer['items'] if self.answer else []
 
     # Chord track.
     def start_chord_analysis(self, midi_path, mtime):
