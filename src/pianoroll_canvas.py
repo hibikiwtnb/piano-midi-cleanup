@@ -42,6 +42,21 @@ PLAYHEAD_FRAME_MS = 16  # About 60 fps while playing in the visible roll.
 IDLE_POLL_MS = 50
 HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 HAND_BY_CHANNEL = {channel: hand for hand, channel in CHANNELS.items()}
+# Roll colours, shared with the offline video renderer (pianoroll_video.py).
+ROLL_BACKGROUND = '#fbfcfe'
+RULER_BACKGROUND = '#eef1f5'
+PEDAL_BACKGROUND = '#f6f7f9'
+BLACK_KEY_ROW = '#f1f3f6'
+OCTAVE_LINE = '#dce2e8'
+KEY_WHITE, KEY_BLACK, KEY_OUTLINE = 'white', '#3a3f47', '#d5dae0'
+LABEL_TEXT = '#334155'
+PEDAL_FILL = '#8a94a6'
+PLAYHEAD = '#e53935'
+BAR_LINE, BEAT_LINE, SIXTEENTH_LINE = '#8996a5', '#d3d9e0', '#eef1f4'
+RULER_TICK, RULER_TEXT = '#b8c0ca', '#435365'
+DELETED_FILL, DELETED_OUTLINE = '#f4b8b8', '#bd6262'
+SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
+PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
 
 
 def first_beat_target(midi_path):
@@ -210,7 +225,7 @@ class PianoRollView(ttk.Frame):
 
         roll = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
-        self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background='#eef1f5', highlightthickness=0,
+        self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background=RULER_BACKGROUND, highlightthickness=0,
                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
         self.chord_label = tk.Canvas(roll, width=KEYS_WIDTH, height=CHORD_ROW_HEIGHT, background='white',
                                      highlightthickness=0)
@@ -220,11 +235,11 @@ class PianoRollView(ttk.Frame):
                                       size=10, weight='bold')
         self.keys = tk.Canvas(roll, width=KEYS_WIDTH, background='white', highlightthickness=0,
                               yscrollincrement=ROW_HEIGHT)
-        self.canvas = tk.Canvas(roll, width=800, height=360, background='#fbfcfe', highlightthickness=0,
+        self.canvas = tk.Canvas(roll, width=800, height=360, background=ROLL_BACKGROUND, highlightthickness=0,
                                 xscrollincrement=HORIZONTAL_SCROLL_INCREMENT, yscrollincrement=ROW_HEIGHT)
         self.pedal_labels = tk.Canvas(roll, width=KEYS_WIDTH, height=PEDAL_ROW_HEIGHT, background='white',
                                       highlightthickness=0)
-        self.pedal = tk.Canvas(roll, height=PEDAL_ROW_HEIGHT, background='#f6f7f9', highlightthickness=0,
+        self.pedal = tk.Canvas(roll, height=PEDAL_ROW_HEIGHT, background=PEDAL_BACKGROUND, highlightthickness=0,
                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
         vertical = ttk.Scrollbar(roll, orient='vertical', command=self.yview)
         horizontal = ttk.Scrollbar(roll, orient='horizontal', command=self.xview)
@@ -376,12 +391,12 @@ class PianoRollView(ttk.Frame):
             except OSError:
                 # Keep the platform's native font and script coverage outside Windows.
                 return canvas.create_text(KEYS_WIDTH - 3, y, text=text, anchor='e',
-                                          font=('TkDefaultFont', 8), fill='#334155')
+                                          font=('TkDefaultFont', 8), fill=LABEL_TEXT)
             left, top, right, bottom = font.getbbox(text)
             width = max(1, math.ceil((right - left) / 4))
             height = max(1, math.ceil((bottom - top) / 4))
             image = Image.new('RGB', (width * 4, height * 4), 'white')
-            ImageDraw.Draw(image).text((-left, -top), text, font=font, fill='#334155')
+            ImageDraw.Draw(image).text((-left, -top), text, font=font, fill=LABEL_TEXT)
             image = image.resize((width, height), Image.Resampling.LANCZOS)
             self.label_images[key] = ImageTk.PhotoImage(image, master=self)
         return canvas.create_image(KEYS_WIDTH - 3, y, image=self.label_images[key], anchor='e')
@@ -471,12 +486,12 @@ class PianoRollView(ttk.Frame):
             y = (PITCHES - 1 - pitch) * ROW_HEIGHT
             black = pitch % 12 in (1, 3, 6, 8, 10)
             if black:
-                self.canvas.create_rectangle(0, y, width, y + ROW_HEIGHT, fill='#f1f3f6', outline='', tags='bg')
+                self.canvas.create_rectangle(0, y, width, y + ROW_HEIGHT, fill=BLACK_KEY_ROW, outline='', tags='bg')
             if not self.keyboard_drawn:
-                self.keys.create_rectangle(0, y, KEYS_WIDTH, y + ROW_HEIGHT, fill='#3a3f47' if black else 'white',
-                                           outline='#d5dae0')
+                self.keys.create_rectangle(0, y, KEYS_WIDTH, y + ROW_HEIGHT, fill=KEY_BLACK if black else KEY_WHITE,
+                                           outline=KEY_OUTLINE)
             if pitch % 12 == 0:
-                self.canvas.create_line(0, y + ROW_HEIGHT, width, y + ROW_HEIGHT, fill='#dce2e8', tags='bg')
+                self.canvas.create_line(0, y + ROW_HEIGHT, width, y + ROW_HEIGHT, fill=OCTAVE_LINE, tags='bg')
                 if not self.keyboard_drawn:
                     self.draw_small_label(self.keys, note_name(pitch), y + ROW_HEIGHT / 2, 9)
         self.keyboard_drawn = True
@@ -503,10 +518,10 @@ class PianoRollView(ttk.Frame):
             self.draw_small_label(self.pedal_labels, label, y + PEDAL_ROW_HEIGHT / 2, 12)
             for down, up in intervals:
                 self.pedal.create_rectangle(down * pps, y + 2, max(up * pps, down * pps + 2),
-                                            y + PEDAL_ROW_HEIGHT - 2, fill='#8a94a6', outline='')
+                                            y + PEDAL_ROW_HEIGHT - 2, fill=PEDAL_FILL, outline='')
         self.draw_small_label(self.chord_label, tr('Chords'), CHORD_ROW_HEIGHT / 2, 12)
-        self.playhead = self.canvas.create_line(0, 0, 0, height, fill='#e53935', width=2)
-        self.pedal_playhead = self.pedal.create_line(0, 0, 0, rows * PEDAL_ROW_HEIGHT, fill='#e53935', width=2)
+        self.playhead = self.canvas.create_line(0, 0, 0, height, fill=PLAYHEAD, width=2)
+        self.pedal_playhead = self.pedal.create_line(0, 0, 0, rows * PEDAL_ROW_HEIGHT, fill=PLAYHEAD, width=2)
         self.draw_chords()
         self.draw_grid()
         self.move_playhead(self.position_seconds())
@@ -529,8 +544,8 @@ class PianoRollView(ttk.Frame):
             y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
             item = self.canvas.create_rectangle(
                 change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3),
-                y + ROW_HEIGHT - 1, fill='#f4b8b8' if deleted else '#f4cf9b',
-                outline='#bd6262' if deleted else '#c28a3c', stipple='gray50',
+                y + ROW_HEIGHT - 1, fill=DELETED_FILL if deleted else SHORTENED_FILL,
+                outline=DELETED_OUTLINE if deleted else SHORTENED_OUTLINE, stipple='gray50',
                 dash=(3, 2) if deleted else (), tags='change')
             self.change_items[item] = change
         if self.canvas.find_withtag('note'):
@@ -634,7 +649,7 @@ class PianoRollView(ttk.Frame):
                 label = self.chords.create_text(left + 5, CHORD_ROW_HEIGHT / 2, text=text, anchor='w',
                                                 font=self.chord_font, fill='#24364f')
                 self.chord_items[label] = segment
-        self.chord_playhead = self.chords.create_line(0, 0, 0, CHORD_ROW_HEIGHT, fill='#e53935', width=2)
+        self.chord_playhead = self.chords.create_line(0, 0, 0, CHORD_ROW_HEIGHT, fill=PLAYHEAD, width=2)
         self.chords.xview('moveto', self.canvas.xview()[0])
         self.move_playhead(self.position_seconds())
 
@@ -675,8 +690,8 @@ class PianoRollView(ttk.Frame):
         for index in range(first, last + 1):
             x = (offset + index * sixteenth) * pps
             if index % 16 == 0:
-                self.canvas.create_line(x, 0, x, height, fill='#8996a5', width=2, tags='grid')
-                self.ruler.create_line(x, 0, x, RULER_HEIGHT, fill='#8996a5')
+                self.canvas.create_line(x, 0, x, height, fill=BAR_LINE, width=2, tags='grid')
+                self.ruler.create_line(x, 0, x, RULER_HEIGHT, fill=BAR_LINE)
                 if index >= 0:
                     label = str(index // 16 + 1)
                     key_index = bisect_right(key_times, offset + index * sixteenth + 1e-9) - 1
@@ -687,12 +702,12 @@ class PianoRollView(ttk.Frame):
                             label += '  Key=' + tonic + (' minor' if key.endswith('m') else ' Major')
                             previous_key = key
                     self.ruler.create_text(x + 3, RULER_HEIGHT / 2, text=label, anchor='w',
-                                           fill='#435365')
+                                           fill=RULER_TEXT)
             elif index % 4 == 0:
-                self.canvas.create_line(x, 0, x, height, fill='#d3d9e0', tags='grid')
-                self.ruler.create_line(x, RULER_HEIGHT * 0.6, x, RULER_HEIGHT, fill='#b8c0ca')
+                self.canvas.create_line(x, 0, x, height, fill=BEAT_LINE, tags='grid')
+                self.ruler.create_line(x, RULER_HEIGHT * 0.6, x, RULER_HEIGHT, fill=RULER_TICK)
             elif pps * sixteenth >= 6:
-                self.canvas.create_line(x, 0, x, height, fill='#eef1f4', tags='grid')
+                self.canvas.create_line(x, 0, x, height, fill=SIXTEENTH_LINE, tags='grid')
         if self.canvas.find_withtag('bg'):
             self.canvas.tag_raise('grid', 'bg')
         if self.canvas.find_withtag('note'):
@@ -849,8 +864,8 @@ class PianoRollView(ttk.Frame):
             if visible:
                 x = self.move_playhead(seconds)
                 right = self.canvas.canvasx(self.canvas.winfo_width())
-                if x > right - 40 or x < self.canvas.canvasx(0):
-                    self.xview('moveto', max(0.0, (x - 40) / self.width()))
+                if x > right - PAGE_MARGIN or x < self.canvas.canvasx(0):
+                    self.xview('moveto', max(0.0, (x - PAGE_MARGIN) / self.width()))
             if seconds >= self.duration:
                 self.stop()
         if self.play_started is not None:
