@@ -51,7 +51,7 @@
 
 - 顯示原始 `song.mid` 時儲存：建立或覆寫同曲的 `song_bpmfix.mid`，不修改原檔，儲存後預覽切到 `song_bpmfix.mid`。
 - 顯示 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 時儲存：寫入 `song_bpmfix.mid` 並重寫調號；顯示的是 cleaned 時，它也以同一個位移量與調號改寫，修改痕跡紀錄跟著平移，不必重新處理；儲存後預覽切到 `song_bpmfix.mid`。
-- 檔名以 `_bpmfix` 或 `_bpmfix_cleaned` 結尾時，對應的 `song_bpmfix.mid` 必須存在才能調整。
+- 顯示 `song_bpmfix_cleaned.mid` 而對應的 `song_bpmfix.mid` 不存在時，儲存以顯示中的 cleaned 建立 `song_bpmfix.mid`。
 
 之後重跑時選「沿用 `song_bpmfix.mid`」可保留手動對齊；若從原始 `song.mid` 重算並執行自動第一拍，手動結果可能被取代。是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
 
