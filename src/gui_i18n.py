@@ -11,6 +11,7 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'Arrow keys\nstep 0.1': 'Arrow keys\nstep 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 s\n←→ 5 ms',
         'Only here': 'Only on this side',
         'Longer tail': 'Longer tail',
         'Click a cell to show or hide it · › next': 'Click a cell to show or hide it · › next',
@@ -102,6 +103,7 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'Arrow keys\nstep 0.1': '方向鍵\n微調 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',
         'Only here': '獨有音符',
         'Longer tail': '音尾較長',
         'Click a cell to show or hide it · › next': '點格子顯示／隱藏 · › 下一處',
@@ -284,6 +286,7 @@ _TEXT = {
         'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
+        'Arrow keys\nstep 0.1': '方向键\n微调 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',
         'Only here': '独有音符',
         'Longer tail': '音尾较长',
         'Click a cell to show or hide it · › next': '点格子显示／隐藏 · › 下一处',

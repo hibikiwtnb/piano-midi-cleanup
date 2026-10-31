@@ -176,6 +176,7 @@ class PianoRollView(ttk.Frame):
         self.keyboard_drawn = False
         self.change_tooltip = None
         self.tooltip_item = None
+        self.hint = None
         self.chord_segments = []
         self.chord_message = ''
         self.chord_items = {}
@@ -199,7 +200,7 @@ class PianoRollView(ttk.Frame):
         self.status = status if status is not None else tk.StringVar(value=tr('Ready'))
         self.build()
         self.bind('<Map>', self.schedule_visible_chords)
-        self.bind('<Unmap>', lambda _event: self.hide_change_tooltip())
+        self.bind('<Unmap>', lambda _event: (self.hide_change_tooltip(), self.hide_hint()))
         self.bpm.trace_add('write', lambda *_: self.draw_grid())
         self.offset.trace_add('write', lambda *_: self.draw_grid())
         self.after_id = self.after(IDLE_POLL_MS, self.update_playhead)
@@ -212,11 +213,13 @@ class PianoRollView(ttk.Frame):
         self.bpm_entry.pack(side='left', padx=(4, 12))
         for key, amount in (('<Up>', 0.1), ('<Right>', 0.1), ('<Down>', -0.1), ('<Left>', -0.1)):
             self.bpm_entry.bind(key, lambda _event, amount=amount: self.step_bpm(amount))
+        self.attach_hint(self.bpm_entry, tr('Arrow keys\nstep 0.1'))
         ttk.Label(edit, text=tr('第一拍 offset (秒)')).pack(side='left')
         self.offset_entry = ttk.Entry(edit, textvariable=self.offset, width=8)
         self.offset_entry.pack(side='left', padx=4)
         for key, amount in (('<Up>', 0.1), ('<Down>', -0.1), ('<Right>', 0.005), ('<Left>', -0.005)):
             self.offset_entry.bind(key, lambda _event, amount=amount: self.step_offset_seconds(amount))
+        self.attach_hint(self.offset_entry, tr('↑↓ 0.1 s\n←→ 5 ms'))
         self.minus_button = ttk.Button(edit, text=tr('−1 beat'), command=lambda: self.step_offset(-1))
         self.minus_button.pack(side='left', padx=2)
         self.plus_button = ttk.Button(edit, text=tr('+1 beat'), command=lambda: self.step_offset(1))
@@ -470,6 +473,26 @@ class PianoRollView(ttk.Frame):
             # The processing record states which stage removed or trimmed it; nothing is inferred.
             text += '\n' + tr('Processing record: {}').format(tr(STAGE_REASONS[change['stage']]))
         self.place_tooltip(self.canvas, current[0], text)
+
+    def attach_hint(self, widget, text):
+        """A two-line key hint under a control while it has focus, styled like the roll's tooltips."""
+        widget.bind('<FocusIn>', lambda _event: self.show_hint(widget, text), add='+')
+        widget.bind('<FocusOut>', lambda _event: self.hide_hint(), add='+')
+
+    def show_hint(self, widget, text):
+        self.hide_hint()
+        if str(widget.cget('state')) == 'disabled':
+            return
+        self.hint = tk.Toplevel(self)
+        self.hint.overrideredirect(True)
+        tk.Label(self.hint, text=text, justify='left', background='#ffffe1', foreground='#202020',
+                 relief='solid', borderwidth=1, padx=6, pady=3).pack()
+        self.hint.geometry('+{}+{}'.format(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height() + 4))
+
+    def hide_hint(self):
+        if self.hint is not None:
+            self.hint.destroy()
+            self.hint = None
 
     def place_tooltip(self, canvas, item, text, bounds=None):
         """Anchor once below the hovered item's visible bounds, not to the pointer."""
