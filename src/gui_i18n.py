@@ -11,6 +11,7 @@ _language = 'zh_TW'
 
 _TEXT = {
     'en': {
+        'Undo': 'Undo', 'Cmd/Ctrl+Z': 'Cmd/Ctrl+Z',
         'Mark on the roll:': 'Mark on the roll:',
         'Next': 'Next',
         '{} against {}': '{} against {}',
@@ -19,7 +20,7 @@ _TEXT = {
         '{} notes selected': '{} notes selected',
         'D delete\nC change hand': 'D delete\nC change hand',
         'Edit failed: {}': 'Edit failed: {}',
-        'Deleted {} notes. Cmd/Ctrl+Z undoes.': 'Deleted {} notes. Cmd/Ctrl+Z undoes.',
+        'Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.': 'Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.',
         'Moved {} notes to {}. Press C again for the next hand.': 'Moved {} notes to {}. Press C again for the next hand.',
         'Undid the last edit.': 'Undid the last edit.',
         'Arrow keys\nstep 0.1': 'Arrow keys\nstep 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 s\n←→ 5 ms',
@@ -106,6 +107,7 @@ _TEXT = {
         'Piano MIDI Cleanup': 'Piano MIDI Cleanup',
     },
     'zh_TW': {
+        'Undo': '撤銷', 'Cmd/Ctrl+Z': 'Cmd／Ctrl+Z',
         'Mark on the roll:': '在捲簾上標出：',
         'Next': '下一個',
         '{} against {}': '{} 對照 {}',
@@ -114,9 +116,9 @@ _TEXT = {
         '{} notes selected': '已選 {} 個音',
         'D delete\nC change hand': 'D 刪除\nC 換手',
         'Edit failed: {}': '編輯失敗：{}',
-        'Deleted {} notes. Cmd/Ctrl+Z undoes.': '已刪除 {} 個音。Cmd／Ctrl+Z 復原。',
+        'Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.': '已刪除 {} 個音。按撤銷（Cmd／Ctrl+Z）可復原。',
         'Moved {} notes to {}. Press C again for the next hand.': '已把 {} 個音改為{}，再按 C 換下一隻手。',
-        'Undid the last edit.': '已復原上一步編輯。',
+        'Undid the last edit.': '已撤銷上一步編輯。',
         'Arrow keys\nstep 0.1': '方向鍵\n微調 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',
         'Click to show · Compare sets the other side': '點列切換顯示 · 「比較」選對照方',
         'Not comparing. Press Compare on a version.': '目前沒有比較。在任一版本按「比較」。',
@@ -292,6 +294,7 @@ _TEXT = {
         'Other readings: {}': '其他讀法：{}', 'Bass: {}': '低音：{}', 'Chord tones: {}': '組成音：{}',
     },
     'zh_CN': {
+        'Undo': '撤销', 'Cmd/Ctrl+Z': 'Cmd／Ctrl+Z',
         'Mark on the roll:': '在卷帘上标出：',
         'Next': '下一个',
         '{} against {}': '{} 对照 {}',
@@ -300,7 +303,7 @@ _TEXT = {
         '{} notes selected': '已选 {} 个音',
         'D delete\nC change hand': 'D 删除\nC 换手',
         'Edit failed: {}': '编辑失败：{}',
-        'Deleted {} notes. Cmd/Ctrl+Z undoes.': '已删除 {} 个音。Cmd／Ctrl+Z 撤销。',
+        'Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.': '已删除 {} 个音。按撤销（Cmd／Ctrl+Z）可恢复。',
         'Moved {} notes to {}. Press C again for the next hand.': '已把 {} 个音改为{}，再按 C 换下一只手。',
         'Undid the last edit.': '已撤销上一步编辑。',
         'Arrow keys\nstep 0.1': '方向键\n微调 0.1', '↑↓ 0.1 s\n←→ 5 ms': '↑↓ 0.1 秒\n←→ 5 毫秒',

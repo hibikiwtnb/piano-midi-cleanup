@@ -228,6 +228,13 @@ class PianoRollView(ttk.Frame):
         self.plus_button.pack(side='left', padx=2)
         self.apply_button = ttk.Button(edit, text=tr('Apply'), command=self.apply)
         self.apply_button.pack(side='left', padx=(12, 2))
+        self.undo_button = ttk.Button(edit, text=tr('Undo'), command=self.undo_edit, state='disabled')
+        self.undo_button.pack(side='left', padx=2)
+        self.attach_hint(self.undo_button, tr('Cmd/Ctrl+Z'))
+        # The shortcut also works while the toolbar has focus, not only the roll.
+        for widget in (self.undo_button, self.bpm_entry, self.offset_entry):
+            for key in ('<Command-z>', '<Control-z>'):
+                widget.bind(key, lambda _event: self.undo_edit())
         ttk.Label(edit, textvariable=self.target_text, foreground='gray').pack(side='left', padx=8)
 
         play = ttk.Frame(self, padding=(0, 0, 0, 4))
@@ -733,10 +740,11 @@ class PianoRollView(ttk.Frame):
             self.set_status(tr('Edit failed: {}').format(error))
             return 'break'
         self.undo_stack = (self.undo_stack + [(path, backup)])[-UNDO_LIMIT:]
+        self.undo_button.configure(state='normal')
         count = len(self.selected)
         self.reload_after_edit(position, keep)
         if channel is None:
-            self.set_status(tr('Deleted {} notes. Cmd/Ctrl+Z undoes.').format(count))
+            self.set_status(tr('Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.').format(count))
         else:
             self.set_status(tr('Moved {} notes to {}. Press C again for the next hand.').format(
                 count, tr(HAND_BY_CHANNEL[channel].replace('_', ' '))))
@@ -757,6 +765,8 @@ class PianoRollView(ttk.Frame):
         if not self.undo_stack:
             return 'break'
         path, backup = self.undo_stack.pop()
+        if not self.undo_stack:
+            self.undo_button.configure(state='disabled')
         position = self.position_seconds()
         self.stop()
         try:
