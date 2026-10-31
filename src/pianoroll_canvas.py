@@ -585,8 +585,9 @@ class PianoRollView(ttk.Frame):
             tag = 'hand_' + hand
             rounded_rect(canvas, x, 2, x + width, LEGEND_HEIGHT - 2, 9, fill=self.legend_background,
                          outline='', tags=(tag, 'chip'))
-            canvas.create_oval(x + 8, middle - 5, x + 18, middle + 5, fill=color if enabled else '',
-                               outline=color, width=1.5, tags=tag)
+            # Square like the notes themselves; hollow while the hand is muted.
+            canvas.create_rectangle(x + 8, middle - 5, x + 18, middle + 5, fill=color if enabled else '',
+                                    outline=color, width=1.5, tags=tag)
             canvas.create_text(x + 24, middle, text=text, anchor='w', font=self.legend_font,
                                fill=LABEL_TEXT if enabled else LEGEND_MUTED_TEXT, tags=tag)
             canvas.tag_bind(tag, '<Enter>', lambda _event, hand=hand: self.hover_hand(hand, True))
