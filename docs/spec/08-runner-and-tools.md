@@ -65,6 +65,17 @@
 
 `postprocess.py` 將規則清理、雙手簡化及重疊截斷的逐環節差異寫入最終 MIDI 旁的同名 `.changes.json`，每次完整處理覆寫。紀錄綁定最終 MIDI 的 SHA-256；外部修改或缺少紀錄時不推測舊版刪音位置。卷簾同步儲存第一拍時會平移痕跡並更新指紋，其他工具修改造成的不符仍拒絕載入。
 
+選單另有三項對答案：多出的音、漏掉的音、對答案全部錯誤，讀取 `compare_answer.py` 寫在 MIDI 旁的同名 `.answer.json`。多出的音以紅色實線框住模型自己的音，漏掉的音以紅色虛線空框畫在答案音的位置；兩者畫在音符之上。紀錄同樣綁定 MIDI 的 SHA-256，MIDI 改過（包括調第一拍）就不載入，需重新比對。
+
+### 對答案（`compare_answer.py`）
+
+`python src/compare_answer.py answer.mid model_a.mid [model_b.mid ...]`
+
+- 判定：同音高、起音差 50 毫秒以內算對，一對一配對（匈牙利演算法）。答案時間範圍內沒配上的模型音算多出，沒配上的答案音算漏掉，各計一個錯；不看音長、力度、踏板。
+- 對齊：答案可用自己的時間軸（例如從 0 秒開始的譜面片段）。以一條直線 `模型秒 = offset + rate × 答案秒` 對到模型，對所有給定模型合併的起音做格點搜尋（rate 0.97–1.03）後，用 80 毫秒內的配對做兩次最小平方。直線由所有模型共同決定，不會偏向其中一個；也可用 `--offset`、`--rate` 指定。給定的模型必須共用同一時間軸（同一段音訊、同樣的後處理平移）。
+- 範圍：答案 MIDI 長度（含 end of track）對應的時間窗，外面的模型音不計。
+- 輸出：每個模型一份 `<model>.answer.json`，含對齊參數、時間窗、命中／多出／漏掉數量與每個錯誤音的區間。
+
 ### 和弦分析
 
 `src/chord_analysis.py` 以半拍為格累計音級發聲長度，納入低音與踏板延音，再由移植自 Magenta note-seq 的 `src/chord_inference.py` 以 HMM／Viterbi 推斷和弦段落。段落由 Tonal.js 命名；弱起不標和弦，低音非根音時可顯示轉位。需要 Node.js，缺少時在和弦軌提示，其他功能照常。分析在背景執行，結果存成 MIDI 旁的 `.chords.json`，以 MIDI 內容的 SHA-256 與分析版本（`CHORD_CACHE_VERSION`）比對；卷簾另以檔案路徑與修改時間做記憶體中的快速檢查。結果只供檢視，未接入刪音規則。
@@ -107,10 +118,22 @@
 | `src/midi_stats.py` | 音符數、極短音（< 0.05 秒）、低力度音（≤ 30）、音域、平均力度、最多同時按鍵數 |
 | `src/note_text_review.py` | 每個起音組一行文字：小節、拍位、每個音的手、音名與長度（拍） |
 | `src/pianoroll_snapshot.py` | 每 4 小節一張捲簾 PNG，顏色區分手；橫向或直向 |
+| `src/pianoroll_video.py` | 捲簾錄影：見下節 |
 | `src/generate_chord_review.py` | 開發中。輸出每拍的和弦候補表（Tonal.js 判斷） |
 | `src/chord_analysis.py` | 現行卷簾和弦分析，也可由命令列輸出和弦段落；與舊候補表工具不同 |
 
 「最多同時按鍵數」依 MIDI 音長計算，不加踏板延音；上游音長已含延音時，這個數字會高估實際按鍵，不能單憑它判定彈不到。
+
+### 捲簾錄影（`pianoroll_video.py`）
+
+`python src/pianoroll_video.py song_bpmfix_cleaned.mid --bars 9-20 --audio bounce.wav --out section.mp4 [--answer] [--language zh_CN]`
+
+- 不開視窗，用 PIL 逐格畫，直接送進 ffmpeg 編成 H.264（預設 1920×1080、60 fps，`--size`、`--fps` 可改）；需要 PATH 上有 `ffmpeg`。
+- 畫面是卷簾面板的捲簾按畫面高度等比放大：同樣的顏色、格線、小節尺、手別顏色、力度深淺與踏板帶，不畫和弦與清理修改痕跡。音域依段落內的音決定，整段固定。
+- 翻頁和面板播放相同：播放線碰到右邊界前 `PAGE_MARGIN`（面板 40 px，按比例放大）就整頁翻過，翻完播放線在左邊同樣距離處。正在發聲的音以深色外框標示（`--no-highlight` 關閉）。
+- 只畫指定段落內的音與踏板。範圍用小節尺的編號 `--bars`（含結束小節）或 `--start`/`--end` 秒數。
+- `--audio`：由同一份 MIDI 渲染的音訊，0 秒對 MIDI 0 秒（前面有預留時用 `--audio-offset`），自動切出段落後合成，音畫共用 MIDI 時間。
+- `--answer`：畫出 `.answer.json` 的錯誤（和面板疊圖相同），右上角計數器在播放線經過錯誤音的起音時累加；沒給範圍時錄對答案的時間窗。
 
 ## 開發用腳本
 
