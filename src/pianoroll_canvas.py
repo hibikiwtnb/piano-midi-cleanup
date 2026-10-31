@@ -25,8 +25,12 @@ from midi_playback import MidiPlayback, default_output_name, display_port_name, 
 from midi_stats import note_name
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
-from compare_answer import answer_path, load_record
+from compare_answer import answer_path
 from note_changes import changes_path, load_changes, save_changes, shift_changes
+from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
+from version_sidebar import (
+    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, KIND_LABELS, LENGTHENED_OUTLINE, ROLE_LABELS, SHORTENED_FILL,
+    SHORTENED_OUTLINE, VersionSidebar, draw_swatch)
 
 
 KEYS_WIDTH = 44
@@ -55,20 +59,14 @@ PEDAL_FILL = '#8a94a6'
 PLAYHEAD = '#e53935'
 BAR_LINE, BEAT_LINE, SIXTEENTH_LINE = '#8996a5', '#d3d9e0', '#eef1f4'
 RULER_TICK, RULER_TEXT = '#b8c0ca', '#435365'
-DELETED_FILL, DELETED_OUTLINE = '#f4b8b8', '#bd6262'
-SHORTENED_FILL, SHORTENED_OUTLINE = '#f4cf9b', '#c28a3c'
-ANSWER_ERROR = '#d32f2f'
-# Toolbar legend: hand chips toggle playback, overlay swatches only explain colours.
+# Toolbar legend: hand chips toggle playback, comparison swatches only explain colours.
 LEGEND_HEIGHT = 26
 LEGEND_HOVER = '#e4e7ec'
 LEGEND_MUTED_TEXT = '#9aa3af'
 LEGEND_DIVIDER = '#d5dae0'
 MUTED_NOTE_STRENGTH = 0.22
-OVERLAY_KINDS = {'none': (), 'deleted': ('deleted',), 'shortened': ('shortened',),
-                 'all': ('deleted', 'shortened'), 'extra': ('extra',), 'missed': ('missed',),
-                 'answer': ('extra', 'missed')}
-OVERLAY_LABELS = {'deleted': 'Deleted', 'shortened': 'Shortened', 'extra': 'Extra', 'missed': 'Missed'}
-ANSWER_MODES = ('extra', 'missed', 'answer')
+STAGE_REASONS = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
+                 'trim': 'Overlap trim'}
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
 
 
@@ -144,10 +142,11 @@ def rounded_rect(canvas, x0, y0, x1, y1, radius, **options):
 
 
 class PianoRollView(ttk.Frame):
-    def __init__(self, master, midi_port=None, on_output=None, on_first_beat=None, status=None):
+    def __init__(self, master, midi_port=None, on_output=None, on_first_beat=None, on_version=None, status=None):
         super().__init__(master)
         self.on_output = on_output
         self.on_first_beat = on_first_beat
+        self.on_version = on_version
         self.path = None
         self.loaded_mtime = None
         self.target = None
@@ -163,9 +162,14 @@ class PianoRollView(ttk.Frame):
         self.after_id = None
         self.play_after_id = None
         self.center_pending = False
-        self.changes = None
-        self.changes_mtime = None
-        self.answer = None
+        self.versions = []
+        self.shown_role = None
+        self.reference_role = None
+        self.reference_choice = None  # The role the user picked, or 'none'; reused for the next song.
+        self.diff_items = []
+        self.diff_message = ''
+        self.comparison_stamp = None
+        self.diff_enabled = dict.fromkeys(KINDS, True)
         self.change_items = {}
         self.note_items = {}
         self.label_images = {}
@@ -189,7 +193,7 @@ class PianoRollView(ttk.Frame):
             value=default_output_name() if midi_port in (None, 'CoPiano') else display_port_name(midi_port))
         self.shading = tk.BooleanVar(value=True)
         self.show_chords = tk.BooleanVar(value=True)
-        self.change_mode = tk.StringVar(value=tr('Hide changes'))
+        self.show_versions = tk.BooleanVar(value=True)
         self.hand_enabled = {hand: tk.BooleanVar(value=True) for hand in HAND_ORDER}
         self.target_text = tk.StringVar()
         self.status = status if status is not None else tk.StringVar(value=tr('Ready'))
@@ -232,21 +236,12 @@ class PianoRollView(ttk.Frame):
         selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=22, state='readonly')
         selector.pack(side='left')
         selector.bind('<<ComboboxSelected>>', self.change_output)
-        self.change_modes = {tr(label): mode for label, mode in (
-            ('Hide changes', 'none'), ('Deleted notes', 'deleted'),
-            ('Shortened tails', 'shortened'), ('All changes', 'all'),
-            ('Extra notes (vs answer)', 'extra'), ('Missed notes (vs answer)', 'missed'),
-            ('Answer errors', 'answer'))}
         # Rarely changed view options live in one menu; the legend beside it shows what the colours mean.
         view = ttk.Menubutton(play, text=tr('View'))
         menu = tk.Menu(view, tearoff=False)
         menu.add_checkbutton(label=tr('Velocity shading'), variable=self.shading, command=self.recolor_notes)
         menu.add_checkbutton(label=tr('Chord track'), variable=self.show_chords, command=self.layout_chord_track)
-        overlay = tk.Menu(menu, tearoff=False)
-        for label in self.change_modes:
-            overlay.add_radiobutton(label=label, variable=self.change_mode, value=label,
-                                    command=self.change_overlay_selected)
-        menu.add_cascade(label=tr('Change overlay'), menu=overlay)
+        menu.add_checkbutton(label=tr('Version sidebar'), variable=self.show_versions, command=self.layout_sidebar)
         view['menu'] = menu
         view.pack(side='right')
         background = ttk.Style(self).lookup('TFrame', 'background') or self.winfo_toplevel().cget('background')
@@ -255,7 +250,10 @@ class PianoRollView(ttk.Frame):
         self.legend.pack(side='right', padx=(0, 10))
         self.legend_font = tkfont.nametofont('TkDefaultFont')
 
-        roll = ttk.Frame(self)
+        self.sidebar = VersionSidebar(self, on_show=self.select_version, on_reference=self.select_reference,
+                                      on_toggle=self.toggle_kind, on_next=self.next_difference)
+        self.sidebar.pack(side='right', fill='y', padx=(8, 0))
+        roll = self.roll_frame = ttk.Frame(self)
         roll.pack(fill='both', expand=True)
         self.ruler = tk.Canvas(roll, height=RULER_HEIGHT, background=RULER_BACKGROUND, highlightthickness=0,
                                xscrollincrement=HORIZONTAL_SCROLL_INCREMENT)
@@ -350,7 +348,7 @@ class PianoRollView(ttk.Frame):
         self.xview('moveto', left * self.pixels_per_second / self.width())
 
     def width(self):
-        end = max([self.duration] + [item['end'] for item in (self.changes or []) + self.answer_items()])
+        end = max([self.duration] + [item['end'] for item in self.diff_items])
         return max(800.0, end * self.pixels_per_second + 80)
 
     # Loading.
@@ -360,9 +358,9 @@ class PianoRollView(ttk.Frame):
             self.stop()
             self.center_pending = False
             self.path = None
-            self.changes = None
-            self.changes_mtime = None
-            self.answer = None
+            self.versions, self.shown_role, self.reference_role, self.diff_items = [], None, None, []
+            self.diff_message, self.comparison_stamp = '', None
+            self.update_sidebar()
             self.notes, self.pedal_rows, self.duration = [], [], 0.0
             self.key_signatures = []
             self.chord_segments, self.chord_message, self.chord_job = [], '', None
@@ -372,13 +370,9 @@ class PianoRollView(ttk.Frame):
             self.set_status(tr('Choose a MIDI file first.'))
             return
         mtime = os.path.getmtime(midi_path)
-        record_mtime = tuple(path.stat().st_mtime_ns if path.is_file() else None
-                             for path in (changes_path(midi_path), answer_path(midi_path)))
         if midi_path == self.path and mtime == self.loaded_mtime:
-            if record_mtime != self.changes_mtime:
-                self.changes = load_changes(midi_path)
-                self.answer = load_record(midi_path)
-                self.changes_mtime = record_mtime
+            if self.version_stamp(midi_path) != self.comparison_stamp:
+                self.refresh_comparison()
                 self.draw()
             return
         same_file = midi_path == self.path
@@ -386,9 +380,7 @@ class PianoRollView(ttk.Frame):
         self.stop()
         self.notes, pedals, self.duration, bpm, self.key_signatures = read_roll(midi_path)
         self.path, self.loaded_mtime = midi_path, mtime
-        self.changes = load_changes(midi_path)
-        self.answer = load_record(midi_path)
-        self.changes_mtime = record_mtime
+        self.refresh_comparison()
         streams = defaultdict(list)
         for channel, intervals in sorted(pedals.items()):
             streams[tuple(intervals)].append(channel)
@@ -441,22 +433,10 @@ class PianoRollView(ttk.Frame):
 
     def reset_change_hint(self):
         self.hide_change_tooltip()
-        mode = self.change_modes[self.change_mode.get()]
-        if mode == 'none':
-            return
-        elif mode in ANSWER_MODES:
-            if self.answer is None:
-                text = tr('No matching answer comparison. Run compare_answer.py first.')
-            else:
-                text = tr('Red outline: extra notes   Red dashed: missed notes   Extra {} / Missed {}').format(
-                    self.answer['counts']['extra'], self.answer['counts']['missed'])
-        elif self.changes is None:
-            text = tr('No matching change record. Run processing to record changes.')
-        elif not self.changes:
-            text = tr('No notes were deleted or shortened.')
-        else:
-            text = tr('Red: deleted notes   Orange: shortened tails')
-        self.set_status(text)
+        if self.reference_role is not None and not self.diff_message:
+            counts = kind_counts(self.diff_items)
+            self.set_status(tr('Against {}: ').format(self.role_label(self.reference_role)) + tr(', ').join(
+                '{} {}'.format(tr(KIND_LABELS[kind]), counts[kind]) for kind in KINDS))
 
     def hide_change_tooltip(self):
         if self.change_tooltip is not None:
@@ -476,16 +456,20 @@ class PianoRollView(ttk.Frame):
         if change is None:
             self.reset_change_hint()
             return
-        if change['kind'] in ('extra', 'missed'):
-            self.set_status(note_name(change['pitch']))
-            self.place_tooltip(self.canvas, current[0], tr('Extra note: not in the answer') if change['kind'] == 'extra'
-                               else tr('Missed note: in the answer, not transcribed'))
-            return
-        stage = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
-                 'trim': 'Overlap trim'}[change['stage']]
         self.set_status(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
-        title = tr('Deletion reason:') if change['kind'] == 'deleted' else tr('Trimming reason:')
-        self.place_tooltip(self.canvas, current[0], title + '\n' + tr(stage))
+        kind, reference = change['kind'], self.role_label(self.reference_role)
+        if 'stage' in change:
+            title = tr('Deletion reason:') if kind == 'missed' else tr('Trimming reason:')
+            text = title + '\n' + tr(STAGE_REASONS[change['stage']])
+        elif kind == 'extra':
+            text = tr('Extra note: not in {}').format(reference)
+        elif kind == 'missed':
+            text = tr('Missing note: in {}, not here').format(reference)
+        else:
+            milliseconds = round((change['end'] - change['start']) * 1000)
+            text = (tr('Tail {} ms shorter than in {}') if kind == 'shortened'
+                    else tr('Tail {} ms longer than in {}')).format(milliseconds, reference)
+        self.place_tooltip(self.canvas, current[0], text)
 
     def place_tooltip(self, canvas, item, text, bounds=None):
         """Anchor once below the hovered item's visible bounds, not to the pointer."""
@@ -550,7 +534,7 @@ class PianoRollView(ttk.Frame):
             item = self.canvas.create_rectangle(start * pps, y, max(end * pps, start * pps + 3), y + ROW_HEIGHT - 1,
                                                 fill=self.note_color(channel, velocity), outline='', tags='note')
             self.note_items[item] = (pitch, velocity, channel)
-        self.canvas.tag_raise('answer')
+        self.canvas.tag_raise('above')
 
         for row, (channels, intervals) in enumerate(self.pedal_rows):
             y = row * PEDAL_ROW_HEIGHT
@@ -609,22 +593,15 @@ class PianoRollView(ttk.Frame):
             canvas.tag_bind(tag, '<Leave>', lambda _event, hand=hand: self.hover_hand(hand, False))
             canvas.tag_bind(tag, '<Button-1>', lambda _event, hand=hand: self.toggle_hand(hand))
             x += width + 2
-        kinds = OVERLAY_KINDS[self.change_modes[self.change_mode.get()]]
+        counts = kind_counts(self.diff_items)
+        kinds = [kind for kind in KINDS if self.diff_enabled[kind] and counts[kind]]
         if kinds and x:
             canvas.create_line(x + 6, 6, x + 6, LEGEND_HEIGHT - 6, fill=LEGEND_DIVIDER)
             x += 12
         for kind in kinds:
             x += 8
-            top, bottom = middle - 4, middle + 4
-            if kind in ('deleted', 'shortened'):
-                deleted = kind == 'deleted'
-                canvas.create_rectangle(x, top, x + 14, bottom, fill=DELETED_FILL if deleted else SHORTENED_FILL,
-                                        outline=DELETED_OUTLINE if deleted else SHORTENED_OUTLINE,
-                                        dash=(3, 2) if deleted else ())
-            else:
-                canvas.create_rectangle(x + 1, top, x + 13, bottom, outline=ANSWER_ERROR, width=2,
-                                        dash=() if kind == 'extra' else (3, 2))
-            text = tr(OVERLAY_LABELS[kind])
+            draw_swatch(canvas, kind, x, middle)
+            text = tr(KIND_LABELS[kind])
             canvas.create_text(x + 20, middle, text=text, anchor='w', font=self.legend_font, fill=LABEL_TEXT)
             x += 20 + self.legend_font.measure(text) + 4
         canvas.configure(width=max(1, x))
@@ -643,45 +620,110 @@ class PianoRollView(ttk.Frame):
         self.hover_hand(hand, True)
         self.focus_roll()
 
-    def change_overlay_selected(self):
+    # Versions and comparison.
+    def version_stamp(self, midi_path):
+        """File times of every version and record the comparison reads, to notice outside changes."""
+        paths = [version.path for version in song_versions(midi_path)]
+        paths += [str(record(path)) for path in paths for record in (changes_path, answer_path)]
+        return tuple(os.path.getmtime(path) if os.path.isfile(path) else None for path in paths)
+
+    def refresh_comparison(self):
+        self.versions = song_versions(self.path)
+        self.shown_role = next(version.role for version in self.versions
+                               if os.path.samefile(version.path, self.path))
+        self.reference_role = default_reference(self.versions, self.shown_role, self.reference_choice)
+        self.comparison_stamp = self.version_stamp(self.path)
+        self.diff_items, self.diff_message = [], ''
+        if self.reference_role is not None:
+            try:
+                self.diff_items = compare_versions(self.versions, self.shown_role, self.reference_role)
+            except (OSError, ValueError, KeyError, IndexError, EOFError) as error:
+                self.diff_message = tr('Comparison failed: {}').format(error)
+        self.update_sidebar()
+
+    def update_sidebar(self):
+        stages = next((stage_counts(version.path) for version in self.versions if version.role == 'cleaned'), None)
+        self.sidebar.update_view(self.versions, self.shown_role, self.reference_role,
+                                 kind_counts(self.diff_items) if self.reference_role else None,
+                                 stages, self.diff_enabled, self.diff_message)
+
+    def role_label(self, role):
+        return tr(ROLE_LABELS[role]) if role else ''
+
+    def layout_sidebar(self):
+        if self.show_versions.get():
+            self.sidebar.pack(side='right', fill='y', padx=(8, 0), before=self.roll_frame)
+        else:
+            self.sidebar.pack_forget()
+
+    def select_version(self, path):
+        """Show another version; the panel keeps it as the preview so tab changes do not revert it."""
+        self.show(path)
+        if self.on_version:
+            self.on_version(path)
+        self.focus_roll()
+
+    def select_reference(self, role):
+        self.reference_choice = 'none' if role == self.reference_role else role
+        self.refresh_comparison()
+        self.draw()
+        self.focus_roll()
+
+    def toggle_kind(self, kind):
+        self.diff_enabled[kind] = not self.diff_enabled[kind]
+        self.update_sidebar()
         self.draw_changes()
         self.draw_legend()
+        self.focus_roll()
+
+    def next_difference(self, kind):
+        """Move the playhead to the next difference of one kind after it, wrapping to the first."""
+        items = sorted((item for item in self.diff_items if item['kind'] == kind), key=lambda item: item['start'])
+        if not items:
+            return
+        position = self.position_seconds()
+        item = next((item for item in items if item['start'] > position + 0.05), items[0])
+        playing = self.play_started is not None
+        self.stop()
+        self.play_start_seconds = min(item['start'], self.duration)
+        self.move_playhead(self.play_start_seconds)
+        x = item['start'] * self.pixels_per_second
+        self.xview('moveto', max(0.0, x - self.canvas.winfo_width() / 3) / self.width())
+        center = (PITCHES - 1 - item['pitch'] + 0.5) * ROW_HEIGHT
+        top = max(0.0, center - self.canvas.winfo_height() / 2)
+        self.yview('moveto', top / (PITCHES * ROW_HEIGHT))
+        self.focus_roll()
+        if playing:
+            self.play()
 
     def draw_changes(self):
+        """Missing notes and shorter tails sit under the notes; extra notes and longer tails outline them."""
         self.canvas.delete('change')
         pps = self.pixels_per_second
         self.change_items.clear()
         self.reset_change_hint()
-        mode = self.change_modes[self.change_mode.get()]
-        for change in self.changes or []:
-            if mode not in ('all', change['kind']):
+        for change in self.diff_items:
+            kind = change['kind']
+            if not self.diff_enabled[kind]:
                 continue
-            deleted = change['kind'] == 'deleted'
             y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
-            item = self.canvas.create_rectangle(
-                change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3),
-                y + ROW_HEIGHT - 1, fill=DELETED_FILL if deleted else SHORTENED_FILL,
-                outline=DELETED_OUTLINE if deleted else SHORTENED_OUTLINE, stipple='gray50',
-                dash=(3, 2) if deleted else (), tags='change')
+            box = (change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3), y + ROW_HEIGHT - 1)
+            if kind == 'missed':
+                item = self.canvas.create_rectangle(*box, fill=DELETED_FILL, outline=DELETED_OUTLINE,
+                                                    stipple='gray50', dash=(3, 2), tags='change')
+            elif kind == 'shortened':
+                item = self.canvas.create_rectangle(*box, fill=SHORTENED_FILL, outline=SHORTENED_OUTLINE,
+                                                    stipple='gray50', tags='change')
+            else:
+                item = self.canvas.create_rectangle(
+                    *box, outline=ANSWER_ERROR if kind == 'extra' else LENGTHENED_OUTLINE, width=2,
+                    tags=('change', 'above'))
             self.change_items[item] = change
         if self.canvas.find_withtag('note'):
             self.canvas.tag_lower('change', 'note')
-        # Answer errors sit above the notes: an extra outlines the model's own note.
-        for item_data in self.answer_items():
-            if mode not in ('answer', item_data['kind']):
-                continue
-            extra = item_data['kind'] == 'extra'
-            y = (PITCHES - 1 - item_data['pitch']) * ROW_HEIGHT + 1
-            item = self.canvas.create_rectangle(
-                item_data['start'] * pps, y, max(item_data['end'] * pps, item_data['start'] * pps + 3),
-                y + ROW_HEIGHT - 1, outline=ANSWER_ERROR, width=2, dash=() if extra else (3, 2), tags=('change', 'answer'))
-            self.change_items[item] = item_data
-        self.canvas.tag_raise('answer')
+        self.canvas.tag_raise('above')
         if getattr(self, 'playhead', None):
             self.canvas.tag_raise(self.playhead)
-
-    def answer_items(self):
-        return self.answer['items'] if self.answer else []
 
     # Chord track.
     def start_chord_analysis(self, midi_path, mtime):

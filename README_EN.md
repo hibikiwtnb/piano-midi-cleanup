@@ -158,7 +158,7 @@ Here, `*` stands for your original base filename. Actual outputs keep that name;
 | `*_stats.txt` | Statistics and run record | Each processing block is updated |
 | `*_bpmfix.mid` | Tempo-corrected MIDI; first beat and key signatures can be written here | Rebuild source; manual first beat is saved here |
 | `*_bpmfix_cleaned.mid` | Processed result after rule cleanup, hand split and optional trim | Overwritten on every run |
-| `*_bpmfix_cleaned.changes.json` | Data for the roll's change overlay | Tied to the same result |
+| `*_bpmfix_cleaned.changes.json` | Processing record for the roll's version comparison | Tied to the same result |
 | `*.chords.json` | Chord-analysis cache for a viewed MIDI | Matched by MIDI content and analysis version |
 | `*_bpmfix_cleaned_pianoroll/` | Piano roll PNGs | Created only when snapshots are enabled |
 

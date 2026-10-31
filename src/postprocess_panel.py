@@ -250,6 +250,7 @@ class Panel:
         about = ttk.Frame(self.main_tabs, padding=8)
         self.roll = PianoRollView(self.main_tabs, midi_port=self.settings.get('playback_output'),
                                   on_output=self.save_midi_output, on_first_beat=self.first_beat_saved,
+                                  on_version=self.version_selected,
                                   status=self.status)
         self.roll.configure(padding=8)
         self.main_tabs.add(processing, text=tr('Processing'))
@@ -391,6 +392,9 @@ class Panel:
     def save_midi_output(self, name):
         self.settings['playback_output'] = name
         save_settings(self.settings)
+
+    def version_selected(self, path):
+        self.preview_path = path
 
     def first_beat_saved(self, target):
         self.preview_path = target

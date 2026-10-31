@@ -158,7 +158,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 | `*_stats.txt` | 各步驟統計與執行紀錄 | 每個處理區塊會更新 |
 | `*_bpmfix.mid` | 速度修正版；第一拍與調號可寫在這裡 | 後處理的重建來源；手動第一拍也寫在這裡 |
 | `*_bpmfix_cleaned.mid` | 處理結果：規則清理、分手、可選截斷後的 MIDI | 每次重跑都會覆寫 |
-| `*_bpmfix_cleaned.changes.json` | 捲簾「修改痕跡」用的紀錄 | 只對應同一份處理結果 |
+| `*_bpmfix_cleaned.changes.json` | 捲簾版本比較用的處理紀錄 | 只對應同一份處理結果 |
 | `*.chords.json` | 顯示過的 MIDI 的和弦分析快取 | 以 MIDI 內容與分析版本比對 |
 | `*_bpmfix_cleaned_pianoroll/` | 捲簾 PNG | 只有勾選截圖時產生 |
 
