@@ -29,7 +29,7 @@ from compare_answer import answer_path
 from note_changes import changes_path, load_changes, save_changes, shift_changes
 from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
 from version_sidebar import (
-    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, KIND_LABELS, LENGTHENED_OUTLINE, ROLE_LABELS, SHORTENED_FILL,
+    ANSWER_ERROR, DELETED_FILL, DELETED_OUTLINE, LENGTHENED_OUTLINE, ROLE_LABELS, SHORTENED_FILL,
     SHORTENED_OUTLINE, VersionSidebar, draw_swatch)
 
 
@@ -435,8 +435,9 @@ class PianoRollView(ttk.Frame):
         self.hide_change_tooltip()
         if self.reference_role is not None and not self.diff_message:
             counts = kind_counts(self.diff_items)
-            self.set_status(tr('Against {}: ').format(self.role_label(self.reference_role)) + tr(', ').join(
-                '{} {}'.format(tr(KIND_LABELS[kind]), counts[kind]) for kind in KINDS))
+            self.set_status(tr('{} against {}: ').format(self.role_label(self.shown_role),
+                                                       self.role_label(self.reference_role)) + tr(', ').join(
+                '{} {}'.format(self.kind_label(kind), counts[kind]) for kind in KINDS))
 
     def hide_change_tooltip(self):
         if self.change_tooltip is not None:
@@ -457,18 +458,17 @@ class PianoRollView(ttk.Frame):
             self.reset_change_hint()
             return
         self.set_status(tr('{} | Velocity {}').format(note_name(change['pitch']), change['velocity']))
-        kind, reference = change['kind'], self.role_label(self.reference_role)
-        if 'stage' in change:
-            title = tr('Deletion reason:') if kind == 'missed' else tr('Trimming reason:')
-            text = title + '\n' + tr(STAGE_REASONS[change['stage']])
-        elif kind == 'extra':
-            text = tr('Extra note: not in {}').format(reference)
-        elif kind == 'missed':
-            text = tr('Missing note: in {}, not here').format(reference)
+        kind = change['kind']
+        shown, reference = self.role_label(self.shown_role), self.role_label(self.reference_role)
+        if kind in ('shown_only', 'reference_only'):
+            here, there = (shown, reference) if kind == 'shown_only' else (reference, shown)
+            text = tr('Only in {}; not in {}').format(here, there)
         else:
-            milliseconds = round((change['end'] - change['start']) * 1000)
-            text = (tr('Tail {} ms shorter than in {}') if kind == 'shortened'
-                    else tr('Tail {} ms longer than in {}')).format(milliseconds, reference)
+            longer = shown if kind == 'shown_longer' else reference
+            text = tr('Tail {} ms longer in {}').format(round((change['end'] - change['start']) * 1000), longer)
+        if 'stage' in change:
+            # The processing record states which stage removed or trimmed it; nothing is inferred.
+            text += '\n' + tr('Processing record: {}').format(tr(STAGE_REASONS[change['stage']]))
         self.place_tooltip(self.canvas, current[0], text)
 
     def place_tooltip(self, canvas, item, text, bounds=None):
@@ -602,7 +602,7 @@ class PianoRollView(ttk.Frame):
         for kind in kinds:
             x += 8
             draw_swatch(canvas, kind, x, middle)
-            text = tr(KIND_LABELS[kind])
+            text = self.kind_label(kind)
             canvas.create_text(x + 20, middle, text=text, anchor='w', font=self.legend_font, fill=LABEL_TEXT)
             x += 20 + self.legend_font.measure(text) + 4
         canvas.configure(width=max(1, x))
@@ -651,6 +651,12 @@ class PianoRollView(ttk.Frame):
     def role_label(self, role):
         return tr(ROLE_LABELS[role]) if role else ''
 
+    def kind_label(self, kind):
+        """Names the side, e.g. 'Only in Processed result' or 'Tempo corrected tail longer'."""
+        role = self.shown_role if kind.startswith('shown') else self.reference_role
+        template = 'Only in {}' if kind.endswith('only') else '{} tail longer'
+        return tr(template).format(self.role_label(role))
+
     def layout_sidebar(self):
         if self.show_versions.get():
             self.sidebar.pack(side='right', fill='y', padx=(8, 0), before=self.roll_frame)
@@ -698,7 +704,7 @@ class PianoRollView(ttk.Frame):
             self.play()
 
     def draw_changes(self):
-        """Missing notes and shorter tails sit under the notes; extra notes and longer tails outline them."""
+        """What only the reference has is a ghost under the notes; the shown file's own differences are outlined."""
         self.canvas.delete('change')
         pps = self.pixels_per_second
         self.change_items.clear()
@@ -709,15 +715,15 @@ class PianoRollView(ttk.Frame):
                 continue
             y = (PITCHES - 1 - change['pitch']) * ROW_HEIGHT + 1
             box = (change['start'] * pps, y, max(change['end'] * pps, change['start'] * pps + 3), y + ROW_HEIGHT - 1)
-            if kind == 'missed':
+            if kind == 'reference_only':
                 item = self.canvas.create_rectangle(*box, fill=DELETED_FILL, outline=DELETED_OUTLINE,
                                                     stipple='gray50', dash=(3, 2), tags='change')
-            elif kind == 'shortened':
+            elif kind == 'reference_longer':
                 item = self.canvas.create_rectangle(*box, fill=SHORTENED_FILL, outline=SHORTENED_OUTLINE,
                                                     stipple='gray50', tags='change')
             else:
                 item = self.canvas.create_rectangle(
-                    *box, outline=ANSWER_ERROR if kind == 'extra' else LENGTHENED_OUTLINE, width=2,
+                    *box, outline=ANSWER_ERROR if kind == 'shown_only' else LENGTHENED_OUTLINE, width=2,
                     tags=('change', 'above'))
             self.change_items[item] = change
         if self.canvas.find_withtag('note'):

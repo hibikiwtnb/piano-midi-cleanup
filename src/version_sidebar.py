@@ -22,12 +22,9 @@ ANSWER_ERROR = '#d32f2f'
 
 ROLE_LABELS = {'original': 'Original', 'bpmfix': 'Tempo corrected', 'cleaned': 'Processed result',
                'answer': 'Answer', 'other': 'Other file'}
-KIND_LABELS = {'extra': 'Extra notes', 'missed': 'Missing notes', 'shortened': 'Shorter tails',
-               'lengthened': 'Longer tails'}
-# Inside the Tails column the column title already says what is shorter or longer.
-COLUMN_LABELS = dict(KIND_LABELS, shortened='Shorter', lengthened='Longer')
+# Comparison table: one row per difference type, one column per side. No side is assumed right.
+TABLE_ROWS = (('Only here', ('shown_only', 'reference_only')), ('Longer tail', ('shown_longer', 'reference_longer')))
 STAGE_LABELS = (('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
-COLUMNS = (('Notes', ('extra', 'missed')), ('Tails', ('shortened', 'lengthened')))
 PADDING = 12
 ROW_HEIGHT = 42
 STAGE_HEIGHT = 18
@@ -35,17 +32,20 @@ KIND_HEIGHT = 26
 
 
 def draw_swatch(canvas, kind, x, middle, enabled=True, tags=()):
-    """A small note-shaped sample of how the roll draws one comparison kind."""
+    """A small note-shaped sample of how the roll draws one comparison kind.
+
+    The shown file's own notes and tails are outlined; what only the reference has is a pale ghost.
+    """
     top, bottom = middle - 4, middle + 4
     if not enabled:
         return canvas.create_rectangle(x, top, x + 14, bottom, outline=DISABLED_TEXT, tags=tags)
-    if kind == 'missed':
+    if kind == 'reference_only':
         return canvas.create_rectangle(x, top, x + 14, bottom, fill=DELETED_FILL, outline=DELETED_OUTLINE,
                                        dash=(3, 2), tags=tags)
-    if kind == 'shortened':
+    if kind == 'reference_longer':
         return canvas.create_rectangle(x, top, x + 14, bottom, fill=SHORTENED_FILL, outline=SHORTENED_OUTLINE,
                                        tags=tags)
-    color = ANSWER_ERROR if kind == 'extra' else LENGTHENED_OUTLINE
+    color = ANSWER_ERROR if kind == 'shown_only' else LENGTHENED_OUTLINE
     return canvas.create_rectangle(x + 1, top, x + 13, bottom, outline=color, width=2, tags=tags)
 
 
@@ -109,7 +109,10 @@ class VersionSidebar(tk.Frame):
         right = width - PADDING
         y = PADDING
         canvas.create_text(PADDING, y, text=tr('Versions'), anchor='nw', font=self.title_font, fill=PRIMARY_TEXT)
-        y += self.title_font.metrics('linespace') + 8
+        y += self.title_font.metrics('linespace') + 2
+        canvas.create_text(PADDING, y, text=tr('Click to show · Compare sets the other side'), anchor='nw',
+                           font=self.small_font, fill=DISABLED_TEXT, width=right - PADDING)
+        y += self.small_font.metrics('linespace') + 8
 
         for index, version in enumerate(versions):
             shown = version.role == shown_role
@@ -166,43 +169,39 @@ class VersionSidebar(tk.Frame):
         y += 12
         canvas.create_text(PADDING, y, text=tr('Comparison'), anchor='nw', font=self.title_font, fill=PRIMARY_TEXT)
         y += self.title_font.metrics('linespace') + 4
-        if reference_role is None:
-            summary = tr('Choose Compare on a version to see the differences.')
-        else:
-            summary = tr('{} against {}').format(tr(ROLE_LABELS[shown_role]), tr(ROLE_LABELS[reference_role]))
-        summary_item = canvas.create_text(PADDING, y, text=message or summary, anchor='nw', font=self.small_font,
-                                          fill=SECONDARY_TEXT, width=right - PADDING)
-        y = canvas.bbox(summary_item)[3] + 12
-        if reference_role is None or counts is None:
+        if message or reference_role is None:
+            canvas.create_text(PADDING, y, text=message or tr('Not comparing. Press Compare on a version.'),
+                               anchor='nw', font=self.small_font, fill=SECONDARY_TEXT, width=right - PADDING)
             return
 
-        column_width = (right - PADDING - 12) / 2
-        for column, (title, kinds) in enumerate(COLUMNS):
-            left = PADDING + column * (column_width + 12)
-            canvas.create_text(left, y, text=tr(title), anchor='nw', font=self.role_font, fill=SECONDARY_TEXT)
-            row_y = y + self.role_font.metrics('linespace') + 6
-            for kind in kinds:
+        # Header row: the two sides by name, the shown one first.
+        label_width = max(self.small_font.measure(tr(title)) for title, _ in TABLE_ROWS) + 10
+        cell_width = (right - PADDING - label_width) / 2
+        lefts = [PADDING + label_width + column * cell_width for column in range(2)]
+        for left, role in zip(lefts, (shown_role, reference_role)):
+            canvas.create_text(left + 2, y, text=self.elide(tr(ROLE_LABELS[role]), self.role_font, cell_width - 6),
+                               anchor='nw', font=self.role_font, fill=PRIMARY_TEXT)
+        y += self.role_font.metrics('linespace') + 6
+        for title, kinds in TABLE_ROWS:
+            middle = y + (KIND_HEIGHT - 2) / 2
+            canvas.create_text(PADDING, middle, text=tr(title), anchor='w', font=self.small_font, fill=SECONDARY_TEXT)
+            for left, kind in zip(lefts, kinds):
                 tag = 'kind_' + kind
                 on = enabled[kind]
-                rounded_rect(canvas, left - 4, row_y, left + column_width, row_y + KIND_HEIGHT - 2, 7,
+                cell_right = left + cell_width - 4
+                rounded_rect(canvas, left - 2, y, cell_right, y + KIND_HEIGHT - 2, 7,
                              fill=SIDEBAR_BACKGROUND, outline='', tags=(tag, 'hover'))
-                middle = row_y + (KIND_HEIGHT - 2) / 2
-                draw_swatch(canvas, kind, left + 2, middle, on, tags=tag)
-                label = tr(COLUMN_LABELS[kind])
-                canvas.create_text(left + 22, middle, text=label, anchor='w', font=self.text_font,
+                draw_swatch(canvas, kind, left + 4, middle, on, tags=tag)
+                canvas.create_text(left + 24, middle, text=str(counts[kind]), anchor='w', font=self.text_font,
                                    fill=PRIMARY_TEXT if on else DISABLED_TEXT, tags=tag)
-                count_right = left + column_width - 16
-                canvas.create_text(count_right, middle, text=str(counts[kind]), anchor='e', font=self.text_font,
-                                   fill=SECONDARY_TEXT if on else DISABLED_TEXT, tags=tag)
                 self.bind_area(tag, lambda kind=kind: self.on_toggle(kind))
                 if counts[kind] and on:
                     jump = 'next_' + kind
-                    rounded_rect(canvas, count_right + 2, row_y + 3, left + column_width, row_y + KIND_HEIGHT - 5, 5,
-                                 fill=SIDEBAR_BACKGROUND, outline='',
-                                 tags=(jump, 'hover'))
-                    canvas.create_text(count_right + 8, middle, text='›', font=self.title_font, fill=ACCENT, tags=jump)
+                    rounded_rect(canvas, cell_right - 18, y + 3, cell_right, y + KIND_HEIGHT - 5, 5,
+                                 fill=SIDEBAR_BACKGROUND, outline='', tags=(jump, 'hover'))
+                    canvas.create_text(cell_right - 9, middle, text='›', font=self.title_font, fill=ACCENT, tags=jump)
                     self.bind_area(jump, lambda kind=kind: self.on_next(kind))
-                row_y += KIND_HEIGHT
-        y = row_y + 8
-        canvas.create_text(PADDING, y, text=tr('Click a row to show or hide it; › jumps to the next one.'),
+            y += KIND_HEIGHT
+        y += 6
+        canvas.create_text(PADDING, y, text=tr('Click a cell to show or hide it · › next'),
                            anchor='nw', font=self.small_font, fill=DISABLED_TEXT, width=right - PADDING)

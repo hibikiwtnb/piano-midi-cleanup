@@ -8,10 +8,11 @@ alignment. Both sides are mapped onto the bpmfix timeline, compared, and the
 result is mapped back onto the shown file's timeline.
 
 Notes match by compare_answer's rule (same pitch, onset within 50 ms, one-to-one).
-Unmatched shown notes are extra, unmatched reference notes are missed, and matched
-pairs whose ends differ by more than TAIL_TOLERANCE are shortened or lengthened.
-Comparing cleaned with bpmfix uses the processing record instead when it is
-current, so each difference keeps the stage that made it.
+The result is symmetric and says nothing about which side is right or why they
+differ: unmatched notes are only in the shown file or only in the reference, and
+matched pairs whose ends differ by more than TAIL_TOLERANCE have the longer tail
+on one side. Comparing cleaned with bpmfix uses the processing record instead
+when it is current, so each difference also names the stage that made it.
 """
 
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ TIMELINE_ROLES = ('bpmfix', 'cleaned', 'other')
 SUFFIXES = {'bpmfix': '_bpmfix', 'cleaned': '_bpmfix_cleaned'}
 # Preferred comparison for each shown version when the user has not picked one.
 DEFAULT_REFERENCES = {'cleaned': ('bpmfix', 'answer'), 'bpmfix': ('answer',), 'other': ('answer',)}
-KINDS = ('extra', 'missed', 'shortened', 'lengthened')
+KINDS = ('shown_only', 'reference_only', 'shown_longer', 'reference_longer')
 
 
 @dataclass(frozen=True)
@@ -98,21 +99,21 @@ def mapped(notes, offset, rate):
 
 
 def diff_notes(shown, reference):
-    """Extra, missed and tail differences of shown against reference on one timeline."""
+    """Notes only on one side and tails longer on one side, for two versions on one timeline."""
     pairs = match(reference, shown)
     hit_reference = {i for i, _ in pairs}
     hit_shown = {j for _, j in pairs}
-    items = [dict(kind='extra', start=note['start'], end=note['end'], pitch=note['pitch'],
+    items = [dict(kind='shown_only', start=note['start'], end=note['end'], pitch=note['pitch'],
                   velocity=note['velocity']) for j, note in enumerate(shown) if j not in hit_shown]
-    items += [dict(kind='missed', start=note['start'], end=note['end'], pitch=note['pitch'],
+    items += [dict(kind='reference_only', start=note['start'], end=note['end'], pitch=note['pitch'],
                    velocity=note['velocity']) for i, note in enumerate(reference) if i not in hit_reference]
     for i, j in pairs:
         before, after = reference[i], shown[j]
         if after['end'] < before['end'] - TAIL_TOLERANCE:
-            items.append(dict(kind='shortened', start=after['end'], end=before['end'], pitch=after['pitch'],
+            items.append(dict(kind='reference_longer', start=after['end'], end=before['end'], pitch=after['pitch'],
                               velocity=after['velocity']))
         elif after['end'] > before['end'] + TAIL_TOLERANCE:
-            items.append(dict(kind='lengthened', start=before['end'], end=after['end'], pitch=after['pitch'],
+            items.append(dict(kind='shown_longer', start=before['end'], end=after['end'], pitch=after['pitch'],
                               velocity=after['velocity']))
     items.sort(key=lambda item: (item['start'], item['pitch']))
     return items
@@ -123,7 +124,7 @@ def processing_items(cleaned_path):
     changes = load_changes(cleaned_path)
     if changes is None:
         return None
-    return [dict(change, kind='missed' if change['kind'] == 'deleted' else 'shortened') for change in changes]
+    return [dict(change, kind='reference_only' if change['kind'] == 'deleted' else 'reference_longer') for change in changes]
 
 
 def compare_versions(versions, shown_role, reference_role):

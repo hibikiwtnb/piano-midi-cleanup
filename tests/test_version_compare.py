@@ -39,12 +39,12 @@ class DiffNotes(unittest.TestCase):
         reference = [note(1.0, 2.0, 60), note(2.0, 3.0, 62), note(3.0, 4.0, 64), note(4.0, 4.5, 65)]
         shown = [note(1.02, 1.5, 60), note(2.0, 3.5, 62), note(3.0, 4.0, 67), note(4.0, 4.52, 65)]
         counts = kind_counts(diff_notes(shown, reference))
-        # 64 is missing and 67 extra; 65's 20 ms tail difference stays under the tolerance.
-        self.assertEqual(counts, dict(extra=1, missed=1, shortened=1, lengthened=1))
+        # 64 is only in the reference and 67 only shown; 65's 20 ms tail difference is under the tolerance.
+        self.assertEqual(counts, dict(shown_only=1, reference_only=1, shown_longer=1, reference_longer=1))
 
-    def test_shorter_tail_covers_the_removed_part(self):
+    def test_longer_reference_tail_covers_the_part_the_shown_note_lacks(self):
         items = diff_notes([note(1.0, 1.5, 60)], [note(1.0, 2.0, 60)])
-        self.assertEqual([(item['kind'], item['start'], item['end']) for item in items], [('shortened', 1.5, 2.0)])
+        self.assertEqual([(item['kind'], item['start'], item['end']) for item in items], [('reference_longer', 1.5, 2.0)])
 
 
 class CompareVersions(unittest.TestCase):
@@ -59,7 +59,7 @@ class CompareVersions(unittest.TestCase):
             self.assertEqual([version.role for version in versions], ['original', 'bpmfix', 'cleaned'])
             self.assertEqual(compare_versions(versions, 'bpmfix', 'original'), [])
             missed = compare_versions(versions, 'cleaned', 'original')
-            self.assertEqual([(item['kind'], item['pitch']) for item in missed], [('missed', 67)])
+            self.assertEqual([(item['kind'], item['pitch']) for item in missed], [('reference_only', 67)])
             self.assertAlmostEqual(missed[0]['start'], 2.25, places=2)
 
 
