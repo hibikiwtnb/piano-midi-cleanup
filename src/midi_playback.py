@@ -101,8 +101,11 @@ def hand_for_channel(channel):
 
 
 def read_midi_events(path):
-    """Return timed non-meta events with a hand track id, the hands present, and the duration."""
-    midi = mido.MidiFile(path)
+    """Return timed non-meta events with a hand track id, the hands present, and the duration.
+
+    path may also be an already loaded mido.MidiFile, such as the roll's unsaved edits.
+    """
+    midi = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
     raw_events = []
     sequence = 0
 

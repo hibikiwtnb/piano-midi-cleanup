@@ -66,11 +66,18 @@ class NoteEdit(unittest.TestCase):
 
     def test_moving_to_another_channel_changes_only_the_channel(self):
         before = ticks(self.path)
-        edit_notes(self.path, [0, 4], channel=3)
+        edit_notes(self.path, channels={0: 3, 4: 3})
         notes = list(paired_notes(mido.MidiFile(self.path)))
         self.assertEqual(sorted((n.start_tick, n.end_tick, n.pitch) for n in notes),
                          sorted(note[:3] for note in before))
         self.assertEqual(sum(note.channel == 3 for note in notes), 2)
+
+    def test_delete_and_move_in_one_pass(self):
+        before = ticks(self.path)
+        edit_notes(self.path, deleted=[1], channels={4: 3})
+        after = ticks(self.path)
+        self.assertEqual(len(after), len(before) - 1)
+        self.assertEqual(sum(note[3] == 3 for note in after), 1)
 
 
 if __name__ == '__main__':

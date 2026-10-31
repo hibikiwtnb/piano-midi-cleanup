@@ -10,7 +10,7 @@ import time
 import tkinter as tk
 from collections import defaultdict
 from tkinter import font as tkfont
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import mido
@@ -27,7 +27,7 @@ from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
 from gui_i18n import tr
 from compare_answer import answer_path
 from note_changes import changes_path, load_changes, save_changes, shift_changes
-from note_edit import edit_notes, paired_notes
+from note_edit import edit_notes, edited_midi, paired_notes
 from version_compare import KINDS, compare_versions, default_reference, kind_counts, song_versions, stage_counts
 from version_sidebar import SIDE_COLORS, VersionSidebar, draw_swatch
 
@@ -178,6 +178,12 @@ class PianoRollView(ttk.Frame):
         self.hint = None
         self.selected = set()
         self.drag_start = None
+        # Unsaved note edits: file_index maps each shown note to its index in the file (note_edit order);
+        # pending_deleted and pending_channels are in file indices. Save writes them; undo steps back.
+        self.file_index = []
+        self.pending_deleted = set()
+        self.pending_channels = {}
+        self.loaded_bpm = None
         self.undo_stack = []
         self.chord_segments = []
         self.chord_message = ''
@@ -377,6 +383,11 @@ class PianoRollView(ttk.Frame):
     # Loading.
     def show(self, midi_path):
         """Load midi_path unless the same file version is already shown."""
+        if self.has_unsaved_edits():
+            current = os.path.getmtime(self.path) if os.path.isfile(self.path) else None
+            target = os.path.getmtime(midi_path) if midi_path and os.path.isfile(midi_path) else None
+            if (midi_path != self.path or target != current) and not self.confirm_unsaved():
+                return
         if not midi_path or not os.path.isfile(midi_path):
             self.stop()
             self.center_pending = False
@@ -404,6 +415,10 @@ class PianoRollView(ttk.Frame):
         view = (self.canvas.xview()[0], self.canvas.yview()[0])
         self.stop()
         self.notes, pedals, self.duration, bpm, self.key_signatures = read_roll(midi_path)
+        self.file_index = list(range(len(self.notes)))
+        self.pending_deleted, self.pending_channels, self.undo_stack = set(), {}, []
+        self.update_undo_button()
+        self.loaded_bpm = bpm
         self.path, self.loaded_mtime = midi_path, mtime
         self.refresh_comparison()
         streams = defaultdict(list)
@@ -725,29 +740,28 @@ class PianoRollView(ttk.Frame):
         return True
 
     def edit_selected(self, channel=None):
-        """Delete the selection, or move it to channel; the selection stays on moved notes."""
+        """Delete the selection, or move it to channel, on screen only; Save writes it to the MIDI file."""
         if not self.editable():
             return 'break'
-        path = self.path
-        keep = {self.notes[index][:3] for index in self.selected} if channel is not None else set()
-        position = self.position_seconds()
         self.stop()
-        try:
-            with open(path, 'rb') as source:
-                backup = source.read()
-            edit_notes(path, sorted(self.selected), channel)
-        except (OSError, ValueError, IndexError, EOFError) as error:
-            self.set_status(tr('Edit failed: {}').format(error))
-            return 'break'
-        self.undo_stack = (self.undo_stack + [(path, backup)])[-UNDO_LIMIT:]
-        self.undo_button.configure(state='normal')
+        self.undo_stack = (self.undo_stack + [(list(self.notes), list(self.file_index), set(self.pending_deleted),
+                                               dict(self.pending_channels), set(self.selected))])[-UNDO_LIMIT:]
         count = len(self.selected)
-        self.reload_after_edit(position, keep)
         if channel is None:
-            self.set_status(tr('Deleted {} notes. Undo (Cmd/Ctrl+Z) restores them.').format(count))
+            self.pending_deleted |= {self.file_index[index] for index in self.selected}
+            kept = [index for index in range(len(self.notes)) if index not in self.selected]
+            self.notes = [self.notes[index] for index in kept]
+            self.file_index = [self.file_index[index] for index in kept]
+            self.selected = set()
+            self.set_status(tr('Deleted {} notes (not saved yet).').format(count))
         else:
-            self.set_status(tr('Moved {} notes to {}. Press C again for the next hand.').format(
+            for index in self.selected:
+                start, end, pitch, _, velocity = self.notes[index]
+                self.notes[index] = (start, end, pitch, channel, velocity)
+                self.pending_channels[self.file_index[index]] = channel
+            self.set_status(tr('Moved {} notes to {} (not saved yet). Press C again for the next hand.').format(
                 count, tr(HAND_BY_CHANNEL[channel].replace('_', ' '))))
+        self.edits_changed()
         return 'break'
 
     def cycle_hand(self):
@@ -764,30 +778,46 @@ class PianoRollView(ttk.Frame):
     def undo_edit(self):
         if not self.undo_stack:
             return 'break'
-        path, backup = self.undo_stack.pop()
-        if not self.undo_stack:
-            self.undo_button.configure(state='disabled')
-        position = self.position_seconds()
         self.stop()
-        try:
-            with open(path, 'wb') as target:
-                target.write(backup)
-        except OSError as error:
-            self.set_status(tr('Edit failed: {}').format(error))
-            return 'break'
-        if path == self.path:
-            self.reload_after_edit(position, set())
+        self.notes, self.file_index, self.pending_deleted, self.pending_channels, self.selected = self.undo_stack.pop()
+        self.edits_changed()
         self.set_status(tr('Undid the last edit.'))
         return 'break'
 
-    def reload_after_edit(self, position, keep):
-        """Reload the edited file in place, keeping the playhead and reselecting kept (start, end, pitch) notes."""
-        self.selected = set()
-        self.show(self.path)
-        self.selected = {index for index, note in enumerate(self.notes) if note[:3] in keep}
-        self.set_selection(self.selected)
-        self.play_start_seconds = min(position, self.duration)
-        self.move_playhead(self.play_start_seconds)
+    def has_unsaved_edits(self):
+        return bool(self.pending_deleted or self.pending_channels)
+
+    def edits_changed(self):
+        self.update_undo_button()
+        self.target_text.set(tr('Unsaved note edits; Save writes them to {}').format(os.path.basename(self.path))
+                             if self.has_unsaved_edits() else
+                             tr('First beat is saved to {}').format(self.first_beat_files()))
+        self.draw()
+
+    def update_undo_button(self):
+        self.undo_button.configure(state='normal' if self.undo_stack else 'disabled')
+
+    def save_edits(self):
+        """Write the unsaved note edits into the shown MIDI; returns False when writing failed."""
+        try:
+            edit_notes(self.path, self.pending_deleted, self.pending_channels)
+        except (OSError, ValueError, IndexError, EOFError) as error:
+            self.set_status(tr('Edit failed: {}').format(error))
+            return False
+        self.pending_deleted, self.pending_channels, self.undo_stack = set(), {}, []
+        self.update_undo_button()
+        return True
+
+    def confirm_unsaved(self, cancel=True):
+        """Ask before unsaved edits would be lost; False means stay. Without cancel the answer is save or discard."""
+        title, message = tr('Unsaved note edits'), tr('Save the note edits to {}?').format(os.path.basename(self.path))
+        answer = (messagebox.askyesnocancel if cancel else messagebox.askyesno)(title, message, parent=self)
+        if answer is None:
+            return False
+        if answer and not self.save_edits():
+            return False
+        self.pending_deleted, self.pending_channels, self.undo_stack = set(), {}, []
+        return True
 
     # Versions and comparison.
     def version_stamp(self, midi_path):
@@ -1147,7 +1177,10 @@ class PianoRollView(ttk.Frame):
             return
         self.set_status(tr('Playback output: {}').format(self.output_var.get()))
         position = self.position_seconds()
-        self.playback.play(self.path, position)
+        # Unsaved edits are heard as shown, without writing the file.
+        source = (edited_midi(self.path, self.pending_deleted, self.pending_channels) if self.has_unsaved_edits()
+                  else self.path)
+        self.playback.play(source, position)
         self.apply_mix()
         self.play_started = time.monotonic()
         self.play_start_seconds = position
@@ -1169,6 +1202,8 @@ class PianoRollView(ttk.Frame):
         self.play_button.configure(text=tr('Play'))
 
     def shutdown(self):
+        if self.has_unsaved_edits():
+            self.confirm_unsaved(cancel=False)
         self.hide_change_tooltip()
         if self.chord_after_id is not None:
             self.after_cancel(self.chord_after_id)
@@ -1249,6 +1284,16 @@ class PianoRollView(ttk.Frame):
             self.set_status(tr('輸入錯誤：{}').format(error))
             return
         self.stop()
+        if self.has_unsaved_edits():
+            timing_changed = abs(bpm - self.loaded_bpm) >= 0.005 or offset != 0
+            if not self.save_edits():
+                return
+            if not timing_changed:
+                # Only the notes changed: write them and leave tempo, first beat and key signatures alone.
+                self.show(self.path)
+                # After the reload's own status updates, so the confirmation is what stays visible.
+                self.after_idle(self.set_status, tr('Saved the note edits to {}.').format(os.path.basename(self.path)))
+                return
         shown = self.path
         shared = os.path.splitext(shown)[0].endswith('_bpmfix_cleaned')
         changes = load_changes(shown) if shared else None

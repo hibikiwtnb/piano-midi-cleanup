@@ -217,6 +217,8 @@ class Panel:
             self.root.attributes('-zoomed', True)
 
     def close(self):
+        if self.roll.has_unsaved_edits() and not self.roll.confirm_unsaved():
+            return
         self.roll.shutdown()
         state = self.window_state()
         if state == 'normal':
