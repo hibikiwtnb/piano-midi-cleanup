@@ -431,7 +431,7 @@ class PianoRollView(ttk.Frame):
         self.start_chord_analysis(midi_path, mtime)
         self.target = first_beat_target(midi_path)
         self.set_editable(True)
-        self.target_text.set(tr('First beat is saved to {}').format(self.first_beat_files()))
+        self.target_text.set(tr('Saves to {}').format(self.first_beat_files()))
         self.draw()
         if same_file:
             self.xview('moveto', view[0])
@@ -789,9 +789,8 @@ class PianoRollView(ttk.Frame):
 
     def edits_changed(self):
         self.update_undo_button()
-        self.target_text.set(tr('Unsaved note edits; Save writes them to {}').format(os.path.basename(self.path))
-                             if self.has_unsaved_edits() else
-                             tr('First beat is saved to {}').format(self.first_beat_files()))
+        self.target_text.set(tr('Unsaved changes') if self.has_unsaved_edits() else
+                             tr('Saves to {}').format(self.first_beat_files()))
         self.draw()
 
     def update_undo_button(self):
@@ -1292,7 +1291,7 @@ class PianoRollView(ttk.Frame):
                 # Only the notes changed: write them and leave tempo, first beat and key signatures alone.
                 self.show(self.path)
                 # After the reload's own status updates, so the confirmation is what stays visible.
-                self.after_idle(self.set_status, tr('Saved the note edits to {}.').format(os.path.basename(self.path)))
+                self.after_idle(self.set_status, tr('Saved'))
                 return
         shown = self.path
         shared = os.path.splitext(shown)[0].endswith('_bpmfix_cleaned')
@@ -1319,8 +1318,7 @@ class PianoRollView(ttk.Frame):
         # Keep showing the cleaned file that was just saved; only a shown original, which is never written,
         # moves on to the song_bpmfix.mid that took the new first beat.
         target = shown if shared else self.target
-        saved = self.first_beat_files()
         self.show(target)
-        self.set_status(tr('Saved the first beat to {}.').format(saved))
+        self.set_status(tr('Saved'))
         if self.on_first_beat:
             self.on_first_beat(target)
