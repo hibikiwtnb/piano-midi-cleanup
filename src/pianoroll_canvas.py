@@ -168,7 +168,8 @@ class PianoRollView(ttk.Frame):
         self.diff_items = []
         self.diff_message = ''
         self.comparison_stamp = None
-        self.diff_enabled = dict.fromkeys(KINDS, True)
+        # Differences are marked only once the user ticks them; the choice then stays for later songs.
+        self.diff_enabled = dict.fromkeys(KINDS, False)
         self.change_items = {}
         self.note_items = {}
         self.label_images = {}
