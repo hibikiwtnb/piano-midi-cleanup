@@ -1316,7 +1316,9 @@ class PianoRollView(ttk.Frame):
         except (OSError, ValueError) as error:
             self.set_status(tr('寫入失敗：{}').format(error))
             return
-        target = self.target
+        # Keep showing the cleaned file that was just saved; only a shown original, which is never written,
+        # moves on to the song_bpmfix.mid that took the new first beat.
+        target = shown if shared else self.target
         saved = self.first_beat_files()
         self.show(target)
         self.set_status(tr('Saved the first beat to {}.').format(saved))
