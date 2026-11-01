@@ -297,7 +297,9 @@ def main(argv=None):
                         help='seconds of audio before MIDI 0 s (e.g. a lead-in in the bounce)')
     parser.add_argument('--size', default='1920x1080')
     parser.add_argument('--fps', type=int, default=60)
-    parser.add_argument('--zoom', type=float, default=1.0, help='horizontal zoom relative to the panel default')
+    scale = parser.add_mutually_exclusive_group()
+    scale.add_argument('--zoom', type=float, default=1.0, help='horizontal zoom relative to the panel default')
+    scale.add_argument('--bars-per-page', type=float, help='horizontal zoom that fits this many bars on one page')
     parser.add_argument('--no-highlight', action='store_true', help='do not outline notes while they sound')
     parser.add_argument('--answer', action='store_true',
                         help='draw <midi>.answer.json errors and a counter; without a range, record its window')
@@ -328,6 +330,11 @@ def main(argv=None):
     errors = [item for item in record['items'] if item['end'] > start and item['start'] < end] if record else []
     missed = [(item['start'], item['end'], item['pitch'], None, 0) for item in errors if item['kind'] == 'missed']
     layout = Layout(width, height, *pitch_range(notes + missed), len(rows), args.zoom)
+    if args.bars_per_page:
+        # Same geometry with the zoom that makes the page (less the turn margin) hold the bars.
+        bar = 240.0 / bpm
+        zoom = (layout.roll_width - layout.margin) / (args.bars_per_page * bar * layout.pps)
+        layout = Layout(width, height, layout.low, layout.high, len(rows), zoom)
 
     command = [ffmpeg, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24',
                '-s', '{}x{}'.format(width, height), '-r', str(args.fps), '-i', '-']
