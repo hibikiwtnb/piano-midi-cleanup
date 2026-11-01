@@ -215,6 +215,36 @@ def draw_counter(draw, layout, record, seconds):
     draw.rectangle((x0, y0, x1, y0 + (bottom - top) + 2 * pad), fill='white', outline=ANSWER_ERROR,
                    width=max(2, round(2 * s)))
     draw.text((x0 + pad - left, y0 + pad - top), text, font=font, fill=ANSWER_ERROR)
+    return y0 + (bottom - top) + 2 * pad
+
+
+def draw_legend(draw, layout, channels, answer, top):
+    """What the colours mean: one swatch per hand in the section, and the answer error boxes with --answer."""
+    L = layout
+    s = L.scale
+    font = load_font(round(14 * s))
+    entries = [(HAND_COLORS[channel][0], tr(HAND_BY_CHANNEL[channel].replace('_', ' ')))
+               for channel in sorted(channels, key=lambda channel: HAND_ORDER.index(HAND_BY_CHANNEL[channel]),
+                                     reverse=True)]
+    if answer:
+        entries += [('extra', tr('Extra note (not in the answer)')), ('missed', tr('Missed note (answer only)'))]
+    pad, swatch, gap = 8 * s, 28 * s, 6 * s
+    line = max(draw.textbbox((0, 0), label, font=font)[3] for _, label in entries) + gap
+    text_width = max(draw.textlength(label, font=font) for _, label in entries)
+    x1 = L.width - 12 * s
+    x0 = x1 - text_width - swatch - 3 * pad
+    draw.rectangle((x0, top, x1, top + len(entries) * line + 2 * pad - gap), fill='white', outline=KEY_OUTLINE)
+    width = max(2, round(2 * s))
+    for index, (kind, label) in enumerate(entries):
+        y = top + pad + index * line
+        box = (x0 + pad, y + 2 * s, x0 + pad + swatch, y + line - gap - 2 * s)
+        if kind == 'extra':
+            draw.rectangle(box, outline=ANSWER_ERROR, width=width)
+        elif kind == 'missed':
+            dashed_rectangle(draw, box, ANSWER_ERROR, width, 3 * s)
+        else:
+            draw.rectangle(box, fill=kind)
+        draw.text((x0 + 2 * pad + swatch, y), label, font=font, fill=LABEL_TEXT)
 
 
 def draw_frame(page, layout, left, seconds, notes, highlight, record=None):
@@ -232,8 +262,15 @@ def draw_frame(page, layout, left, seconds, notes, highlight, record=None):
                                width=max(1, round(s)))
     x = x_of(seconds)
     draw.line((x, L.ruler, x, L.height), fill=PLAYHEAD, width=max(2, round(2 * s)))
+    top = L.ruler + 10 * s
     if record is not None:
-        draw_counter(draw, L, record, seconds)
+        top = draw_counter(draw, L, record, seconds) + 8 * s
+    # One colour means the MIDI was not split into hands, so a hand swatch would mislabel it.
+    channels = {channel for _, _, _, channel, _ in notes if channel in HAND_COLORS}
+    if len(channels) < 2:
+        channels = set()
+    if channels or record is not None:
+        draw_legend(draw, L, channels, record is not None, top)
     return image
 
 

@@ -49,6 +49,8 @@ _TEXT = {
         '{}: click to mute or unmute in playback': '{}: click to mute or unmute in playback',
         '{} | Velocity {}': '{} | Velocity {}',
         'Extra {}   Missed {}   Errors {}': 'Extra {}   Missed {}   Errors {}',
+        'Extra note (not in the answer)': 'Extra note (not in the answer)',
+        'Missed note (answer only)': 'Missed note (answer only)',
         'Protect pedal sustain': 'Limit trimming based on pedal state',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             'Keep the original note ending if trimming could make the sound end earlier. Fewer notes will be shortened when enabled.',
@@ -160,6 +162,8 @@ _TEXT = {
             '本介面用於 MIDI 後處理；音訊轉譜由上游模型完成。',
         '{} | Velocity {}': '{}｜力度 {}',
         'Extra {}   Missed {}   Errors {}': '多音 {}　漏音 {}　錯誤 {}',
+        'Extra note (not in the answer)': '多寫的音（答案沒有）',
+        'Missed note (answer only)': '漏掉的音（只在答案裡）',
         'Protect pedal sustain': '依踏板狀態限制截斷',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             '若截短音符可能使聲音提早結束，就保留原音尾。開啟後，截短的音符會較少。',
@@ -351,6 +355,8 @@ _TEXT = {
             '本界面用于 MIDI 后处理；音频转谱由上游模型完成。',
         '{} | Velocity {}': '{}｜力度 {}',
         'Extra {}   Missed {}   Errors {}': '多音 {}　漏音 {}　错误 {}',
+        'Extra note (not in the answer)': '多写的音（答案没有）',
+        'Missed note (answer only)': '漏掉的音（只在答案里）',
         'Protect pedal sustain': '依踏板状态限制截断',
         'Keep note tails that trimming could silence earlier; fewer notes may be shortened.':
             '若截短音符可能使声音提早结束，就保留原音尾。开启后，截短的音符会较少。',
