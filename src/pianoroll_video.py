@@ -247,7 +247,7 @@ def draw_legend(draw, layout, channels, answer, top):
         draw.text((x0 + 2 * pad + swatch, y), label, font=font, fill=LABEL_TEXT)
 
 
-def draw_frame(page, layout, left, seconds, notes, highlight, record=None):
+def draw_frame(page, layout, left, seconds, notes, highlight, record=None, legend=True):
     L = layout
     s = L.scale
     image = page.copy()
@@ -269,7 +269,7 @@ def draw_frame(page, layout, left, seconds, notes, highlight, record=None):
     channels = {channel for _, _, _, channel, _ in notes if channel in HAND_COLORS}
     if len(channels) < 2:
         channels = set()
-    if channels or record is not None:
+    if legend and (channels or record is not None):
         draw_legend(draw, L, channels, record is not None, top)
     return image
 
@@ -301,6 +301,7 @@ def main(argv=None):
     scale.add_argument('--zoom', type=float, default=1.0, help='horizontal zoom relative to the panel default')
     scale.add_argument('--bars-per-page', type=float, help='horizontal zoom that fits this many bars on one page')
     parser.add_argument('--no-highlight', action='store_true', help='do not outline notes while they sound')
+    parser.add_argument('--no-legend', action='store_true', help='do not draw the colour legend')
     parser.add_argument('--answer', action='store_true',
                         help='draw <midi>.answer.json errors and a counter; without a range, record its window')
     parser.add_argument('--language', default='zh_TW', choices=('zh_TW', 'zh_CN', 'en'), help='label language')
@@ -357,7 +358,7 @@ def main(argv=None):
                 left = seconds - layout.margin / layout.pps
             page = draw_page(layout, left, notes, rows, bpm, key_signatures, duration, errors)
             pages += 1
-        encoder.stdin.write(draw_frame(page, layout, left, seconds, notes, not args.no_highlight, record).tobytes())
+        encoder.stdin.write(draw_frame(page, layout, left, seconds, notes, not args.no_highlight, record, not args.no_legend).tobytes())
     encoder.stdin.close()
     if encoder.wait() != 0:
         sys.exit('ffmpeg failed')
