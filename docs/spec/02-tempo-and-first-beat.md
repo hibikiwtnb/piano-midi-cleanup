@@ -55,6 +55,8 @@
 
 之後重跑時選「沿用 `song_bpmfix.mid`」可保留手動對齊；若從原始 `song.mid` 重算並執行自動第一拍，手動結果可能被取代。是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
 
+命令列 `postprocess.py --first-beat 秒數` 以給定值做同樣的手動對齊（負值表示第一拍在 0 秒之前，與自動第一拍報告的數值同義），寫 `MIDI first beat stats`。同一段錄音的幾份轉譜給同一個值，就能保持共同時間軸。
+
 ## 報告
 
 `MIDI BPMFix stats`、`MIDI auto first beat stats`、`MIDI first beat stats`（手動）。

@@ -7,6 +7,8 @@ import sys
 import tempfile
 from collections import namedtuple
 
+import mido
+
 import clean_midi_rules
 import hand_split_channels
 import key_signature
@@ -14,7 +16,7 @@ import playable_reduction
 import trim_overlaps
 from bpmfix_utils import apply_bpm_fix, bpmfix_path_for
 from clean_midi_rules import apply_rule_cleaning, cleaned_path_for
-from first_beat import auto_align_first_beat
+from first_beat import append_first_beat_stats, auto_align_first_beat, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS, apply_hand_split
 from key_signature import apply_key_signatures
 from midi_stats import stats_path_for, write_midi_stats
@@ -151,7 +153,9 @@ def plan_steps(args):
     steps = []
     if args.bpm or args.audio:
         steps.append(('bpmfix', 'BPMFix ({})'.format('{} BPM'.format(args.bpm) if args.bpm else args.audio)))
-        if args.first_beat:
+        if args.first_beat_seconds is not None:
+            steps.append(('first_beat', 'First beat at {:.3f}s'.format(args.first_beat_seconds)))
+        elif args.first_beat:
             steps.append(('first_beat', 'Auto first beat'))
         if args.key_signature:
             steps.append(('key_signature', 'Key signatures'))
@@ -217,7 +221,14 @@ def _run_postprocess(args, stats_path):
         if name == 'bpmfix':
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm)
         elif name == 'first_beat':
-            auto_align_first_beat(bpmfix_path, report_path=stats_path)
+            if args.first_beat_seconds is None:
+                auto_align_first_beat(bpmfix_path, report_path=stats_path)
+            else:
+                # The same manual alignment as the roll's first-beat window, e.g. one value for every
+                # transcription of one recording so they keep a shared timeline.
+                bpm = mido.tempo2bpm(midi_tempo(mido.MidiFile(bpmfix_path)))
+                append_first_beat_stats(bpmfix_path, build_bpm_fixed_midi(bpmfix_path, bpm, args.first_beat_seconds),
+                                        report_path=stats_path)
         elif name == 'key_signature':
             apply_key_signatures(bpmfix_path, report_path=stats_path)
         elif name == 'clean':
@@ -262,8 +273,12 @@ def build_parser(parser_class=argparse.ArgumentParser):
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--bpm', type=float, help='Known BPM; runs BPMFix from song.mid.')
     source.add_argument('--audio', help='Source audio for BPM detection; runs BPMFix from song.mid.')
-    parser.add_argument('--no-first-beat', dest='first_beat', action='store_false',
-                        help='Skip the automatic first beat alignment after BPMFix.')
+    first_beat = parser.add_mutually_exclusive_group()
+    first_beat.add_argument('--no-first-beat', dest='first_beat', action='store_false',
+                            help='Skip the automatic first beat alignment after BPMFix.')
+    first_beat.add_argument('--first-beat', dest='first_beat_seconds', type=float, metavar='SECONDS',
+                            help='Put the first beat at this time of the BPM-fixed MIDI instead of estimating it '
+                                 '(negative = before 0 s, as the auto first beat report prints).')
     parser.add_argument('--no-key-signature', dest='key_signature', action='store_false',
                         help='Skip key signature detection after BPMFix.')
     parser.add_argument('--no-clean', dest='clean', action='store_false', help='Skip rule cleaning.')

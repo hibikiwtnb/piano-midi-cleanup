@@ -6,7 +6,7 @@
 
 | 順序 | 步驟 | 預設 | 開關 |
 |:---:|---|:---:|---|
-| 1 | BPM 修正、第一拍對齊、調號 | 給 `--bpm` 或 `--audio` 時執行 | `--no-first-beat`、`--no-key-signature` |
+| 1 | BPM 修正、第一拍對齊、調號 | 給 `--bpm` 或 `--audio` 時執行 | `--no-first-beat`、`--first-beat 秒數`、`--no-key-signature` |
 | 2 | 規則清理 | 開 | `--no-clean`、`--semitone-pairs` |
 | 3 | 可彈性清理（兩手時；三手改在分手後） | 關 | `--playable` |
 | 4 | 分手 | 開 | `--no-split`、`--hands 2/3/4` |
