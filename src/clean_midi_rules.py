@@ -19,12 +19,19 @@ PIANO_MIN_PITCH = 21
 PIANO_MAX_PITCH = 108
 # Optional: notes a semitone apart starting within this window are a semitone pair; the softer one is removed.
 SEMITONE_PAIR_WINDOW_SECONDS = 0.05
+# On by default, for Pianotrans MIDI: a short high note far from the longer notes struck with it is taken for an
+# overtone of them. It relies on Pianotrans note lengths including the pedal; other models' lengths mean something else.
+HIGH_PHANTOM_MIN_PITCH = 84
+HIGH_PHANTOM_MIN_DISTANCE = 7
+HIGH_PHANTOM_MAX_BEATS = 0.25
+HIGH_PHANTOM_WINDOW_SECONDS = 0.05
 
 RULE_ORDER = [
     'too_short',
     'too_low_velocity',
     'low_velocity_and_short',
     'outside_piano_range',
+    'high_phantom',
     'semitone_pair',
 ]
 
@@ -38,6 +45,9 @@ def rule_labels():
             LOW_VELOCITY_AND_SHORT_BEATS,
         ),
         'outside_piano_range': 'Pitch outside {}-{}'.format(PIANO_MIN_PITCH, PIANO_MAX_PITCH),
+        'high_phantom': 'High phantom note: pitch >= {}, up to {} beat, at least {} semitones from longer notes'.format(
+            HIGH_PHANTOM_MIN_PITCH, HIGH_PHANTOM_MAX_BEATS, HIGH_PHANTOM_MIN_DISTANCE,
+        ),
         'semitone_pair': 'Softer note of a semitone pair within {:.3f}s (shorter at equal velocity)'.format(
             SEMITONE_PAIR_WINDOW_SECONDS,
         ),
@@ -187,7 +197,27 @@ def plan_semitone_pairs(notes):
     return [note for note in notes if id(note) in removed]
 
 
-def plan_removals(notes, semitone_pairs=False):
+def plan_high_phantoms(notes):
+    """Short high notes struck with other notes that are all longer and all at least the minimum distance away."""
+    notes = sorted(notes, key=lambda note: note['start_seconds'])
+    phantoms = []
+    for index, note in enumerate(notes):
+        if note['note'] < HIGH_PHANTOM_MIN_PITCH or note['duration_beats'] > HIGH_PHANTOM_MAX_BEATS:
+            continue
+        others = []
+        for step in (-1, 1):
+            position = index + step
+            while (0 <= position < len(notes)
+                   and abs(notes[position]['start_seconds'] - note['start_seconds']) <= HIGH_PHANTOM_WINDOW_SECONDS):
+                others.append(notes[position])
+                position += step
+        if others and all(abs(other['note'] - note['note']) >= HIGH_PHANTOM_MIN_DISTANCE
+                          and other['duration_beats'] > HIGH_PHANTOM_MAX_BEATS for other in others):
+            phantoms.append(note)
+    return phantoms
+
+
+def plan_removals(notes, semitone_pairs=False, high_phantoms=True):
     removals = set()
     rule_counts = {rule_name: 0 for rule_name in RULE_ORDER}
 
@@ -203,6 +233,12 @@ def plan_removals(notes, semitone_pairs=False):
             remove(note, rule_name)
         else:
             kept.append(note)
+    if high_phantoms:
+        phantoms = plan_high_phantoms(kept)
+        for note in phantoms:
+            remove(note, 'high_phantom')
+        removed = {id(note) for note in phantoms}
+        kept = [note for note in kept if id(note) not in removed]
     if semitone_pairs:
         for note in plan_semitone_pairs(kept):
             remove(note, 'semitone_pair')
@@ -232,13 +268,13 @@ def rebuild_track_without_messages(track, removed_indexes):
     return rebuilt
 
 
-def clean_midi(input_path, output_path=None, semitone_pairs=False):
+def clean_midi(input_path, output_path=None, semitone_pairs=False, high_phantoms=True):
     if output_path is None:
         output_path = cleaned_path_for(input_path)
 
     midi_file = mido.MidiFile(input_path)
     notes = collect_notes(midi_file)
-    removals, rule_counts = plan_removals(notes, semitone_pairs)
+    removals, rule_counts = plan_removals(notes, semitone_pairs, high_phantoms)
 
     cleaned = mido.MidiFile(
         type=midi_file.type,
@@ -270,6 +306,7 @@ def clean_midi(input_path, output_path=None, semitone_pairs=False):
         'kept_notes': kept_notes,
         'rule_counts': rule_counts,
         'semitone_pairs': semitone_pairs,
+        'high_phantoms': high_phantoms,
     }
     return output_path, stats
 
@@ -299,6 +336,8 @@ def format_clean_stats(stats):
     for rule_name in RULE_ORDER:
         if rule_name == 'semitone_pair' and not stats.get('semitone_pairs'):
             continue
+        if rule_name == 'high_phantom' and not stats.get('high_phantoms'):
+            continue
         count = stats['rule_counts'][rule_name]
         lines.append(
             '- {}: {} ({:.2%})'.format(
@@ -322,8 +361,9 @@ def write_clean_report(input_path, stats, report_path=None, append=False):
     return report_path
 
 
-def apply_rule_cleaning(input_path, output_path=None, report_path=None, append_report=False, semitone_pairs=False):
-    output_path, stats = clean_midi(input_path, output_path, semitone_pairs)
+def apply_rule_cleaning(input_path, output_path=None, report_path=None, append_report=False, semitone_pairs=False,
+                        high_phantoms=True):
+    output_path, stats = clean_midi(input_path, output_path, semitone_pairs, high_phantoms)
     report_path = write_clean_report(
         input_path,
         stats,
@@ -351,6 +391,9 @@ def main(argv=None):
     parser.add_argument('-o', '--output', help='Output cleaned MIDI path.')
     parser.add_argument('--semitone-pairs', action='store_true',
                         help='Also remove the softer note of notes a semitone apart starting together (off by default).')
+    parser.add_argument('--no-high-phantoms', dest='high_phantoms', action='store_false',
+                        help='Keep short high notes far from longer notes struck with them; '
+                             'for models other than Piano Transcription, such as Transkun.')
     args = parser.parse_args(argv)
 
     input_path = args.input_midi or choose_midi()
@@ -362,7 +405,8 @@ def main(argv=None):
         return 1
 
     try:
-        output_path, report_path, _ = apply_rule_cleaning(input_path, args.output, semitone_pairs=args.semitone_pairs)
+        output_path, report_path, _ = apply_rule_cleaning(input_path, args.output, semitone_pairs=args.semitone_pairs,
+                                                       high_phantoms=args.high_phantoms)
     except Exception as error:
         messagebox.showerror('MIDI Cleaner failed', str(error))
         raise

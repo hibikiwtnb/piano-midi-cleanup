@@ -161,7 +161,9 @@ def plan_steps(args):
             steps.append(('key_signature', 'Key signatures'))
     else:
         steps.append(('reuse_bpmfix', 'Reuse the existing BPM-fixed MIDI'))
-    steps.append(('clean', 'Rule cleaning{}'.format(' with semitone pairs' if args.semitone_pairs else ''))
+    extras = [label for enabled, label in ((args.high_phantoms, 'high phantom notes'),
+                                           (args.semitone_pairs, 'semitone pairs')) if enabled]
+    steps.append(('clean', 'Rule cleaning{}'.format(' with ' + ' and '.join(extras) if extras else ''))
                  if args.clean else ('copy', 'No cleaning'))
     if args.playable and args.hands == 2:
         steps.append(('playable', 'Playable reduction'))
@@ -242,7 +244,7 @@ def _run_postprocess(args, stats_path):
             apply_key_signatures(bpmfix_path, report_path=stats_path)
         elif name == 'clean':
             apply_rule_cleaning(bpmfix_path, cleaned_path, report_path=stats_path, append_report=True,
-                                semitone_pairs=args.semitone_pairs)
+                                semitone_pairs=args.semitone_pairs, high_phantoms=args.high_phantoms)
         elif name == 'copy':
             shutil.copyfile(bpmfix_path, cleaned_path)
         elif name == 'playable':
@@ -293,6 +295,9 @@ def build_parser(parser_class=argparse.ArgumentParser):
     parser.add_argument('--no-clean', dest='clean', action='store_false', help='Skip rule cleaning.')
     parser.add_argument('--semitone-pairs', action='store_true',
                         help='Also remove the softer note of semitone pairs in rule cleaning.')
+    parser.add_argument('--no-high-phantoms', dest='high_phantoms', action='store_false',
+                        help='Keep short high notes far from longer notes struck with them in rule cleaning; '
+                             'for models other than Piano Transcription, such as Transkun.')
     parser.add_argument('--playable', action='store_true',
                         help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
                              'player\'s left and right hands, after the split.')

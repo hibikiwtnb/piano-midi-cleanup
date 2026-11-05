@@ -116,6 +116,8 @@ def arguments(path, settings):
     for name, flag in (('clean', '--no-clean'), ('split', '--no-split'), ('trim', '--no-trim')):
         if not preset['switches'][name]:
             argv.append(flag)
+    if not preset['switches'].get('high_phantoms', True):
+        argv.append('--no-high-phantoms')
     for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable')):
         if preset['switches'][name]:
             argv.append(flag)

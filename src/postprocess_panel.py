@@ -37,6 +37,7 @@ SWITCHES = (
     ('key_signature', 'Key signatures (after BPMFix)', True),
     ('clean', 'Rule cleaning', True),
     ('semitone_pairs', 'Semitone pairs (in rule cleaning)', False),
+    ('high_phantoms', 'High phantom note cleanup', True),
     ('playable', 'Playable reduction (one player, 2 hands)', False),
     ('split', 'Hand split', True),
     ('trim', 'Overlap trim', True),
@@ -410,6 +411,7 @@ class Panel:
             check = ttk.Checkbutton(frame, text=tr(label), variable=self.switches[name])
             check.grid(row=row, column=0, columnspan=2, sticky='w', pady=3)
             self.step_checks[name] = check
+        SettingTooltip(self.step_checks['high_phantoms'], 'high_phantoms')
         row = len(SWITCHES)
         ttk.Label(frame, text=tr('Snapshots')).grid(row=row, column=0, sticky='w', pady=(8, 0))
         snapshot_values = ('', 'landscape', 'portrait')
@@ -678,7 +680,8 @@ class Panel:
             args += ['--audio', self.audio.get().strip()]
         switches = preset['switches']
         for name, flag in (('first_beat', '--no-first-beat'), ('key_signature', '--no-key-signature'),
-                           ('clean', '--no-clean'), ('split', '--no-split'), ('trim', '--no-trim')):
+                           ('clean', '--no-clean'), ('high_phantoms', '--no-high-phantoms'), ('split', '--no-split'),
+                           ('trim', '--no-trim')):
             if not switches[name]:
                 args.append(flag)
         for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable')):
