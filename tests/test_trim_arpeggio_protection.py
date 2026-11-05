@@ -1,4 +1,4 @@
-"""Overlap trim keeps a slightly staggered chord whole, and still shortens what only looks like one."""
+"""Arpeggio protection keeps a slightly spread chord whole, and overlap trim still shortens what only looks like one."""
 
 from pathlib import Path
 import sys
@@ -36,7 +36,7 @@ def write_midi(path, notes):
 
 
 @unittest.skipUnless(DATA_REPO.is_dir(), 'needs the sibling data repository for temporary files')
-class StaggeredChords(unittest.TestCase):
+class ArpeggioProtection(unittest.TestCase):
     def setUp(self):
         scratch = DATA_REPO / 'scratch'
         scratch.mkdir(exist_ok=True)
@@ -58,7 +58,7 @@ class StaggeredChords(unittest.TestCase):
         stats, lengths = self.trim([(0, 71, 4), (0.112, 76, 4), (0.232, 80, 4)])
         self.assertAlmostEqual(lengths[71], 4, delta=0.005)
         self.assertAlmostEqual(lengths[76], 4, delta=0.005)
-        self.assertEqual(stats['staggered_kept'], 2)
+        self.assertEqual(stats['arpeggio_kept'], 2)
 
     def test_two_onset_chord_counts(self):
         _, lengths = self.trim([(0, 67, 2), (0, 74, 2), (0.15, 62, 2), (0.6, 79, 2), (1.1, 84, 2)])
@@ -68,7 +68,7 @@ class StaggeredChords(unittest.TestCase):
     def test_pedal_protection_does_not_change_the_decision(self):
         stats, lengths = self.trim([(0, 71, 4), (0.112, 76, 4), (0.232, 80, 4)], protect_pedal=True)
         self.assertAlmostEqual(lengths[71], 4, delta=0.005)
-        self.assertEqual(stats['staggered_kept'], 2)
+        self.assertEqual(stats['arpeggio_kept'], 2)
         self.assertEqual(stats['sustain_kept'], 0)
 
     def test_later_trims_still_apply(self):
@@ -83,7 +83,7 @@ class StaggeredChords(unittest.TestCase):
         stats, lengths = self.trim(notes)
         self.assertAlmostEqual(lengths[60], 0.24, delta=0.005)
         self.assertAlmostEqual(lengths[64], 0.24, delta=0.005)
-        self.assertEqual(stats['staggered_kept'], 0)
+        self.assertEqual(stats['arpeggio_kept'], 0)
 
     def test_sixteenth_after_a_long_note_is_not_a_chord(self):
         # Dotted rhythm: the last two onsets fit the span, but their gap is a real sixteenth.
@@ -95,7 +95,7 @@ class StaggeredChords(unittest.TestCase):
         stats, lengths = self.trim([(index * 0.15, pitch, 2) for index, pitch in enumerate(pitches)])
         for pitch in pitches[:-1]:
             self.assertAlmostEqual(lengths[pitch], 0.15, delta=0.005)
-        self.assertEqual(stats['staggered_kept'], 0)
+        self.assertEqual(stats['arpeggio_kept'], 0)
 
     def test_neighbour_tone_is_still_trimmed(self):
         _, lengths = self.trim([(0, 73, 1), (0, 78, 1), (0.14, 79, 1), (0.5, 76, 1)])
@@ -112,7 +112,7 @@ class StaggeredChords(unittest.TestCase):
 
     def test_report_counts_kept_notes(self):
         stats, _ = self.trim([(0, 71, 4), (0.112, 76, 4), (0.232, 80, 4)])
-        self.assertIn('Notes kept inside staggered chords: 2', trim_overlaps.format_trim_stats(stats))
+        self.assertIn('Notes kept by arpeggio protection: 2', trim_overlaps.format_trim_stats(stats))
 
 
 if __name__ == '__main__':
