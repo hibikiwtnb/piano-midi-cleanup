@@ -973,7 +973,33 @@ def apply_channels(notes):
         note['end_message'].channel = channel
 
 
-def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=None):
+def move_notes_off_gliss_hands(groups, gliss_spans, limits=None):
+    """During a glissando its hand is busy, so the notes struck meanwhile go to the other hand.
+
+    This runs after the split search and does not take part in it: everything outside the spans keeps its result.
+    gliss_spans holds (start tick, end tick, hand of the run) for two hands. An onset group the other hand cannot
+    hold stays as the search left it and is counted, because no note is removed for this.
+    """
+    max_notes, max_span = limits or (FIRST_PLAYER_MAX_NOTES, HARD_SPAN)
+    moved = over_limit = 0
+    for group in groups:
+        for start, end, gliss_hand in gliss_spans:
+            inside = [note for note in group if start <= note['start_ticks'] <= end]
+            if not inside:
+                continue
+            other_hand = 'left' if gliss_hand == 'right' else 'right'
+            inside_ids = {id(note) for note in inside}
+            pitches = sorted(note['note'] for note in group if id(note) in inside_ids or note['hand'] == other_hand)
+            if hand_fits(pitches, max_notes, max_span):
+                moved += sum(1 for note in inside if note['hand'] != other_hand)
+                for note in inside:
+                    note['hand'] = other_hand
+            else:
+                over_limit += sum(1 for note in inside if note['hand'] != other_hand)
+    return moved, over_limit
+
+
+def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=None, gliss_spans=None):
     if second_player_bars is None:
         second_player_bars = SECOND_PLAYER_MIN_BARS
     midi_file = mido.MidiFile(midi_path)
@@ -982,6 +1008,7 @@ def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=Non
     blobs = blob_lines(notes, midi_file.ticks_per_beat, hands=hands)
     assign_groups(groups, hands, blobs, midi_file.ticks_per_beat, limits=limits,
                   second_player_bars=second_player_bars)
+    gliss_moves = move_notes_off_gliss_hands(groups, gliss_spans, limits) if gliss_spans else None
     map_pedal_channels(midi_file, notes)
     apply_channels(notes)
     midi_file.save(midi_path)
@@ -998,6 +1025,7 @@ def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=Non
         'fast_run_chords': fast_run_chords,
         'second_player_bars': second_player_bars,
         'material_grouping_bars': MATERIAL_GROUPING_BARS if hands == 3 else 0,
+        'gliss_moves': gliss_moves,
     }
     return stats
 
@@ -1029,6 +1057,9 @@ def format_split_stats(stats):
         lines.append('Second player minimum active bars: {}'.format(stats['second_player_bars']))
     if stats.get('material_grouping_bars'):
         lines.append('Material grouping context: up to {} bars (experimental)'.format(stats['material_grouping_bars']))
+    if stats.get('gliss_moves'):
+        moved, over_limit = stats['gliss_moves']
+        lines.append('Moved off a glissando hand: {}; kept, over the hand limit: {}'.format(moved, over_limit))
     return '\n'.join(lines)
 
 
@@ -1043,9 +1074,9 @@ def write_split_report(stats, report_path=None, append=False):
 
 
 def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, limits=None,
-                     second_player_bars=None):
+                     second_player_bars=None, gliss_spans=None):
     stats = split_hands_in_place(midi_path, hands=hands, limits=limits,
-                                 second_player_bars=second_player_bars)
+                                 second_player_bars=second_player_bars, gliss_spans=gliss_spans)
     write_split_report(stats, report_path=report_path, append=append_report)
     return stats
 

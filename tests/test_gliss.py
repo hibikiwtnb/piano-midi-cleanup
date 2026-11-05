@@ -10,7 +10,7 @@ import mido
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import gliss
-from hand_split_channels import collect_notes
+from hand_split_channels import CHANNELS, apply_hand_split, collect_notes, split_hands_in_place
 
 DATA_REPO = Path(__file__).resolve().parents[2] / 'piano-midi-cleanup-data'
 TICKS_PER_BEAT = 480
@@ -323,6 +323,64 @@ class RepairTest(GlissTest):
         runs, _ = gliss.extract_runs(self.path, output)
         gliss.assign_hands(runs, output)
         self.assertEqual(runs[0]['hand'], 'right')
+
+
+class SplitTest(GlissTest):
+    NOTES = [(0, 72, 1, 80), (0, 48, 1, 80), (1, 76, 1, 80), (2, 74, 1, 80), (3, 50, 1, 80), (4, 77, 1, 80), (4, 52, 1, 80)]
+
+    def hands(self):
+        return {(note['start_ticks'], note['note']): note['start_message'].channel
+                for note in collect_notes(mido.MidiFile(self.path))}
+
+    def test_no_spans_change_nothing(self):
+        write_midi(self.path, self.NOTES)
+        split_hands_in_place(self.path)
+        plain = Path(self.path).read_bytes()
+        write_midi(self.path, self.NOTES)
+        split_hands_in_place(self.path, gliss_spans=None)
+        self.assertEqual(Path(self.path).read_bytes(), plain)
+        write_midi(self.path, self.NOTES)
+        stats = split_hands_in_place(self.path, gliss_spans=[])
+        self.assertEqual(Path(self.path).read_bytes(), plain)
+        self.assertIsNone(stats['gliss_moves'])
+
+    def test_notes_during_a_run_go_to_the_other_hand(self):
+        write_midi(self.path, self.NOTES)
+        split_hands_in_place(self.path)
+        plain = self.hands()
+        self.assertEqual(plain[(480, 76)], CHANNELS['right'])
+        write_midi(self.path, self.NOTES)
+        stats = split_hands_in_place(self.path, gliss_spans=[(480, 960, 'right')])
+        forced = self.hands()
+        self.assertEqual(forced[(480, 76)], CHANNELS['left'])
+        self.assertEqual(forced[(960, 74)], CHANNELS['left'])
+        self.assertEqual(stats['gliss_moves'], (2, 0))
+        for key in ((0, 72), (1440, 50), (1920, 77), (1920, 52)):
+            self.assertEqual(forced[key], plain[key])
+
+    def test_left_hand_run_moves_notes_to_the_right(self):
+        write_midi(self.path, self.NOTES)
+        split_hands_in_place(self.path, gliss_spans=[(1440, 1440, 'left')])
+        self.assertEqual(self.hands()[(1440, 50)], CHANNELS['right'])
+
+    def test_group_over_the_hand_limit_stays_and_is_counted(self):
+        notes = [(0, 48, 1, 80), (0, 76, 1, 80), (1, 72, 1, 80)]
+        write_midi(self.path, notes)
+        split_hands_in_place(self.path)
+        plain = self.hands()
+        write_midi(self.path, notes)
+        stats = split_hands_in_place(self.path, gliss_spans=[(0, 0, 'right')])
+        self.assertEqual(self.hands(), plain)
+        self.assertEqual(stats['gliss_moves'], (0, 1))
+
+    def test_report_mentions_moves_only_with_spans(self):
+        write_midi(self.path, self.NOTES)
+        report = str(Path(self.folder.name) / 'report.txt')
+        apply_hand_split(self.path, report_path=report)
+        self.assertNotIn('glissando', Path(report).read_text(encoding='utf-8'))
+        write_midi(self.path, self.NOTES)
+        apply_hand_split(self.path, report_path=report, gliss_spans=[(480, 960, 'right')])
+        self.assertIn('Moved off a glissando hand: 2', Path(report).read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':
