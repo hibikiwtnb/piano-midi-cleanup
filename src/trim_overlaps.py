@@ -34,6 +34,15 @@ LEFT_CHANNELS = {CHANNELS['left'], CHANNELS['second_left']}
 HAND_NAMES = {channel: hand.replace('_', ' ') for hand, channel in CHANNELS.items()}
 # A trim may end a note's sound, sustain-pedal (CC64) tail included, at most this many seconds earlier.
 SUSTAIN_TOLERANCE_SECONDS = 0.1
+# A staggered chord is a slightly spread chord in one hand, not a figure of its own: no trim may end one of its
+# notes inside it, which would leave a stub shorter than a sixteenth. Neighbouring onsets are under MAX_GAP apart,
+# which leaves out real sixteenths (about 0.25 beat), and the whole chain spans at most MAX_SPAN, which leaves out
+# glissandi and other long runs. It has at least MIN_PITCHES pitches, and no pitch within STEP_SEMITONES of a pitch
+# in another of its onset groups, which leaves out grace notes and neighbour tones.
+STAGGERED_MAX_GAP_BEATS = 0.2
+STAGGERED_MAX_SPAN_BEATS = 0.25
+STAGGERED_MIN_PITCHES = 3
+STAGGERED_STEP_SEMITONES = 2
 
 
 def hand_groups(notes):
@@ -146,9 +155,41 @@ class PedalGuard:
 
 
 def release(note, tick, rule, counts):
-    if note['new_end'] > tick and note['pedal_guard'].allow(note, tick):
+    if note['new_end'] <= tick:
+        return
+    if tick <= note['keep_through']:
+        note['staggered_kept'] = True
+    elif note['pedal_guard'].allow(note, tick):
         note['new_end'] = tick
         counts[rule] = counts.get(rule, 0) + 1
+
+
+def is_staggered_chord(groups):
+    pitches = {note['note'] for group in groups for note in group}
+    if len(pitches) < STAGGERED_MIN_PITCHES:
+        return False
+    return not any(abs(first['note'] - second['note']) <= STAGGERED_STEP_SEMITONES
+                   for index, group in enumerate(groups)
+                   for later in groups[index + 1:]
+                   for first in group
+                   for second in later)
+
+
+def mark_staggered_chords(groups, ticks_per_beat):
+    """Have the notes of each staggered chord in one hand's onset groups keep sounding through its last onset."""
+    max_gap = STAGGERED_MAX_GAP_BEATS * ticks_per_beat
+    max_span = STAGGERED_MAX_SPAN_BEATS * ticks_per_beat
+    onsets = [group[0]['start_ticks'] for group in groups]
+    start = 0
+    for index in range(1, len(groups) + 1):
+        if index < len(groups) and onsets[index] - onsets[index - 1] < max_gap:
+            continue
+        chain = groups[start:index]
+        if len(chain) > 1 and onsets[index - 1] - onsets[start] <= max_span and is_staggered_chord(chain):
+            for group in chain:
+                for note in group:
+                    note['keep_through'] = onsets[index - 1]
+        start = index
 
 
 def trim_fast_figures(groups, ticks_per_beat, counts):
@@ -270,8 +311,11 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
     for note in notes:
         note['new_end'] = note['end_ticks']
         note['pedal_guard'] = guard
+        note['keep_through'] = note['start_ticks']
     mark_harmonies(notes)
     groups_by_channel = hand_groups(notes)
+    for groups in groups_by_channel.values():
+        mark_staggered_chords(groups, midi_file.ticks_per_beat)
 
     peaks_before = {channel: max_simultaneous_keys(groups) for channel, groups in groups_by_channel.items()}
     fast_figure_channels = {CHANNELS[hand] for hand in fast_figure_hands}
@@ -298,6 +342,7 @@ def trim_overlaps_in_place(midi_path, fast_figure_hands=DEFAULT_FAST_FIGURE_HAND
         'sustain_trimmed': len(guard.accepted),
         'sustain_kept': len(guard.rejected['sustain'] - guard.accepted),
         'uncertain_kept': len(guard.rejected['uncertain'] - guard.rejected['sustain'] - guard.accepted),
+        'staggered_kept': sum(1 for note in notes if note.get('staggered_kept')),
     }
 
 
@@ -310,6 +355,7 @@ def format_trim_stats(stats):
                         stats['sustain_trimmed']),
         'Notes kept to avoid ending the sound early: {}'.format(stats['sustain_kept']),
         'Notes kept with uncertain pedal or note events: {}'.format(stats['uncertain_kept']),
+        'Notes kept inside staggered chords: {}'.format(stats['staggered_kept']),
         'Fast figure: {}; {} or more onset groups each within {} beat'.format(
             ', '.join(hand.replace('_', ' ') for hand in stats['fast_figure_hands']),
             FAST_FIGURE_MIN_ONSETS, FAST_FIGURE_BEATS),
