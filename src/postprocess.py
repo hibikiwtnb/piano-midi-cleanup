@@ -10,6 +10,7 @@ from collections import namedtuple
 import mido
 
 import clean_midi_rules
+import gliss
 import hand_split_channels
 import key_signature
 import playable_reduction
@@ -77,6 +78,14 @@ PARAMETERS = (
     Parameter('trim.harmony_pitch_classes', 'Harmony change: at least pitch classes', int,
               ((trim_overlaps, 'HARMONY_MIN_PITCH_CLASSES'),)),
     Parameter('trim.outer_step', 'Outer line: step up to (semitones)', int, ((trim_overlaps, 'OUTER_STEP_SEMITONES'),)),
+    Parameter('gliss.min_degrees', 'Glissando: at least scale degrees', int, ((gliss, 'MIN_DEGREES'),)),
+    Parameter('gliss.max_seconds_per_degree', 'Glissando: slowest time per degree (s)', float,
+              ((gliss, 'MAX_SECONDS_PER_DEGREE'),)),
+    Parameter('gliss.min_coverage', 'Glissando: share of degrees present', float, ((gliss, 'MIN_COVERAGE'),)),
+    Parameter('gliss.max_repeated_share', 'Glissando: repeated chord share that rejects a run', float,
+              ((gliss, 'MAX_REPEATED_SHARE'),)),
+    Parameter('gliss.length_gap_ratio', 'Glissando: note length in median gaps', float,
+              ((gliss, 'LENGTH_GAP_RATIO'),)),
 )
 PARAMETER_DEFAULTS = {parameter.key: getattr(*parameter.targets[0]) for parameter in PARAMETERS}
 PARAMETER_BY_KEY = {parameter.key: parameter for parameter in PARAMETERS}
@@ -150,6 +159,8 @@ def plan_steps(args):
         raise ValueError('Playable reduction with --hands 3 needs the hand split to find the first player\'s hands.')
     if args.trim and not args.split:
         raise ValueError('Overlap trimming works per hand; it needs the hand split.')
+    if args.gliss_fill and not args.gliss:
+        raise ValueError('Filling glissandi needs --gliss.')
     steps = []
     if args.bpm or args.audio:
         steps.append(('bpmfix', 'BPMFix ({})'.format('{} BPM'.format(args.bpm) if args.bpm else args.audio)))
@@ -161,6 +172,8 @@ def plan_steps(args):
             steps.append(('key_signature', 'Key signatures'))
     else:
         steps.append(('reuse_bpmfix', 'Reuse the existing BPM-fixed MIDI'))
+    if args.gliss:
+        steps.append(('gliss_extract', 'Find glissandi and keep them out of the next steps'))
     extras = [label for enabled, label in ((args.high_phantoms, 'high phantom notes'),
                                            (args.semitone_pairs, 'semitone pairs')) if enabled]
     steps.append(('clean', 'Rule cleaning{}'.format(' with ' + ' and '.join(extras) if extras else ''))
@@ -174,6 +187,9 @@ def plan_steps(args):
             ', '.join(hand.replace('_', ' ') for hand in playable_reduction.THREE_HAND_PLAYER))))
     if args.trim:
         steps.append(('trim', 'Overlap trim (fast figure: {})'.format(', '.join(args.fast_figure_hands))))
+    if args.gliss:
+        steps.append(('gliss_restore', 'Repair glissandi and put them back{}'.format(
+            ', filling scale notes' if args.gliss_fill else '')))
     if args.snapshot:
         steps.append(('snapshot', 'Piano roll snapshots ({})'.format(args.snapshot)))
     return steps
@@ -225,10 +241,12 @@ def _run_postprocess(args, stats_path):
         keep_bpmfix_sections(stats_path)
 
     changes = []
+    runs = rejected = None
     for name in names:
         before = None
         if name in ('clean', 'playable', 'trim'):
-            before = note_snapshot(bpmfix_path if name == 'clean' else cleaned_path)
+            # With glissandi taken out, the MIDI without them is already in cleaned_path and is cleaned in place.
+            before = note_snapshot(bpmfix_path if name == 'clean' and runs is None else cleaned_path)
         if name == 'bpmfix':
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm)
         elif name == 'first_beat':
@@ -242,11 +260,15 @@ def _run_postprocess(args, stats_path):
                                         report_path=stats_path)
         elif name == 'key_signature':
             apply_key_signatures(bpmfix_path, report_path=stats_path)
+        elif name == 'gliss_extract':
+            runs, rejected = gliss.extract_runs(bpmfix_path, cleaned_path)
         elif name == 'clean':
-            apply_rule_cleaning(bpmfix_path, cleaned_path, report_path=stats_path, append_report=True,
-                                semitone_pairs=args.semitone_pairs, high_phantoms=args.high_phantoms)
+            apply_rule_cleaning(bpmfix_path if runs is None else cleaned_path, cleaned_path, report_path=stats_path,
+                                append_report=True, semitone_pairs=args.semitone_pairs,
+                                high_phantoms=args.high_phantoms)
         elif name == 'copy':
-            shutil.copyfile(bpmfix_path, cleaned_path)
+            if runs is None:
+                shutil.copyfile(bpmfix_path, cleaned_path)
         elif name == 'playable':
             apply_playable_reduction(cleaned_path, report_path=stats_path,
                                      max_notes=playable_reduction.DEFAULT_MAX_NOTES_PER_HAND,
@@ -255,10 +277,23 @@ def _run_postprocess(args, stats_path):
         elif name == 'split':
             limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN) \
                 if args.playable and args.hands == 2 else None
-            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands, limits=limits)
+            gliss_spans = None
+            if runs is not None:
+                gliss.assign_hands(runs, cleaned_path)
+                # With three or four hands a run still goes to a main hand, but no other note is moved for it.
+                gliss_spans = gliss.split_spans(runs) if args.hands == 2 else None
+            apply_hand_split(cleaned_path, report_path=stats_path, append_report=True, hands=args.hands, limits=limits,
+                             gliss_spans=gliss_spans)
         elif name == 'trim':
             apply_overlap_trim(cleaned_path, report_path=stats_path, fast_figure_hands=tuple(args.fast_figure_hands),
                                protect_pedal=not args.no_pedal_protection)
+        elif name == 'gliss_restore':
+            rows = gliss.restore_runs(cleaned_path, runs, fill=args.gliss_fill)
+            ticks_per_beat = mido.MidiFile(cleaned_path).ticks_per_beat
+            changes.extend(gliss.run_changes(rows, cleaned_path))
+            gliss.save_records(cleaned_path, gliss.run_records(rows, ticks_per_beat))
+            update_report(stats_path, gliss.format_gliss_stats(cleaned_path, rows, rejected, args.gliss_fill,
+                                                               ticks_per_beat))
         elif name == 'snapshot':
             write_snapshots(cleaned_path, layouts=SNAPSHOT_LAYOUTS[args.snapshot])
 
@@ -266,6 +301,8 @@ def _run_postprocess(args, stats_path):
             changes.extend(stage_changes(before, note_snapshot(cleaned_path), name))
 
     save_changes(cleaned_path, changes)
+    if not args.gliss:
+        gliss.remove_records(cleaned_path)
 
     summary = '\n'.join(['MIDI post-processing run', 'Output: {}'.format(cleaned_path)]
                         + ['{}. {}'.format(index, label) for index, (_, label) in enumerate(steps, 1)]
@@ -301,6 +338,11 @@ def build_parser(parser_class=argparse.ArgumentParser):
     parser.add_argument('--playable', action='store_true',
                         help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
                              'player\'s left and right hands, after the split.')
+    parser.add_argument('--gliss', action='store_true',
+                        help='Find glissandi, keep them out of cleaning, reduction, split and trim, give them one '
+                             'length and a hand of their own, and move the notes played meanwhile to the other hand.')
+    parser.add_argument('--gliss-fill', action='store_true',
+                        help='With --gliss, also add the notes of the run\'s own scale that the transcription missed.')
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')

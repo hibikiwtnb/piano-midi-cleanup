@@ -1,5 +1,8 @@
 """Glissando correction finds runs on their own scale, leaves crossing chords alone, and repairs only the run."""
 
+import contextlib
+import io
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -10,6 +13,8 @@ import mido
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import gliss
+import note_changes
+import postprocess
 from hand_split_channels import CHANNELS, apply_hand_split, collect_notes, split_hands_in_place
 
 DATA_REPO = Path(__file__).resolve().parents[2] / 'piano-midi-cleanup-data'
@@ -381,6 +386,81 @@ class SplitTest(GlissTest):
         write_midi(self.path, self.NOTES)
         apply_hand_split(self.path, report_path=report, gliss_spans=[(480, 960, 'right')])
         self.assertIn('Moved off a glissando hand: 2', Path(report).read_text(encoding='utf-8'))
+
+
+class PipelineTest(GlissTest):
+    def run_tool(self, *flags):
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            status = postprocess.main([self.path, '--no-first-beat', '--no-key-signature', '--bpm', '120'] + list(flags))
+        self.assertEqual(status, 0, output.getvalue())
+        self.cleaned = self.path.replace('.mid', '_bpmfix_cleaned.mid')
+        return collect_notes(mido.MidiFile(self.cleaned))
+
+    def test_off_gives_the_same_output_as_before_and_no_record(self):
+        write_midi(self.path, run_notes(0, WHITE_DOWN) + [(5, 60, 1, 80)])
+        self.run_tool()
+        self.assertFalse(gliss.records_path(self.cleaned).exists())
+        self.assertNotIn('glissando', Path(self.path.replace('.mid', '_stats.txt')).read_text(encoding='utf-8').lower())
+
+    def test_nothing_found_changes_no_note(self):
+        notes = [(index, 60 + index, 1, 80) for index in range(8)]
+        write_midi(self.path, notes)
+        plain = [(note['start_ticks'], note['end_ticks'], note['note'], note['start_message'].channel)
+                 for note in self.run_tool()]
+        result = [(note['start_ticks'], note['end_ticks'], note['note'], note['start_message'].channel)
+                  for note in self.run_tool('--gliss')]
+        self.assertEqual(result, plain)
+
+    def test_short_soft_run_notes_survive_rule_cleaning(self):
+        # Without --gliss these would be cut as too short and too soft.
+        notes = run_notes(0, WHITE_DOWN, length=0.04, velocity=30)
+        write_midi(self.path, notes)
+        self.assertEqual(self.run_tool(), [])
+        self.assertEqual(sorted(note['note'] for note in self.run_tool('--gliss')), sorted(WHITE_DOWN))
+
+    def test_run_and_other_notes_get_different_hands(self):
+        # The chord is inside the run's register, where the split alone would give it to the right hand.
+        chord = [(0.5, 76, 1, 80), (0.5, 72, 1, 80)]
+        write_midi(self.path, run_notes(0, WHITE_DOWN) + chord)
+        result = self.run_tool('--gliss')
+        by_hand = {}
+        for note in result:
+            by_hand.setdefault(note['start_message'].channel, []).append(note['note'])
+        self.assertEqual(sorted(by_hand[CHANNELS['left']]), [72, 76])
+        self.assertEqual(len(by_hand[CHANNELS['right']]), 14)
+
+    def test_run_notes_keep_one_length_after_trim(self):
+        write_midi(self.path, run_notes(0, WHITE_DOWN) + [(0.5, 60, 1, 80)])
+        result = self.run_tool('--gliss')
+        lengths = {note['end_ticks'] - note['start_ticks'] for note in result if note['note'] != 60}
+        self.assertEqual(len(lengths), 1)
+
+    def test_fill_needs_gliss(self):
+        write_midi(self.path, run_notes(0, WHITE_DOWN))
+        with contextlib.redirect_stdout(io.StringIO()):
+            status = postprocess.main([self.path, '--bpm', '120', '--gliss-fill'])
+        self.assertEqual(status, 1)
+
+    def test_record_report_and_changes_describe_the_run(self):
+        holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
+        write_midi(self.path, run_notes(0, holes))
+        self.run_tool('--gliss', '--gliss-fill')
+        record = json.loads(gliss.records_path(self.cleaned).read_text(encoding='utf-8'))
+        self.assertEqual(record['runs'][0]['direction'], 'down')
+        self.assertEqual([note['pitch'] for note in record['runs'][0]['notes'] if note['filled']], [84])
+        report = Path(self.path.replace('.mid', '_stats.txt')).read_text(encoding='utf-8')
+        self.assertIn('MIDI glissando stats', report)
+        self.assertIn('filled C6', report)
+        changes = note_changes.load_changes(self.cleaned)
+        self.assertIsNotNone(changes)
+        self.assertTrue(any(change['stage'] == 'gliss' for change in changes))
+
+    def test_turning_it_off_removes_the_old_record(self):
+        write_midi(self.path, run_notes(0, WHITE_DOWN))
+        self.run_tool('--gliss')
+        self.assertTrue(gliss.records_path(self.cleaned).exists())
+        self.run_tool()
+        self.assertFalse(gliss.records_path(self.cleaned).exists())
 
 
 if __name__ == '__main__':

@@ -8,6 +8,8 @@ the pedal carries both to the same end, so length is deliberately not used to de
 out of the MIDI here and put back after the other steps, so those steps need no exceptions.
 """
 
+import json
+from pathlib import Path
 import statistics
 
 import mido
@@ -487,6 +489,21 @@ def run_records(rows, ticks_per_beat):
                  notes=[dict(tick=note['tick'], pitch=note['pitch'], end_tick=note['end'], filled=note['filled'])
                         for note in row['placed']])
             for row in rows]
+
+
+def records_path(midi_path):
+    return Path(midi_path).with_suffix('.gliss.json')
+
+
+def save_records(midi_path, records):
+    records_path(midi_path).write_text(json.dumps(dict(version=1, runs=records), ensure_ascii=True), encoding='utf-8')
+
+
+def remove_records(midi_path):
+    """A run without glissandi leaves no record that describes an earlier output."""
+    path = records_path(midi_path)
+    if path.exists():
+        path.unlink()
 
 
 def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):

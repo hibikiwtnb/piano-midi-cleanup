@@ -69,7 +69,7 @@ def load_changes(midi_path):
             changes = payload['changes']
             if isinstance(changes, list) and all(
                 item['kind'] in ('deleted', 'shortened')
-                and item['stage'] in ('clean', 'playable', 'trim')
+                and item['stage'] in ('gliss', 'clean', 'playable', 'trim')
                 and 0 <= item['pitch'] <= 127 and 0 <= item['start'] <= item['end']
                 for item in changes
             ):

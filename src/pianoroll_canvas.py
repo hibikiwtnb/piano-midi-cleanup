@@ -71,7 +71,7 @@ SELECTION_BOX = '#2f6fdb'
 DRAG_THRESHOLD = 4
 UNDO_LIMIT = 20
 READ_ONLY_ROLES = ('original', 'answer')  # Editing never touches the source MIDI or the answer.
-STAGE_REASONS = {'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
+STAGE_REASONS = {'gliss': 'Glissando correction', 'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
 

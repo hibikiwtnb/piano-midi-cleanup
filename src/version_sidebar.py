@@ -18,7 +18,7 @@ DIVIDER = '#dfe3e8'
 # whatever only that side has (whole notes or the longer part of a tail) is a plain filled block.
 SIDE_COLORS = {'reference': ('#f4b8b8', '#c96a6a'), 'shown': ('#f5d76e', '#c9a227')}
 
-STAGE_LABELS = (('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
+STAGE_LABELS = (('gliss', 'Glissando correction'), ('clean', 'Rule cleaning'), ('playable', 'Playable reduction'), ('trim', 'Overlap trim'))
 PADDING = 12
 ROW_HEIGHT = 42
 STAGE_HEIGHT = 18
