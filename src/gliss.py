@@ -3,7 +3,8 @@
 What it answers: which fast one-direction notes are a single gesture on one scale, so they should share one length,
 one hand and, on request, the scale notes the model missed. The evidence is in docs/gliss-correction-design.md.
 
-What it must not do: change any other note. Raw note length cannot separate a run from the chords it crosses, because
+What it must not do: change any other note, except that notes struck during a run move to the other hand and notes the
+run's hand still holds when it starts end there. Raw note length cannot separate a run from the chords it crosses, because
 the pedal carries both to the same end, so length is deliberately not used to decide membership. Notes are only taken
 out of the MIDI here and put back after the other steps, so those steps need no exceptions.
 """
@@ -17,6 +18,7 @@ import numpy as np
 
 from clean_midi_rules import rebuild_track_without_messages, tick_seconds
 from hand_split_channels import CHANNELS, collect_notes
+from trim_overlaps import write_note_ends
 
 WHITE_KEYS = (0, 2, 4, 5, 7, 9, 11)
 BLACK_KEYS = (1, 3, 6, 8, 10)
@@ -404,13 +406,36 @@ def _note_track(midi_file):
     return counts.index(max(counts))
 
 
+def release_run_hands(midi_file, runs):
+    """A hand starting a run has let go of what it held, so those notes end where the run starts.
+
+    Without the run in the MIDI, overlap trimming had nothing to end them at. Returns the shortened notes per run.
+    """
+    notes = collect_notes(midi_file)
+    for note in notes:
+        note['new_end'] = note['end_ticks']
+    released = []
+    for run in runs:
+        if not run['hand']:
+            released.append([])
+            continue
+        held = [note for note in notes if note['start_message'].channel == CHANNELS[run['hand']]
+                and note['start_ticks'] < run['start_tick'] < note['new_end']]
+        for note in held:
+            note['new_end'] = run['start_tick']
+        released.append(held)
+    write_note_ends(midi_file, notes)
+    return released
+
+
 def restore_runs(midi_path, runs, fill=False):
     """Put the repaired runs back into midi_path. Returns one report row per run."""
     midi_file = mido.MidiFile(midi_path)
+    released = release_run_hands(midi_file, runs)
     existing = collect_notes(midi_file)
     additions = []
     rows = []
-    for run in runs:
+    for run, released_notes in zip(runs, released):
         channel = CHANNELS[run['hand']] if run['hand'] else run['members'][0]['start_message'].channel
         placed, filled, held, length = repair_run(run, midi_file.ticks_per_beat, existing, fill)
         dropped = 0
@@ -436,7 +461,7 @@ def restore_runs(midi_path, runs, fill=False):
                                                             velocity=note['velocity'])))
             additions.append((note['end'], 0, mido.Message('note_off', channel=channel, note=note['pitch'], velocity=0)))
         rows.append(dict(run=run, channel=channel, placed=written, filled=filled, held=held, length=length,
-                         dropped=dropped))
+                         dropped=dropped, released=released_notes))
 
     index = _note_track(midi_file)
     events = []
@@ -478,6 +503,9 @@ def run_changes(rows, midi_path):
             elif new['end'] < note['end_ticks']:
                 changes.append(dict(kind='shortened', stage='gliss', start=seconds(new['end']),
                                     end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
+        for note in row['released']:
+            changes.append(dict(kind='shortened', stage='gliss', start=seconds(note['new_end']),
+                                end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
     return changes
 
 
@@ -526,6 +554,8 @@ def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):
             details.append('not filled, key held: ' + ' '.join(_name(pitch) for pitch in row['held']))
         if row['dropped']:
             details.append('{} inside a held note, not written'.format(row['dropped']))
+        if row['released']:
+            details.append('released at the start: ' + ' '.join(_name(note['note']) for note in row['released']))
         lines.append(line + ('; ' + '; '.join(details) if details else ''))
     for item in rejected:
         lines.append('- m{}: rejected, {} of {} notes are in a repeated chord'.format(

@@ -437,6 +437,23 @@ class PipelineTest(GlissTest):
         lengths = {note['end_ticks'] - note['start_ticks'] for note in result if note['note'] != 60}
         self.assertEqual(len(lengths), 1)
 
+    def test_notes_held_by_the_run_hand_end_where_the_run_starts(self):
+        # Struck before the run in the right hand, held past its start.
+        held = [(0, 72, 6, 80), (0, 76, 6, 80)]
+        left = [(0, 48, 6, 80)]
+        write_midi(self.path, held + left + run_notes(1, WHITE_DOWN))
+        result = self.run_tool('--gliss', '--no-trim')
+        ends = {note['note']: note['end_ticks'] for note in result if note['start_ticks'] == 0}
+        self.assertEqual(ends[72], TICKS_PER_BEAT)
+        self.assertEqual(ends[76], TICKS_PER_BEAT)
+        self.assertEqual(ends[48], 6 * TICKS_PER_BEAT)
+
+    def test_released_key_can_be_filled(self):
+        holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
+        write_midi(self.path, [(0, 84, 6, 80), (0, 48, 6, 80)] + run_notes(1, holes))
+        result = self.run_tool('--gliss', '--gliss-fill', '--no-trim')
+        self.assertEqual(len([note for note in result if note['note'] == 84]), 2)
+
     def test_fill_needs_gliss(self):
         write_midi(self.path, run_notes(0, WHITE_DOWN))
         with contextlib.redirect_stdout(io.StringIO()):
