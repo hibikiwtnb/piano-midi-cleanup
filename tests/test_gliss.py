@@ -14,7 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import gliss
 import note_changes
+import gui_i18n
 import postprocess
+from postprocess_panel import PARAMETER_TABS, SWITCHES
 from hand_split_channels import CHANNELS, apply_hand_split, collect_notes, split_hands_in_place
 
 DATA_REPO = Path(__file__).resolve().parents[2] / 'piano-midi-cleanup-data'
@@ -461,6 +463,22 @@ class PipelineTest(GlissTest):
         self.assertTrue(gliss.records_path(self.cleaned).exists())
         self.run_tool()
         self.assertFalse(gliss.records_path(self.cleaned).exists())
+
+
+class PanelTest(unittest.TestCase):
+    def test_switches_are_off_by_default(self):
+        defaults = {name: default for name, _, default in SWITCHES}
+        self.assertFalse(defaults['gliss'])
+        self.assertFalse(defaults['gliss_fill'])
+
+    def test_every_setting_has_a_tab_and_help_in_every_language(self):
+        self.assertIn('gliss', [prefix for prefix, _ in PARAMETER_TABS])
+        self.addCleanup(gui_i18n.set_language, gui_i18n._language)
+        for parameter in postprocess.PARAMETERS:
+            if parameter.key.startswith('gliss.'):
+                for language in ('en', 'zh_TW', 'zh_CN'):
+                    gui_i18n.set_language(language)
+                    self.assertTrue(gui_i18n.setting_help(parameter.key))
 
 
 if __name__ == '__main__':

@@ -29,6 +29,7 @@ PARAMETER_TABS = (
     ('trim', 'Overlap trim'),
     ('key', 'Key signatures'),
     ('playable', 'Playable'),
+    ('gliss', 'Glissando'),
 )
 HAND_ORDER = ('left', 'right', 'second_left', 'second_right')
 # Step switches and their defaults; presets store these and the thresholds, not the files.
@@ -39,6 +40,8 @@ SWITCHES = (
     ('semitone_pairs', 'Semitone pairs (in rule cleaning)', False),
     ('high_phantoms', 'High phantom note cleanup', True),
     ('playable', 'Playable reduction (one player, 2 hands)', False),
+    ('gliss', 'Glissando correction', False),
+    ('gliss_fill', 'Fill missing glissando notes', False),
     ('split', 'Hand split', True),
     ('trim', 'Overlap trim', True),
 )
@@ -684,7 +687,8 @@ class Panel:
                            ('trim', '--no-trim')):
             if not switches[name]:
                 args.append(flag)
-        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable')):
+        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable'), ('gliss', '--gliss'),
+                           ('gliss_fill', '--gliss-fill')):
             if switches[name]:
                 args.append(flag)
         args += ['--hands', str(preset['hands'])]
