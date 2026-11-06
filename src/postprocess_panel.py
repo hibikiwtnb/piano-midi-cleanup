@@ -40,8 +40,8 @@ SWITCHES = (
     ('semitone_pairs', 'Semitone pairs (in rule cleaning)', False),
     ('high_phantoms', 'High phantom note cleanup', True),
     ('playable', 'Playable reduction (one player, 2 hands)', False),
-    ('gliss', 'Glissando correction', False),
-    ('gliss_fill', 'Fill missing glissando notes', False),
+    ('gliss', 'Glissando correction', True),
+    ('gliss_fill', 'Fill missing glissando notes', True),
     ('split', 'Hand split', True),
     ('trim', 'Overlap trim', True),
 )
@@ -683,12 +683,12 @@ class Panel:
             args += ['--audio', self.audio.get().strip()]
         switches = preset['switches']
         for name, flag in (('first_beat', '--no-first-beat'), ('key_signature', '--no-key-signature'),
-                           ('clean', '--no-clean'), ('high_phantoms', '--no-high-phantoms'), ('split', '--no-split'),
+                           ('clean', '--no-clean'), ('high_phantoms', '--no-high-phantoms'), ('gliss', '--no-gliss'),
+                           ('gliss_fill', '--no-gliss-fill'), ('split', '--no-split'),
                            ('trim', '--no-trim')):
             if not switches[name]:
                 args.append(flag)
-        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable'), ('gliss', '--gliss'),
-                           ('gliss_fill', '--gliss-fill')):
+        for name, flag in (('semitone_pairs', '--semitone-pairs'), ('playable', '--playable')):
             if switches[name]:
                 args.append(flag)
         args += ['--hands', str(preset['hands'])]

@@ -159,8 +159,6 @@ def plan_steps(args):
         raise ValueError('Playable reduction with --hands 3 needs the hand split to find the first player\'s hands.')
     if args.trim and not args.split:
         raise ValueError('Overlap trimming works per hand; it needs the hand split.')
-    if args.gliss_fill and not args.gliss:
-        raise ValueError('Filling glissandi needs --gliss.')
     steps = []
     if args.bpm or args.audio:
         steps.append(('bpmfix', 'BPMFix ({})'.format('{} BPM'.format(args.bpm) if args.bpm else args.audio)))
@@ -338,11 +336,11 @@ def build_parser(parser_class=argparse.ArgumentParser):
     parser.add_argument('--playable', action='store_true',
                         help='Reduce every onset group to what two hands can play; with --hands 3 only the first '
                              'player\'s left and right hands, after the split.')
-    parser.add_argument('--gliss', action='store_true',
-                        help='Find glissandi, keep them out of cleaning, reduction, split and trim, give them one '
-                             'length and a hand of their own, and move the notes played meanwhile to the other hand.')
-    parser.add_argument('--gliss-fill', action='store_true',
-                        help='With --gliss, also add the notes of the run\'s own scale that the transcription missed.')
+    parser.add_argument('--no-gliss', dest='gliss', action='store_false',
+                        help='Skip glissando correction: finding glissandi, keeping them out of cleaning, reduction, '
+                             'split and trim, giving them one length and a hand of their own.')
+    parser.add_argument('--no-gliss-fill', dest='gliss_fill', action='store_false',
+                        help='Do not add the notes of a glissando\'s own scale that the transcription missed.')
     parser.add_argument('--no-split', dest='split', action='store_false', help='Skip the hand split.')
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')

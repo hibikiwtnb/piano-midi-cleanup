@@ -400,7 +400,7 @@ class PipelineTest(GlissTest):
 
     def test_off_gives_the_same_output_as_before_and_no_record(self):
         write_midi(self.path, run_notes(0, WHITE_DOWN) + [(5, 60, 1, 80)])
-        self.run_tool()
+        self.run_tool('--no-gliss')
         self.assertFalse(gliss.records_path(self.cleaned).exists())
         self.assertNotIn('glissando', Path(self.path.replace('.mid', '_stats.txt')).read_text(encoding='utf-8').lower())
 
@@ -408,23 +408,23 @@ class PipelineTest(GlissTest):
         notes = [(index, 60 + index, 1, 80) for index in range(8)]
         write_midi(self.path, notes)
         plain = [(note['start_ticks'], note['end_ticks'], note['note'], note['start_message'].channel)
-                 for note in self.run_tool()]
+                 for note in self.run_tool('--no-gliss')]
         result = [(note['start_ticks'], note['end_ticks'], note['note'], note['start_message'].channel)
-                  for note in self.run_tool('--gliss')]
+                  for note in self.run_tool()]
         self.assertEqual(result, plain)
 
     def test_short_soft_run_notes_survive_rule_cleaning(self):
         # Without --gliss these would be cut as too short and too soft.
         notes = run_notes(0, WHITE_DOWN, length=0.04, velocity=30)
         write_midi(self.path, notes)
-        self.assertEqual(self.run_tool(), [])
-        self.assertEqual(sorted(note['note'] for note in self.run_tool('--gliss')), sorted(WHITE_DOWN))
+        self.assertEqual(self.run_tool('--no-gliss'), [])
+        self.assertEqual(sorted(note['note'] for note in self.run_tool()), sorted(WHITE_DOWN))
 
     def test_run_and_other_notes_get_different_hands(self):
         # The chord is inside the run's register, where the split alone would give it to the right hand.
         chord = [(0.5, 76, 1, 80), (0.5, 72, 1, 80)]
         write_midi(self.path, run_notes(0, WHITE_DOWN) + chord)
-        result = self.run_tool('--gliss')
+        result = self.run_tool()
         by_hand = {}
         for note in result:
             by_hand.setdefault(note['start_message'].channel, []).append(note['note'])
@@ -433,7 +433,7 @@ class PipelineTest(GlissTest):
 
     def test_run_notes_keep_one_length_after_trim(self):
         write_midi(self.path, run_notes(0, WHITE_DOWN) + [(0.5, 60, 1, 80)])
-        result = self.run_tool('--gliss')
+        result = self.run_tool()
         lengths = {note['end_ticks'] - note['start_ticks'] for note in result if note['note'] != 60}
         self.assertEqual(len(lengths), 1)
 
@@ -442,7 +442,7 @@ class PipelineTest(GlissTest):
         held = [(0, 72, 6, 80), (0, 76, 6, 80)]
         left = [(0, 48, 6, 80)]
         write_midi(self.path, held + left + run_notes(1, WHITE_DOWN))
-        result = self.run_tool('--gliss', '--no-trim')
+        result = self.run_tool('--no-gliss-fill', '--no-trim')
         ends = {note['note']: note['end_ticks'] for note in result if note['start_ticks'] == 0}
         self.assertEqual(ends[72], TICKS_PER_BEAT)
         self.assertEqual(ends[76], TICKS_PER_BEAT)
@@ -451,19 +451,19 @@ class PipelineTest(GlissTest):
     def test_released_key_can_be_filled(self):
         holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
         write_midi(self.path, [(0, 84, 6, 80), (0, 48, 6, 80)] + run_notes(1, holes))
-        result = self.run_tool('--gliss', '--gliss-fill', '--no-trim')
+        result = self.run_tool('--no-trim')
         self.assertEqual(len([note for note in result if note['note'] == 84]), 2)
 
-    def test_fill_needs_gliss(self):
-        write_midi(self.path, run_notes(0, WHITE_DOWN))
-        with contextlib.redirect_stdout(io.StringIO()):
-            status = postprocess.main([self.path, '--bpm', '120', '--gliss-fill'])
-        self.assertEqual(status, 1)
+    def test_fill_can_be_turned_off(self):
+        holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
+        write_midi(self.path, run_notes(0, holes))
+        self.assertEqual(sorted(note['note'] for note in self.run_tool('--no-gliss-fill')), sorted(holes))
+        self.assertEqual(sorted(note['note'] for note in self.run_tool()), sorted(WHITE_DOWN))
 
     def test_record_report_and_changes_describe_the_run(self):
         holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
         write_midi(self.path, run_notes(0, holes))
-        self.run_tool('--gliss', '--gliss-fill')
+        self.run_tool()
         record = json.loads(gliss.records_path(self.cleaned).read_text(encoding='utf-8'))
         self.assertEqual(record['runs'][0]['direction'], 'down')
         self.assertEqual([note['pitch'] for note in record['runs'][0]['notes'] if note['filled']], [84])
@@ -476,17 +476,17 @@ class PipelineTest(GlissTest):
 
     def test_turning_it_off_removes_the_old_record(self):
         write_midi(self.path, run_notes(0, WHITE_DOWN))
-        self.run_tool('--gliss')
-        self.assertTrue(gliss.records_path(self.cleaned).exists())
         self.run_tool()
+        self.assertTrue(gliss.records_path(self.cleaned).exists())
+        self.run_tool('--no-gliss')
         self.assertFalse(gliss.records_path(self.cleaned).exists())
 
 
 class PanelTest(unittest.TestCase):
-    def test_switches_are_off_by_default(self):
+    def test_switches_are_on_by_default(self):
         defaults = {name: default for name, _, default in SWITCHES}
-        self.assertFalse(defaults['gliss'])
-        self.assertFalse(defaults['gliss_fill'])
+        self.assertTrue(defaults['gliss'])
+        self.assertTrue(defaults['gliss_fill'])
 
     def test_every_setting_has_a_tab_and_help_in_every_language(self):
         self.assertIn('gliss', [prefix for prefix, _ in PARAMETER_TABS])

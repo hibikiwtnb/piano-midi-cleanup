@@ -1,6 +1,6 @@
 # 刮奏修正：設計（2026-11-06）
 
-狀態：已實作（`src/gliss.py`，1.0.16），預設關閉，用 `--gliss`、`--gliss-fill` 打開。驗證腳本和掃描結果在 `piano-midi-cleanup-data/scratch/gliss-design/`。
+狀態：已實作（`src/gliss.py`），預設開啟，補音也開；用 `--no-gliss`、`--no-gliss-fill` 關閉。驗證腳本和掃描結果在 `piano-midi-cleanup-data/scratch/gliss-design/`。
 
 ## 目標
 
@@ -138,7 +138,7 @@ BPMFix → 第一拍 → 調號 → ★偵測並抽出刮奏 → 規則清理 �
 
 ## 介面與紀錄
 
-- CLI：`--gliss`、`--gliss-fill`；GUI 面板比照可彈性清理加勾選。第一版預設關閉，驗證後再討論是否預設打開。
+- CLI：`--no-gliss`、`--no-gliss-fill`；GUI 面板有對應勾選，都預設開啟。
 - 報告：每段列小節、方向、音階、端點、音數、補音、音階外音，格式比照可彈性清理。
 - `*_bpmfix_cleaned.changes.json`：新增 `gliss` 階段，讓捲簾比較看得到改動。
 - 新增 `*_bpmfix_cleaned.gliss.json`：每段的手、音階，以及每個音的 tick、秒數、音高。DuET fork 的 `--glissandi` 直接讀它來寫刮奏記號（`~/workspace/DuET` 的 `gliss-notation` 分支）。
@@ -172,8 +172,6 @@ BPMFix → 第一拍 → 調號 → ★偵測並抽出刮奏 → 規則清理 �
 - Dream Believers m168（E6→A4）被判為刮奏，也待聽。
 - CRYCHIC 有 4 段判為 D 大調音階（m40、m63、m87、m93），這 4 段的音序較不規則，我認為最可能是誤抓。
 - 比原型保守：A song for You 的 m59、m141 在分離音軌漏音較多的版本抓不到。沒抓到的段落維持一般處理，不會改動。
-
-要預設打開，需要先請使用者聽過這份清單。
 
 ## 已知風險
 
