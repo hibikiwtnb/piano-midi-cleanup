@@ -509,12 +509,15 @@ def run_changes(rows, midi_path):
     return changes
 
 
-def run_records(rows, ticks_per_beat):
-    """What each run is, for the sidecar a later score step can read."""
+def run_records(rows, midi_path):
+    """What each run is, for a later score step (DuET's --glissandi reads this): seconds are of the final MIDI."""
+    midi_file = mido.MidiFile(midi_path)
+    seconds = tick_seconds(midi_file)
     return [dict(start_tick=row['run']['start_tick'], end_tick=row['run']['end_tick'],
                  direction='up' if row['run']['direction'] > 0 else 'down', scale=row['run']['scale_name'],
-                 hand=row['run']['hand'], ticks_per_beat=ticks_per_beat,
-                 notes=[dict(tick=note['tick'], pitch=note['pitch'], end_tick=note['end'], filled=note['filled'])
+                 hand=row['run']['hand'], ticks_per_beat=midi_file.ticks_per_beat,
+                 notes=[dict(tick=note['tick'], seconds=seconds(note['tick']), pitch=note['pitch'],
+                             end_tick=note['end'], filled=note['filled'])
                         for note in row['placed']])
             for row in rows]
 

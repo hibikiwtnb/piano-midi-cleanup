@@ -291,7 +291,7 @@ def _run_postprocess(args, stats_path):
             rows = gliss.restore_runs(cleaned_path, runs, fill=args.gliss_fill)
             ticks_per_beat = mido.MidiFile(cleaned_path).ticks_per_beat
             changes.extend(gliss.run_changes(rows, cleaned_path))
-            gliss.save_records(cleaned_path, gliss.run_records(rows, ticks_per_beat))
+            gliss.save_records(cleaned_path, gliss.run_records(rows, cleaned_path))
             update_report(stats_path, gliss.format_gliss_stats(cleaned_path, rows, rejected, args.gliss_fill,
                                                                ticks_per_beat))
         elif name == 'snapshot':

@@ -141,7 +141,7 @@ BPMFix → 第一拍 → 調號 → ★偵測並抽出刮奏 → 規則清理 �
 - CLI：`--gliss`、`--gliss-fill`；GUI 面板比照可彈性清理加勾選。第一版預設關閉，驗證後再討論是否預設打開。
 - 報告：每段列小節、方向、音階、端點、音數、補音、音階外音，格式比照可彈性清理。
 - `*_bpmfix_cleaned.changes.json`：新增 `gliss` 階段，讓捲簾比較看得到改動。
-- 新增 `*_bpmfix_cleaned.gliss.json`：每段的起訖 tick 和音高，之後用來自動寫樂譜記號。
+- 新增 `*_bpmfix_cleaned.gliss.json`：每段的手、音階，以及每個音的 tick、秒數、音高。DuET fork 的 `--glissandi` 直接讀它來寫刮奏記號（`~/workspace/DuET` 的 `gliss-notation` 分支）。
 
 ## 驗證
 
