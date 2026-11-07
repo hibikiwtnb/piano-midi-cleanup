@@ -85,23 +85,19 @@ class DetectionTest(GlissTest):
         runs, _ = detect(self.path, run_notes(0, BLACK_DOWN))
         self.assertEqual([run['scale_name'] for run in runs], ['black'])
 
-    def test_major_scale_run_with_its_own_notes(self):
+    def test_major_scale_run_is_left_as_it_is(self):
+        # Fast fingered major scales were most of DuET's false glissandi, so only one key colour is corrected.
         e_major = [88, 87, 85, 83, 81, 80, 78, 76, 75, 73, 71]
-        runs, _ = detect(self.path, run_notes(0, e_major))
-        self.assertEqual([run['scale_name'] for run in runs], ['E major'])
+        runs, rejected = detect(self.path, run_notes(0, e_major))
+        self.assertEqual(runs, [])
+        self.assertEqual([(item['reason'], item['scale']) for item in rejected], [('scale', 'E major')])
 
-    def test_ambiguous_scale_uses_the_key_signature(self):
-        # A G major or D major run without F# or C# would pass as white; B-flat with no E-flat fits F and B-flat major.
-        run = [81, 79, 77, 74, 72, 70, 69, 67, 65, 62]
-        runs, _ = detect(self.path, run_notes(0, run), key='F')
-        self.assertEqual([item['scale_name'] for item in runs], ['F major'])
-
-    def test_ambiguous_scale_without_a_deciding_key(self):
-        run = [81, 79, 77, 74, 72, 70, 69, 67, 65, 62]
-        runs, _ = detect(self.path, run_notes(0, run), key='E')
-        self.assertEqual(len(runs), 1)
-        self.assertIsNone(runs[0]['scale'])
-        self.assertTrue(runs[0]['scale_name'].startswith('ambiguous'))
+    def test_major_scale_run_is_not_read_as_its_white_keys(self):
+        # G major from C7 down: its white keys alone would be a white run with gaps at every F#.
+        g_major = [96, 95, 93, 91, 90, 88, 86, 84, 83, 81, 79, 78, 76, 74, 72]
+        runs, rejected = detect(self.path, run_notes(0, g_major))
+        self.assertEqual(runs, [])
+        self.assertEqual([item['scale'] for item in rejected], ['G major'])
 
     def test_out_of_order_notes_are_still_one_run(self):
         shuffled = WHITE_DOWN[:8] + [76, 77, 72, 74, 71]
@@ -121,6 +117,13 @@ class DetectionTest(GlissTest):
     def test_a_short_figure_is_not_a_run(self):
         runs, _ = detect(self.path, run_notes(0, WHITE_DOWN[:5]))
         self.assertEqual(runs, [])
+
+    def test_seven_notes_across_eight_degrees_are_not_a_run(self):
+        seven = [pitch for pitch in WHITE_DOWN[:8] if pitch != 86]
+        runs, _ = detect(self.path, run_notes(0, seven))
+        self.assertEqual(runs, [])
+        runs, _ = detect(self.path, run_notes(0, WHITE_DOWN[:8]))
+        self.assertEqual(len(runs), 1)
 
     def test_a_note_past_a_gap_is_not_part_of_the_run(self):
         late = (WHITE_DOWN[-1] - 3, )
@@ -204,7 +207,7 @@ class ThroughNoteTest(GlissTest):
             notes += [(at, 52, 0.5, 80), (at + 1.2, pitch, 0.5, 80), (at + 1.2, 52, 0.5, 80)]
         runs, rejected = detect(self.path, notes)
         self.assertEqual(runs, [])
-        self.assertEqual(len(rejected), 1)
+        self.assertEqual([item['reason'] for item in rejected], ['repeated'])
 
 
 class RepairTest(GlissTest):
@@ -264,17 +267,14 @@ class RepairTest(GlissTest):
         restored, _ = self.restored(run_notes(0, holes), fill=True)
         self.assertEqual([note['note'] for note in restored], BLACK_DOWN)
 
-    def test_fill_adds_the_scale_notes_of_a_major_scale_run(self):
+    def test_major_scale_run_keeps_its_notes_with_fill_on(self):
         e_major = [88, 87, 85, 83, 81, 80, 78, 76, 75, 73, 71]
-        holes = [pitch for pitch in e_major if pitch != 80]
-        restored, _ = self.restored(run_notes(0, holes), fill=True)
-        self.assertEqual([note['note'] for note in restored], e_major)
-
-    def test_no_fill_on_an_ambiguous_scale(self):
-        run = [81, 79, 74, 72, 70, 69, 67, 65, 62]
-        restored, rows = self.restored(run_notes(0, run), fill=True)
-        self.assertEqual(rows[0]['filled'], [])
-        self.assertEqual(len(restored), len(run))
+        notes = run_notes(0, [pitch for pitch in e_major if pitch != 80])
+        restored, rows = self.restored(notes, fill=True)
+        self.assertEqual(rows, [])
+        self.assertEqual([(note['start_ticks'], note['note'], note['end_ticks']) for note in restored],
+                         [(round(start * TICKS_PER_BEAT), pitch, round((start + length) * TICKS_PER_BEAT))
+                          for start, pitch, length, _ in notes])
 
     def test_fill_takes_the_midpoint_and_mean_velocity(self):
         pitches = [93, 91, 89, 88, 86, 84, 81, 79, 77, 76, 74, 72, 71]  # B5 (83) missing

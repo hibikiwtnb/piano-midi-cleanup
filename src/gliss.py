@@ -1,7 +1,9 @@
 """Glissando correction: find runs in a transcription, keep them out of the other steps, and put them back repaired.
 
-What it answers: which fast one-direction notes are a single gesture on one scale, so they should share one length,
-one hand and, on request, the scale notes the model missed. The evidence is in docs/gliss-correction-design.md.
+What it answers: which fast one-direction notes are a single gesture on one key colour, all white or all black keys, so
+they should share one length, one hand and, on request, the keys the model missed. A run on another major scale is still
+found, so that its notes are not read as a white or black run with stray notes, but it is left as it is: those were
+mostly fast fingered scales. The evidence is in docs/gliss-correction-design.md.
 
 What it must not do: change any other note, except that notes struck during a run move to the other hand and notes the
 run's hand still holds when it starts end there. Raw note length cannot separate a run from the chords it crosses, because
@@ -24,10 +26,12 @@ WHITE_KEYS = (0, 2, 4, 5, 7, 9, 11)
 BLACK_KEYS = (1, 3, 6, 8, 10)
 MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
 NOTE_NAMES = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
-KEY_ROOTS = {'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
-             'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11, 'Cb': 11}
+# Runs on these scales are corrected; a run on any other scale of scale_candidates is only reported.
+CORRECTED_SCALES = ('white', 'black')
 
 MIN_DEGREES = 8
+# DuET's test on 148 hand-made scores found 6-7 note runs to be false; the shortest hand-checked run has 8 notes.
+MIN_NOTES = 8
 MAX_SECONDS_PER_DEGREE = 0.075
 MIN_SEED_SECONDS = 0.08
 MAX_SEED_SECONDS = 3.0
@@ -68,7 +72,10 @@ def major_scale(root):
 
 
 def scale_candidates():
-    """Scales in the order they are tried: a run on white keys is never reported as a major scale that contains it."""
+    """Scales in the order they are tried: a run on white keys is never reported as a major scale that contains it.
+
+    Major scales are tried only so that a major scale run wins over the white or black keys it contains; it is not corrected.
+    """
     scales = [('white', WHITE_KEYS), ('black', BLACK_KEYS)]
     scales += [(NOTE_NAMES[root] + ' major', major_scale(root)) for root in range(1, 12)]
     return scales
@@ -231,49 +238,12 @@ def _drop_chord_ends(members, notes, seconds_per_beat):
             return
 
 
-def _key_at(tick, key_changes):
-    current = None
-    for change_tick, root in key_changes:
-        if change_tick <= tick:
-            current = root
-    return current
-
-
-def _resolve_scale(name, scale, pitches, start_tick, key_changes):
-    """Name and scale of a run, or a None scale when its notes fit several scales and the key does not decide."""
-    if name in ('white', 'black'):
-        return name, scale
-    classes = {pitch % 12 for pitch in pitches}
-    fits = [root for root in range(12) if classes <= set(major_scale(root))]
-    if len(fits) == 1:
-        return NOTE_NAMES[fits[0]] + ' major', major_scale(fits[0])
-    key = _key_at(start_tick, key_changes)
-    if key in fits:
-        return NOTE_NAMES[key] + ' major', major_scale(key)
-    return 'ambiguous ({})'.format(', '.join(NOTE_NAMES[root] for root in fits)), None
-
-
-def key_changes_of(midi_file):
-    """(tick, major root) of each key signature; a minor key shares the notes of its relative major."""
-    changes = []
-    for track in midi_file.tracks:
-        tick = 0
-        for message in track:
-            tick += message.time
-            if message.type == 'key_signature':
-                name = message.key
-                root = KEY_ROOTS[name[:-1]] + 3 if name.endswith('m') else KEY_ROOTS[name]
-                changes.append((tick, root % 12))
-    return sorted(changes)
-
-
 def detect_runs(midi_file):
     """Glissando runs of a MIDI, in time order; each holds its member notes and what the repair needs."""
     notes = collect_notes(midi_file)
     tempo = next((message.tempo for track in midi_file.tracks for message in track
                   if message.type == 'set_tempo'), 500000)
     seconds_per_beat = tempo / 1000000
-    key_changes = key_changes_of(midi_file)
     runs = []
     rejected = []
     taken = set()
@@ -296,20 +266,20 @@ def detect_runs(midi_file):
         ordered = sorted(members.values(), key=lambda note: note['start_seconds'])
         span = highest - lowest + 1
         duration = ordered[-1]['start_seconds'] - ordered[0]['start_seconds']
-        if span < MIN_DEGREES or len(members) / span < MIN_COVERAGE or duration <= 0 \
+        if span < MIN_DEGREES or len(members) < MIN_NOTES or len(members) / span < MIN_COVERAGE or duration <= 0 \
                 or duration / (span - 1) > MAX_SECONDS_PER_DEGREE \
                 or (min(pitches) + max(pitches)) / 2 < MIN_CENTER_PITCH or max(pitches) < MIN_TOP_PITCH:
             continue
         member_ids = {id(note) for note in members.values()}
         repeated = sum(1 for note in ordered if _repeated_chord_note(note, notes, member_ids, seconds_per_beat))
         summary = dict(start_tick=ordered[0]['start_ticks'], scale=name, repeated=repeated, notes=len(ordered))
-        if repeated / len(ordered) >= MAX_REPEATED_SHARE:
+        if repeated / len(ordered) >= MAX_REPEATED_SHARE or name not in CORRECTED_SCALES:
+            summary['reason'] = 'repeated' if name in CORRECTED_SCALES else 'scale'
             rejected.append(summary)
             occupied.append((ordered[0]['start_seconds'], ordered[-1]['start_seconds'], direction))
             continue
-        scale_name, resolved = _resolve_scale(name, scale, pitches, ordered[0]['start_ticks'], key_changes)
         runs.append(dict(
-            members=ordered, direction=direction, scale_name=scale_name, scale=resolved, degree_scale=scale,
+            members=ordered, direction=direction, scale_name=name, scale=scale, degree_scale=scale,
             low_degree=lowest, high_degree=highest, start_seconds=ordered[0]['start_seconds'],
             end_seconds=ordered[-1]['start_seconds'], start_tick=ordered[0]['start_ticks'],
             end_tick=ordered[-1]['start_ticks'], start_pitch=pitches_in_order(ordered, direction)[0],
@@ -376,7 +346,7 @@ def repair_run(run, ticks_per_beat, existing, fill):
 
     filled = []
     held = []
-    if fill and run['scale'] is not None:
+    if fill:
         scale = run['scale']
         result = []
         for current, following in zip(placed, placed[1:]):
@@ -540,7 +510,9 @@ def remove_records(midi_path):
 def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):
     bar_ticks = 4 * ticks_per_beat
     lines = ['MIDI glissando stats', 'MIDI: {}'.format(midi_path),
-             'Runs: {}, rejected as repeated chords: {}'.format(len(rows), len(rejected)),
+             'Runs: {}, rejected as repeated chords: {}, left as major scales: {}'.format(
+                 len(rows), sum(item['reason'] == 'repeated' for item in rejected),
+                 sum(item['reason'] == 'scale' for item in rejected)),
              'Fill missing scale notes: {}'.format('On' if fill else 'Off')]
     for row in rows:
         run = row['run']
@@ -561,6 +533,10 @@ def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):
             details.append('released at the start: ' + ' '.join(_name(note['note']) for note in row['released']))
         lines.append(line + ('; ' + '; '.join(details) if details else ''))
     for item in rejected:
-        lines.append('- m{}: rejected, {} of {} notes are in a repeated chord'.format(
-            item['start_tick'] // bar_ticks + 1, item['repeated'], item['notes']))
+        if item['reason'] == 'scale':
+            lines.append('- m{}: left as it is, {} notes on {}, not one key colour'.format(
+                item['start_tick'] // bar_ticks + 1, item['notes'], item['scale']))
+        else:
+            lines.append('- m{}: rejected, {} of {} notes are in a repeated chord'.format(
+                item['start_tick'] // bar_ticks + 1, item['repeated'], item['notes']))
     return '\n'.join(lines)

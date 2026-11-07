@@ -79,6 +79,7 @@ PARAMETERS = (
               ((trim_overlaps, 'HARMONY_MIN_PITCH_CLASSES'),)),
     Parameter('trim.outer_step', 'Outer line: step up to (semitones)', int, ((trim_overlaps, 'OUTER_STEP_SEMITONES'),)),
     Parameter('gliss.min_degrees', 'Glissando: at least scale degrees', int, ((gliss, 'MIN_DEGREES'),)),
+    Parameter('gliss.min_notes', 'Glissando: at least notes', int, ((gliss, 'MIN_NOTES'),)),
     Parameter('gliss.max_seconds_per_degree', 'Glissando: slowest time per degree (s)', float,
               ((gliss, 'MAX_SECONDS_PER_DEGREE'),)),
     Parameter('gliss.min_coverage', 'Glissando: share of degrees present', float, ((gliss, 'MIN_COVERAGE'),)),
