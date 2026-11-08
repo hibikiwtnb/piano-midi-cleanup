@@ -3,7 +3,9 @@
 What it answers: which fast one-direction notes are a single gesture on one key colour, all white or all black keys, so
 they should share one length, one hand and, on request, the keys the model missed. A run on another major scale is still
 found, so that its notes are not read as a white or black run with stray notes, but it is left as it is: those were
-mostly fast fingered scales. The evidence is in docs/gliss-correction-design.md.
+mostly fast fingered scales. The exception is D-flat, G-flat and B major, which hold every black key: a hand sliding over
+the black keys catches the white keys in the gaps between their groups, so such a run is a black-key glissando with those
+white keys in it. The evidence is in docs/gliss-correction-design.md.
 
 What it must not do: change any other note, except that notes struck during a run move to the other hand and notes the
 run's hand still holds when it starts end there. Raw note length cannot separate a run from the chords it crosses, because
@@ -26,7 +28,8 @@ WHITE_KEYS = (0, 2, 4, 5, 7, 9, 11)
 BLACK_KEYS = (1, 3, 6, 8, 10)
 MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
 NOTE_NAMES = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
-# Runs on these scales are corrected; a run on any other scale of scale_candidates is only reported.
+# Runs on these scales are corrected; a run on any other scale of scale_candidates is only reported, unless the scale holds
+# every black key (black_with_gaps).
 CORRECTED_SCALES = ('white', 'black')
 
 MIN_DEGREES = 8
@@ -79,6 +82,11 @@ def scale_candidates():
     scales = [('white', WHITE_KEYS), ('black', BLACK_KEYS)]
     scales += [(NOTE_NAMES[root] + ' major', major_scale(root)) for root in range(1, 12)]
     return scales
+
+
+def black_with_gaps(scale):
+    """Does this scale hold every black key? Then its white keys are E/F and B/C, the gaps between the black groups."""
+    return set(BLACK_KEYS) < set(scale)
 
 
 def scale_degree(pitch, scale):
@@ -273,13 +281,16 @@ def detect_runs(midi_file):
         member_ids = {id(note) for note in members.values()}
         repeated = sum(1 for note in ordered if _repeated_chord_note(note, notes, member_ids, seconds_per_beat))
         summary = dict(start_tick=ordered[0]['start_ticks'], scale=name, repeated=repeated, notes=len(ordered))
-        if repeated / len(ordered) >= MAX_REPEATED_SHARE or name not in CORRECTED_SCALES:
-            summary['reason'] = 'repeated' if name in CORRECTED_SCALES else 'scale'
+        corrected = name in CORRECTED_SCALES or black_with_gaps(scale)
+        if repeated / len(ordered) >= MAX_REPEATED_SHARE or not corrected:
+            summary['reason'] = 'repeated' if corrected else 'scale'
             rejected.append(summary)
             occupied.append((ordered[0]['start_seconds'], ordered[-1]['start_seconds'], direction))
             continue
+        # A black-key run with gap keys is filled with black keys only; the white keys it struck stay in it.
+        scale_name, fill_scale = (name, scale) if name in CORRECTED_SCALES else ('black ({})'.format(name), BLACK_KEYS)
         runs.append(dict(
-            members=ordered, direction=direction, scale_name=name, scale=scale, degree_scale=scale,
+            members=ordered, direction=direction, scale_name=scale_name, scale=fill_scale, degree_scale=scale,
             low_degree=lowest, high_degree=highest, start_seconds=ordered[0]['start_seconds'],
             end_seconds=ordered[-1]['start_seconds'], start_tick=ordered[0]['start_ticks'],
             end_tick=ordered[-1]['start_ticks'], start_pitch=pitches_in_order(ordered, direction)[0],

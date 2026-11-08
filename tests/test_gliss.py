@@ -99,6 +99,14 @@ class DetectionTest(GlissTest):
         self.assertEqual(runs, [])
         self.assertEqual([item['scale'] for item in rejected], ['G major'])
 
+    def test_black_key_run_with_the_gap_keys_is_a_black_run(self):
+        # Kokuhaku m133: G-flat major in 18 ms steps, a black-key glissando that also struck F and C-flat.
+        g_flat = [90, 89, 87, 85, 83, 82, 80, 78, 77, 75, 73, 71, 70]
+        runs, rejected = detect(self.path, run_notes(0, g_flat))
+        self.assertEqual(rejected, [])
+        self.assertEqual([run['scale_name'] for run in runs], ['black (Gb major)'])
+        self.assertEqual(member_pitches(runs[0]), g_flat)
+
     def test_out_of_order_notes_are_still_one_run(self):
         shuffled = WHITE_DOWN[:8] + [76, 77, 72, 74, 71]
         runs, _ = detect(self.path, run_notes(0, shuffled))
@@ -275,6 +283,13 @@ class RepairTest(GlissTest):
         self.assertEqual([(note['start_ticks'], note['note'], note['end_ticks']) for note in restored],
                          [(round(start * TICKS_PER_BEAT), pitch, round((start + length) * TICKS_PER_BEAT))
                           for start, pitch, length, _ in notes])
+
+    def test_fill_adds_only_black_keys_on_a_black_run_with_gap_keys(self):
+        g_flat = [90, 89, 87, 85, 83, 82, 80, 78, 77, 75, 73, 71, 70]
+        holes = [pitch for pitch in g_flat if pitch not in (80, 77)]  # A-flat and F missing
+        restored, rows = self.restored(run_notes(0, holes), fill=True)
+        self.assertEqual(rows[0]['filled'], [80])
+        self.assertEqual([note['note'] for note in restored], [pitch for pitch in g_flat if pitch != 77])
 
     def test_fill_takes_the_midpoint_and_mean_velocity(self):
         pitches = [93, 91, 89, 88, 86, 84, 81, 79, 77, 76, 74, 72, 71]  # B5 (83) missing
