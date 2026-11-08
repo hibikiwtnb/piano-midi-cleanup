@@ -531,7 +531,20 @@ class PianoRollView(ttk.Frame):
                  relief='solid', borderwidth=1, padx=6, pady=3).pack()
         self.hint.geometry('+{}+{}'.format(x, y))
 
+    def show_selection_hint(self, text, x, y):
+        """Draw the hint on the roll itself: a Toplevel opened in a mouse-release handler can leave
+        macOS Tk believing the button is still down, so every click goes to the roll."""
+        self.hide_hint()
+        label = self.canvas.create_text(x + 18, y + 16, text=text, anchor='nw', justify='left',
+                                        fill='#202020', tags='selection_hint')
+        left, top, right, bottom = self.canvas.bbox(label)
+        box = self.canvas.create_rectangle(left - 6, top - 3, right + 6, bottom + 3, fill='#ffffe1',
+                                           outline='#202020', tags='selection_hint')
+        self.canvas.tag_lower(box, label)
+
     def hide_hint(self):
+        if hasattr(self, 'canvas'):
+            self.canvas.delete('selection_hint')
         if self.hint is not None:
             self.hint.destroy()
             self.hint = None
@@ -722,7 +735,7 @@ class PianoRollView(ttk.Frame):
         self.set_selection(self.selected | found if event.state & 0x0001 else found)
         if self.selected:
             self.set_status(tr('{} notes selected').format(len(self.selected)))
-            self.show_hint_at(tr('D delete\nC change hand'), event.x_root + 12, event.y_root + 12)
+            self.show_selection_hint(tr('D delete\nC change hand'), x1, y1)
 
     def set_selection(self, indices):
         self.hide_hint()
@@ -744,6 +757,7 @@ class PianoRollView(ttk.Frame):
         """Delete the selection, or move it to channel, on screen only; Save writes it to the MIDI file."""
         if not self.editable():
             return 'break'
+        self.hide_hint()
         self.stop()
         self.undo_stack = (self.undo_stack + [(list(self.notes), list(self.file_index), set(self.pending_deleted),
                                                dict(self.pending_channels), set(self.selected))])[-UNDO_LIMIT:]
@@ -779,6 +793,7 @@ class PianoRollView(ttk.Frame):
     def undo_edit(self):
         if not self.undo_stack:
             return 'break'
+        self.hide_hint()
         self.stop()
         self.notes, self.file_index, self.pending_deleted, self.pending_channels, self.selected = self.undo_stack.pop()
         self.edits_changed()
