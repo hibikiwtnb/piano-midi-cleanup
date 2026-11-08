@@ -1122,7 +1122,8 @@ class PianoRollView(ttk.Frame):
 
     # Playback.
     def ensure_playback(self):
-        if self.playback is None:
+        # A port that was missing (e.g. Logic Pro not yet open) is looked up again on each play.
+        if self.playback is None or self.output is None:
             self.output, name = open_output(self.output_var.get())
             self.playback = MidiPlayback(self.output)
             if self.output is None:
