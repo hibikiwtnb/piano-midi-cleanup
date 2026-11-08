@@ -177,6 +177,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 - **重跑後手動第一拍不見了**：下一輪選「沿用已修正的速度」，不要從原始檔重算自動對齊。
 - **播放不是匯出**：捲簾播放只是即時試聽，本工具不輸出 WAV、MP3 或其他音訊檔。
 - **內建音源**：Coopiano 是物理建模音源，不需要下載鋼琴取樣。播放使用系統預設音訊裝置；Windows 遠端桌面工作階段必須有可用的播放裝置。
+- **Steinway Grand Piano（選用）**：若本機已有 Steinway Grand Piano 的 SFZ，播放輸出可選「Steinway Grand Piano」，由內附的 sfizz 直接取樣播放，不需要開 Logic。SFZ 預設找 `~/Documents/MuseScore3Evo/SoundFonts/Steinway Grand Piano.sfz`，也可用 `PIANO_MIDI_CLEANUP_SFZ` 指定；取樣不隨專案散布。
 - **播放環境**：Windows x64 與 macOS 的原生音源庫已隨專案提供；跨平台與遠端桌面的系統性播放驗證仍待補齊。
 - **只支援 4/4 與單一速度**：變速、自由速度、3/4 等拍號會讓小節線失準。
 - **不是完成樂譜**：輸出仍是 MIDI，不是排版好的樂譜或 MusicXML。轉譜錯誤、錯音與漏音仍需人工檢查。
@@ -211,4 +212,4 @@ Copyright (c) 2026 hibikiwtnb and contributors.
 
 本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發本程式時須依授權提供相應原始碼，修改版若透過網路與使用者互動，須依第 13 條提供原始碼取得方式。軟體不附任何保證。
 
-轉譜使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0）。內建音源 Coopiano、和弦命名 Tonal.js、和弦推斷 note-seq、Windows 自動 BPM 使用的 Essentia.js 等第三方元件保留各自授權；來源與授權全文見 [sound_sources/README.md](sound_sources/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。本專案是個人專案，與 ByteDance 無關。
+轉譜使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0）。內建音源 Coopiano、取樣播放引擎 sfizz、和弦命名 Tonal.js、和弦推斷 note-seq、Windows 自動 BPM 使用的 Essentia.js 等第三方元件保留各自授權；來源與授權全文見 [sound_sources/README.md](sound_sources/README.md)、[sound_sources/sfizz/README.md](sound_sources/sfizz/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。本專案是個人專案，與 ByteDance 無關。

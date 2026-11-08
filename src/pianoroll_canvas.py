@@ -258,7 +258,7 @@ class PianoRollView(ttk.Frame):
         outputs = output_names()
         if self.output_var.get() not in outputs:
             outputs.insert(0, self.output_var.get())
-        selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=22, state='readonly')
+        selector = ttk.Combobox(play, textvariable=self.output_var, values=outputs, width=24, state='readonly')
         selector.pack(side='left')
         selector.bind('<<ComboboxSelected>>', self.change_output)
         # Rarely changed view options live in one menu; the legend beside it shows what the colours mean.
@@ -1215,7 +1215,7 @@ class PianoRollView(ttk.Frame):
             self.set_status(tr('Could not start playback: {}').format(self.output.error))
             return False
         if not getattr(self.output, 'ready', True):
-            self.set_status(tr('Preparing Coopiano...'))
+            self.set_status(tr('Preparing {}...').format(self.output_var.get()))
             return False
         return True
 

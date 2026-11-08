@@ -13,3 +13,14 @@ The Windows x64 runtime is included at `coopiano/native/coopiano.dll`, built wit
 Coopiano uses the calibrated `coopiano/default.ini` and the OS default stereo output device at its default rate. The existing host adapter resamples the 44.1 kHz engine to supported device rates (44.1, 48, 88.2 or 96 kHz). Under RDP, the session must have an available audio playback device. Output errors are displayed in the app; it does not silently switch to another synth.
 
 The background worker initializes the engine and prepares each incoming note using the engine's existing strike preparation API. It does not precompute every key/velocity combination at startup. Prepared strikes cross a bounded single-producer/single-consumer queue to the audio callback; allocation, contact solving and strike destruction stay off the callback. MIDI timing, hand muting and sustain use the same scheduler as external MIDI outputs. The callback is block-based (1024 frames); note preparation can add latency, and this integration does not claim sample-accurate MIDI delivery or guaranteed real-time performance on every machine. Realtime playback integration is implemented; systematic GUI/RDP playback validation remains outstanding. Realtime playback does not generate audio files.
+
+# sfizz / Steinway Grand Piano
+
+`sfizz/` is the optional sampled-piano playback source. `src/sfizz_output.py`
+loads a user-supplied Steinway Grand Piano SFZ with sfizz and sends its stereo
+PCM to the OS default output with sounddevice. The samples are not in this
+repository; the app finds the SFZ through `PIANO_MIDI_CLEANUP_SFZ` or the
+default MuseScore/Logic locations documented in `sfizz/README.md`. sfizz is
+BSD-2-Clause; `sfizz/LICENSE` and the upstream notices apply. The macOS runtime
+is a universal x86_64/arm64 dylib at `sfizz/native/libsfizz.dylib`; rebuild
+instructions are in `sfizz/README.md`.

@@ -10,6 +10,7 @@ import mido
 
 from hand_split_channels import CHANNELS
 from coopiano_output import OUTPUT_NAME as PIANO_OUTPUT_NAME, CoopianoOutput
+from sfizz_output import OUTPUT_NAME as STEINWAY_OUTPUT_NAME, SfizzOutput, available as steinway_available
 
 
 VIRTUAL_PORT_NAME = 'piano-midi-cleanup'
@@ -41,6 +42,8 @@ def default_output_name():
 
 def open_output(port_name=None):
     """Open the selected audio/MIDI sink; never silently change the selection."""
+    if port_name == STEINWAY_OUTPUT_NAME:
+        return SfizzOutput(), STEINWAY_OUTPUT_NAME
     if port_name in (None, 'CoPiano', PIANO_OUTPUT_NAME):
         return CoopianoOutput(), PIANO_OUTPUT_NAME
     if port_name == VIRTUAL_PORT_NAME and os.name != 'nt':
@@ -77,7 +80,7 @@ def open_output(port_name=None):
 
 
 def output_names():
-    """List Coopiano first, followed by existing MIDI outputs."""
+    """List the built-in pianos first, followed by existing MIDI outputs."""
     try:
         names = list(midi_output_ports())
     except Exception as error:
@@ -85,7 +88,10 @@ def output_names():
         names = []
     if os.name != 'nt' and VIRTUAL_PORT_NAME not in names:
         names.insert(0, VIRTUAL_PORT_NAME)
-    return [PIANO_OUTPUT_NAME] + [name for name in names if name != PIANO_OUTPUT_NAME]
+    built_in = [PIANO_OUTPUT_NAME]
+    if steinway_available():
+        built_in.append(STEINWAY_OUTPUT_NAME)
+    return built_in + [name for name in names if name not in built_in]
 
 
 @dataclass(frozen=True)
