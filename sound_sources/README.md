@@ -21,6 +21,7 @@ loads a user-supplied Steinway Grand Piano SFZ with sfizz and sends its stereo
 PCM to the OS default output with sounddevice. The samples are not in this
 repository; the app finds the SFZ through `PIANO_MIDI_CLEANUP_SFZ` or the
 default MuseScore/Logic locations documented in `sfizz/README.md`. sfizz is
-BSD-2-Clause; `sfizz/LICENSE` and the upstream notices apply. The macOS runtime
-is a universal x86_64/arm64 dylib at `sfizz/native/libsfizz.dylib`; rebuild
+BSD-2-Clause; `sfizz/LICENSE` and `sfizz/THIRD_PARTY.md` (with full texts in
+`sfizz/third_party/`) cover the bundled components. The macOS runtime is a
+universal x86_64/arm64 dylib at `sfizz/native/libsfizz.dylib`; rebuild
 instructions are in `sfizz/README.md`.

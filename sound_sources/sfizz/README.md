@@ -2,7 +2,9 @@
 
 `native/libsfizz.dylib` is sfizz 1.2.3, built as a universal macOS binary
 (x86_64 and arm64). sfizz is BSD-2-Clause; see `LICENSE`. The dylib contains
-bundled third-party code; keep sfizz's license and notices with it.
+bundled third-party code; keep sfizz's license and notices with it. The
+component list and full license texts are in `THIRD_PARTY.md` and
+`third_party/`.
 
 `src/sfizz_output.py` loads an SFZ through this library and sends stereo float
 PCM to the operating system's default output with sounddevice. It is the
