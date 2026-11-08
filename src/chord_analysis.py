@@ -346,47 +346,59 @@ def analyze_chords(midi_path):
         return cached
     # Analyze the same snapshot that was fingerprinted, even if the file is replaced.
     segments = _analyze_chords(mido.MidiFile(file=io.BytesIO(midi_bytes)))
-    payload = dict(version=CHORD_CACHE_VERSION, midi_sha256=midi_sha256,
-                   segments=[asdict(segment) for segment in segments])
-    try:
-        temporary = cache_path.with_suffix('.json.tmp')
-        temporary.write_text(json.dumps(payload, ensure_ascii=True), encoding='utf-8')
-        temporary.replace(cache_path)
-    except OSError:
-        # A read-only source folder must not prevent chord display.
-        pass
+    save_chord_cache(midi_path, segments, midi_sha256)
     return segments
 
 
-def _analyze_chords(midi_file):
-    """Infer ordered segments, excluding the pickup and no-chord stretches."""
+@dataclass(frozen=True)
+class _Song:
+    notes: list
+    seconds: object
+    ticks_per_beat: int
+    frame_ticks: float
+    song_end_tick: int
+    frame_count: int
+    # First frame of the first full bar; chords start there.
+    start_frame: int
+
+
+def _song(midi_file):
     seconds = tick_seconds(midi_file)
     notes = read_notes(midi_file, seconds)
     if not notes:
-        return []
+        return None
     frame_ticks = midi_file.ticks_per_beat / FRAMES_PER_BEAT
     song_end_tick = max(note.sound_end_tick for note in notes)
     frame_count = math.ceil(song_end_tick / frame_ticks)
-    boundaries = [frame * frame_ticks for frame in range(frame_count + 1)]
     # Chords start at the first full bar; the pickup still sounds into it through the pedal.
     start = round(first_bar_tick(notes, midi_file.ticks_per_beat) / frame_ticks)
-    if start >= frame_count:
-        return []
+    return _Song(notes, seconds, midi_file.ticks_per_beat, frame_ticks, song_end_tick, frame_count, start)
+
+
+def _window_segments(song, first_frame, end_frame, keep_first=None, keep_end=None):
+    """Segments inferred from frames [first_frame, end_frame), clipped to [keep_first, keep_end).
+
+    The whole song is first_frame = start_frame and end_frame = frame_count with nothing clipped.
+    """
+    keep_first = first_frame if keep_first is None else keep_first
+    keep_end = end_frame if keep_end is None else keep_end
+    notes, frame_ticks = song.notes, song.frame_ticks
+    boundaries = [frame * frame_ticks for frame in range(first_frame, end_frame + 1)]
     key_chords = infer_key_chords(
-        frame_pitch_vectors(frame_notes(notes, midi_file.ticks_per_beat), boundaries)[start:],
-        change_probs(notes, frame_ticks, frame_count)[start:],
-        frame_basses(notes, frame_ticks, frame_count)[start:],
+        frame_pitch_vectors(frame_notes(notes, song.ticks_per_beat), boundaries),
+        change_probs(notes, frame_ticks, song.frame_count)[first_frame:end_frame - 1],
+        frame_basses(notes, frame_ticks, song.frame_count)[first_frame:end_frame],
         chord_note_concentration=CHORD_NOTE_CONCENTRATION,
         bass_root_bonus=BASS_ROOT_BONUS, bass_tone_bonus=BASS_TONE_BONUS)
 
     runs = []
     queries = []
     for first, end, key, chord in chord_runs(key_chords):
-        first, end = first + start, end + start
-        if chord == NO_CHORD:
+        first, end = max(first + first_frame, keep_first), min(end + first_frame, keep_end)
+        if chord == NO_CHORD or first >= end:
             continue
         start_tick = round(first * frame_ticks)
-        end_tick = min(round(end * frame_ticks), song_end_tick)
+        end_tick = min(round(end * frame_ticks), song.song_end_tick)
         weights, bass = segment_profile(notes, start_tick, end_tick)
         if bass is None:
             continue
@@ -396,14 +408,39 @@ def _analyze_chords(midi_file):
         runs.append((start_tick, end_tick, chord, names, bass, named_sets, len(queries)))
         queries.extend(list(named) for named in named_sets)
 
-    results = detect_chords(queries)
+    results = detect_chords(queries) if queries else []
     segments = []
     for start_tick, end_tick, chord, names, bass, named_sets, first in runs:
         candidates, chosen = name_chord(results[first:first + len(named_sets)], chord, names, bass)
         tones = named_sets[chosen] if chosen is not None else tuple(names[pc] for pc in chord_pitch_classes(chord))
-        segments.append(ChordSegment(start_tick, end_tick, seconds(start_tick), seconds(end_tick),
+        segments.append(ChordSegment(start_tick, end_tick, song.seconds(start_tick), song.seconds(end_tick),
                                      candidates[0], candidates, names[bass % 12], tones))
     return segments
+
+
+def _analyze_chords(midi_file):
+    """Infer ordered segments, excluding the pickup and no-chord stretches."""
+    song = _song(midi_file)
+    if song is None or song.start_frame >= song.frame_count:
+        return []
+    return _window_segments(song, song.start_frame, song.frame_count)
+
+
+def save_chord_cache(midi_path, segments, midi_sha256=None):
+    """Record segments as midi_path's, so reopening the file does not analyze it again."""
+    midi_path = Path(midi_path)
+    cache_path = midi_path.with_suffix('.chords.json')
+    if midi_sha256 is None:
+        midi_sha256 = hashlib.sha256(midi_path.read_bytes()).hexdigest()
+    payload = dict(version=CHORD_CACHE_VERSION, midi_sha256=midi_sha256,
+                   segments=[asdict(segment) for segment in segments])
+    try:
+        temporary = cache_path.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(payload, ensure_ascii=True), encoding='utf-8')
+        temporary.replace(cache_path)
+    except OSError:
+        # A read-only source folder must not prevent chord display.
+        pass
 
 
 def bar_beat(tick, ticks_per_beat, beats_per_bar=4):
