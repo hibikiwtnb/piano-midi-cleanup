@@ -16,8 +16,8 @@ import re
 import subprocess
 import sys
 from bisect import bisect_right
-from collections import defaultdict
-from dataclasses import asdict, dataclass
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import mido
@@ -59,6 +59,9 @@ MAX_PITCH_CLASSES = 5
 # Fewest pitch classes tried when the full set has no chord name.
 MIN_PITCH_CLASSES = 3
 CANDIDATE_COUNT = 3
+# After a note edit, chords are re-inferred this many bars around the edit and spliced in this many bars out.
+UPDATE_CONTEXT_BARS = 4
+UPDATE_SPLICE_BARS = 1
 # Chord qualities from most to least preferred; Tonal lists exotic readings such as m#5 for plain inversions.
 QUALITY_ORDER = ('', 'm', '7', 'maj7', 'm7', 'sus4', 'sus2', '6', 'm6', 'add9', 'madd9', '9', 'maj9', 'm9',
                  '7sus4', 'dim', 'm7b5', 'dim7', 'aug', '5')
@@ -424,6 +427,63 @@ def _analyze_chords(midi_file):
     if song is None or song.start_frame >= song.frame_count:
         return []
     return _window_segments(song, song.start_frame, song.frame_count)
+
+
+def _changed_ticks(before, after):
+    """(first tick, last sounding tick) of the notes only one version has; None when only hands moved."""
+    key = lambda note: (note.start_tick, note.end_tick, note.pitch)
+    difference = Counter(map(key, before.notes))
+    difference.subtract(map(key, after.notes))
+    changed = [note for song in (before, after) for note in song.notes if difference[key(note)]]
+    if not changed:
+        return None
+    return min(note.start_tick for note in changed), max(note.sound_end_tick for note in changed)
+
+
+def _trimmed(segment, start_tick, end_tick, seconds):
+    return replace(segment, start_tick=start_tick, end_tick=end_tick,
+                   start=seconds(start_tick), end=seconds(end_tick))
+
+
+def update_chords(before_midi, after_midi, segments):
+    """Segments for after_midi, re-inferring only the bars around the notes that differ from before_midi.
+
+    segments are before_midi's. The Viterbi path is re-run over the edited bars plus
+    UPDATE_CONTEXT_BARS on each side and spliced in at bar lines UPDATE_SPLICE_BARS out,
+    so chords further away keep their names. An edit that moves the song's first bar or
+    end analyzes the whole song again.
+    """
+    before, after = _song(before_midi), _song(after_midi)
+    if before is None or after is None or (before.start_frame, before.frame_count) != (
+            after.start_frame, after.frame_count):
+        return _analyze_chords(after_midi)
+    changed = _changed_ticks(before, after)
+    if changed is None:
+        return list(segments)
+    bar_frames = BEATS_PER_BAR * FRAMES_PER_BEAT
+    bar_ticks = bar_frames * after.frame_ticks
+    first_bar = math.floor(changed[0] / bar_ticks) - UPDATE_SPLICE_BARS
+    end_bar = math.ceil(changed[1] / bar_ticks) + UPDATE_SPLICE_BARS
+    clamp = lambda frame: max(after.start_frame, min(after.frame_count, frame))
+    keep_first, keep_end = clamp(first_bar * bar_frames), clamp(end_bar * bar_frames)
+    if keep_first >= keep_end:
+        return list(segments)
+    window = _window_segments(after, clamp(keep_first - UPDATE_CONTEXT_BARS * bar_frames),
+                              clamp(keep_end + UPDATE_CONTEXT_BARS * bar_frames), keep_first, keep_end)
+    first_tick, end_tick = round(keep_first * after.frame_ticks), round(keep_end * after.frame_ticks)
+    left = [_trimmed(segment, segment.start_tick, min(segment.end_tick, first_tick), after.seconds)
+            for segment in segments if segment.start_tick < first_tick]
+    right = [_trimmed(segment, max(segment.start_tick, end_tick), segment.end_tick, after.seconds)
+             for segment in segments if segment.end_tick > end_tick]
+    merged = []
+    for segment in left + window + right:
+        # A chord cut at a splice line and found again on the other side stays one segment.
+        if merged and merged[-1].end_tick == segment.start_tick and merged[-1].name == segment.name:
+            longer = max(merged[-1], segment, key=lambda item: item.end_tick - item.start_tick)
+            merged[-1] = _trimmed(longer, merged[-1].start_tick, segment.end_tick, after.seconds)
+        else:
+            merged.append(segment)
+    return merged
 
 
 def save_chord_cache(midi_path, segments, midi_sha256=None):

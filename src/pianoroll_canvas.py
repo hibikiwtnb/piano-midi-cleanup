@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 import mido
 
 from bpmfix_utils import bpmfix_path_for
-from chord_analysis import analyze_chords
+from chord_analysis import analyze_chords, save_chord_cache, update_chords
 from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
@@ -196,6 +196,12 @@ class PianoRollView(ttk.Frame):
         self.chord_refresh_id = None
         self.chord_playhead = None
         self.chord_results = queue.Queue()
+        # The MIDI chord_segments describe while note edits are unsaved; None means the file at self.path.
+        self.chord_midi = None
+        self.chord_edit_running = False
+        self.chord_edit_dirty = False
+        # True while chord_segments describe the notes on screen, unsaved edits included.
+        self.chords_current = False
 
         self.bpm = tk.StringVar()
         self.offset = tk.StringVar(value='0')
@@ -804,6 +810,7 @@ class PianoRollView(ttk.Frame):
         return bool(self.pending_deleted or self.pending_channels)
 
     def edits_changed(self):
+        self.update_chords_after_edit()
         self.update_undo_button()
         self.target_text.set(tr('Unsaved changes') if self.has_unsaved_edits() else
                              tr('Saves to {}').format(self.first_beat_files()))
@@ -819,6 +826,10 @@ class PianoRollView(ttk.Frame):
         except (OSError, ValueError, IndexError, EOFError) as error:
             self.set_status(tr('Edit failed: {}').format(error))
             return False
+        if self.chords_current and self.chord_segments:
+            # The reload then shows these chords instead of analyzing the whole song again.
+            self.chord_cache[(self.path, os.path.getmtime(self.path))] = self.chord_segments
+            save_chord_cache(self.path, self.chord_segments)
         self.pending_deleted, self.pending_channels, self.undo_stack = set(), {}, []
         self.update_undo_button()
         return True
@@ -953,10 +964,17 @@ class PianoRollView(ttk.Frame):
     def start_chord_analysis(self, midi_path, mtime):
         """Analyze chords off the Tk thread; results are cached per file version."""
         key = (midi_path, mtime)
+        if key == self.chord_job and self.chord_segments and not self.chord_message:
+            return  # Already shown, with any unsaved note edits applied.
         self.chord_job = key
+        self.chord_midi, self.chord_edit_dirty = None, False
         if key in self.chord_cache:
             self.chord_segments, self.chord_message = self.chord_cache[key], ''
+            self.chords_current = not self.has_unsaved_edits()
+            if not self.chords_current:
+                self.update_chords_after_edit()
             return
+        self.chords_current = False
         self.chord_segments, self.chord_message = [], tr('Analyzing chords...')
         if not self.show_chords.get() or not self.winfo_ismapped() or self.chord_running:
             return
@@ -973,12 +991,55 @@ class PianoRollView(ttk.Frame):
         if self.chord_after_id is None:
             self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
 
+    def update_chords_after_edit(self):
+        """Re-infer the chords only around the notes an edit or undo changed, off the Tk thread."""
+        self.chords_current = False
+        if not self.chord_segments or self.chord_message or self.chord_job is None:
+            return  # The analysis still running starts this again when it ends.
+        if self.chord_edit_running:
+            self.chord_edit_dirty = True
+            return
+        self.chord_edit_running, self.chord_edit_dirty = True, False
+        job, before, segments = self.chord_job, self.chord_midi, self.chord_segments
+        path, deleted, channels = self.path, set(self.pending_deleted), dict(self.pending_channels)
+
+        def work():
+            try:
+                after = edited_midi(path, deleted, channels)
+                result = (after, update_chords(before or mido.MidiFile(path), after, segments))
+            except Exception as error:
+                result = error
+            self.chord_results.put((('edit', job), result))
+
+        threading.Thread(target=work, daemon=True).start()
+        if self.chord_after_id is None:
+            self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
+
+    def finish_chord_edit(self, job, result):
+        self.chord_edit_running = False
+        if job != self.chord_job:
+            return  # Another file or version is shown now.
+        if isinstance(result, Exception):
+            self.set_status(tr('Chord analysis failed: {}').format(result))
+            return
+        self.chord_midi, self.chord_segments = result
+        self.draw_chords()
+        if self.chord_edit_dirty:
+            self.update_chords_after_edit()
+        else:
+            self.chords_current = True
+
     def poll_chords(self):
         self.chord_after_id = None
         try:
             key, result = self.chord_results.get_nowait()
         except queue.Empty:
-            if self.chord_running:
+            if self.chord_running or self.chord_edit_running:
+                self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
+            return
+        if key[0] == 'edit':
+            self.finish_chord_edit(key[1], result)
+            if self.chord_running or self.chord_edit_running:
                 self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
             return
         self.chord_running.discard(key)
@@ -991,10 +1052,14 @@ class PianoRollView(ttk.Frame):
                 self.chord_segments, self.chord_message = [], tr('Chord analysis failed: {}').format(result)
             else:
                 self.chord_segments, self.chord_message = result, ''
+                self.chord_midi = None
+                self.chords_current = not self.has_unsaved_edits()
+                if not self.chords_current:
+                    self.update_chords_after_edit()
             self.draw_chords()
         else:
             self.schedule_visible_chords()
-        if self.chord_running:
+        if self.chord_running or self.chord_edit_running:
             self.chord_after_id = self.after(CHORD_POLL_MS, self.poll_chords)
 
     def schedule_visible_chords(self, _event=None):
