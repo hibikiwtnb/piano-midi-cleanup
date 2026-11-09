@@ -39,9 +39,7 @@ BPMFIX_SECTIONS = (
 Parameter = namedtuple('Parameter', 'key label kind targets')
 # Thresholds a run may override with --set key=value; each one sets these module constants.
 PARAMETERS = (
-    Parameter('key.change_cost', 'Accidentals a key change must save', int, ((key_signature, 'CHANGE_COST'),)),
-    Parameter('key.crowded_ratio', 'Accidental share that checks a phrase bar by bar', float,
-              ((key_signature, 'CROWDED_RATIO'),)),
+    Parameter('key.change_cost', 'Opposing bars a key change needs', int, ((key_signature, 'CHANGE_COST'),)),
     Parameter('clean.min_seconds', 'Remove notes shorter than (s)', float,
               ((clean_midi_rules, 'MIN_NOTE_DURATION_SECONDS'),)),
     Parameter('clean.min_velocity', 'Remove velocity below', int, ((clean_midi_rules, 'MIN_NOTE_VELOCITY'),)),
