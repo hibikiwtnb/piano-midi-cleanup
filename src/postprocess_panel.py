@@ -17,6 +17,7 @@ from gui_i18n import LANGUAGES, get_language, set_language, setting_help, tr, tr
 import postprocess
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
+from transcribe_tab import TranscribeTab
 from trim_overlaps import DEFAULT_FAST_FIGURE_HANDS
 from app_info import APP_NAME, VERSION, LICENSE_ID, PROJECT_URL, ISSUES_URL, BUNDLED_COMPONENTS
 
@@ -259,6 +260,11 @@ class Panel:
                                   on_version=self.version_selected,
                                   status=self.status)
         self.roll.configure(padding=8)
+        self.transcribe_tab = TranscribeTab(self.main_tabs, self.settings, save_settings,
+                                            on_midi_ready=self.transcription_ready,
+                                            on_open_midi=self.open_in_processing,
+                                            status=self.status, padding=8)
+        self.main_tabs.add(self.transcribe_tab, text=tr('Separate & transcribe'))
         self.main_tabs.add(processing, text=tr('Processing'))
         self.main_tabs.add(self.roll, text=tr('Piano roll'))
         self.main_tabs.add(report, text=tr('Detailed report'))
@@ -394,6 +400,19 @@ class Panel:
         self.selected_midi = selected
         self.bpm.set('')
         self.preview_path = None
+
+    def open_in_processing(self, midi_path):
+        self.midi.set(midi_path)
+        self.load_existing_report()
+        self.main_tabs.select(1)
+
+    def transcription_ready(self, midi_path, audio_path):
+        """Fill the Processing tab with a fresh transcription and detect tempo from its audio."""
+        self.midi.set(midi_path)
+        self.source.set('audio')
+        self.audio.set(audio_path)
+        self.update_source()
+        self.main_tabs.select(1)
 
     def save_midi_output(self, name):
         self.settings['playback_output'] = name
