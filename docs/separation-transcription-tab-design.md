@@ -68,7 +68,7 @@
 
 | 選項 | 說明 | 狀態 |
 |:---|:---|:---|
-| BS-RoFormer SW（六軌，取鋼琴）| 本專案比較過：比舊版 lalal.ai 乾淨，略遜 v6，低音區要另外確認（`separation-lalal-bsroformer-comparison.md`） | 現在只有本機 Swift / Core ML 版，只能在 macOS 用；要找能在 Windows 跑的 PyTorch 或 ONNX 版本 |
+| BS-RoFormer SW（六軌，取鋼琴）| 本專案比較過：比舊版 lalal.ai 乾淨，略遜 v6，低音區要另外確認（`separation-lalal-bsroformer-comparison.md`） | macOS 用 Core ML 版；Windows 用 ONNX 版已實測可跑，見下方測試 |
 | Demucs htdemucs_6s（六軌，取鋼琴）| 廣泛使用、pip 可裝、跨平台 | 未在本專案比較過鋼琴品質 |
 | 不分離 | 輸入已是鋼琴獨奏，或已經用 lalal.ai 等工具分離好 | — |
 
@@ -99,10 +99,52 @@ MuScriptor Large 需要 GPU，一首要幾分鐘，輸出沒有力度和踏板�
    - 加 `tkinterdnd2` 套件：要確認它附的 tkdnd 能在 Tk 9 下載入，Windows 和 macOS 都要試。
    - 備案：保留「選擇…」按鈕和可貼上路徑的輸入框；macOS 另外支援把檔案拖到 Dock 上的 App 圖示。
    - 這決定拖放區是主要入口還是附加功能，要最先驗證。
-2. **BS-RoFormer 的跨平台版本**：沒有 Windows 能跑的版本，就先以 Demucs 當跨平台預設，BS-RoFormer 只在 macOS 提供。
+2. **BS-RoFormer 的跨平台版本**：2026-11-10 已測，見下方「BS-RoFormer 在 Windows 的測試」。
 3. **安裝體積**：多兩個引擎和權重，下載量會增加數百 MB。README 的安裝步驟要更新；權重不放進 repo。
 4. **檔名規則**：`<歌名>_piano.wav` 和 `<歌名>_piano.mid` 會改變現有的輸出檔名，原本是 `<音訊名>.mid`。卷簾版本側欄和「沿用已修正的速度」都依檔名找檔案，要一起檢查。
 5. **速度偵測用哪個音訊**：原曲有鼓、拍子比較清楚，但前奏可能有變化；分離後的鋼琴和 MIDI 時間完全一致。要用幾首歌比較兩者偵測出的 BPM，才能決定預設。
+
+## BS-RoFormer 在 Windows 的測試（2026-11-10）
+
+**結論**：Windows 跑得動，但只用 CPU 很慢；有獨立顯卡時能否加速還沒測到。
+
+**模型來源**
+- 原作者 jarredou 的 HuggingFace 倉庫（`jarredou/BS-ROFO-SW-Fixed`）已無法存取。現在只剩其他人的鏡像：
+  - PyTorch 原始權重：`enerjazzer/BS-ROFO-SW-Fixed`
+  - ONNX 匯出版：`elicwhite/bs-roformer-sw-6stem-onnx`，程式為 MIT；fp16 檔 336 MB，固定每段 4 秒
+- ONNX 版的 README 寫明，權重本身沒有標示授權，來源也無法追溯。
+- 正式提供下載前，要決定權重從哪裡取得。
+
+**測試方式**
+- 把 `bs-roformer-sw/driver.py`（Core ML 版）改成 onnxruntime 版：模型改吃左右聲道分開的 STFT，每段 345 幀，前後段重疊 50%。
+- 測試程式和模型放在 `piano-midi-cleanup-data/scratch/bsr-onnx/`。
+- 分離這一步只需要 onnxruntime、numpy、scipy、soundfile，不需要 PyTorch。
+
+**速度**
+
+| 機器 | 執行方式 | 結果 | 換算 4 分鐘的歌 |
+|:---|:---|:---|:---|
+| x280（Windows 11，i5-8250U，8 GB） | onnxruntime 1.31.1，CPU | 10 秒音訊花 102 秒（每段約 16 秒） | 約 40 分鐘 |
+| x280 | onnxruntime-directml，Intel UHD 620 | 失敗：0x8007000E，顯示記憶體不足 | — |
+| Apple Silicon Mac | onnxruntime，CPU | 30 秒音訊花 142 秒 | 約 19 分鐘 |
+| Apple Silicon Mac | 現有 Core ML 版 | 5 分 41 秒的歌花 3 分 07 秒 | 約 2 分鐘 |
+
+- 沒有測到 NVIDIA 顯卡：x280 沒有獨立顯卡；szserver 的 GPU 被其他服務佔滿，磁碟也只剩 6 GB，所以沒有在上面測。
+
+**和 Core ML 版的輸出比較**
+- 樣本：《A song for You! You? You!!》Off Vocal，第 60–90 秒。
+- 鋼琴軌：音量幾乎相同；波形差異 SNR 16 dB（扣掉頭尾各 2 秒）。
+- 兩邊都用字節模型轉譜後比對（50 ms 內起音一對一配對）：Core ML 265 音、ONNX 256 音，配對上 237 個，F1 0.910。
+- 這個差異和換轉譜模型相當（字節對 Transkun 為 0.921），主要來自切段長度（Core ML 3 秒、ONNX 4 秒）和切點位置不同。沒有正確答案可以對照，看不出哪個比較好。
+
+**接下來的選項**
+- macOS 繼續用 Core ML 版，速度最快。
+- Windows 用 ONNX：
+  - 有 NVIDIA 顯卡時用 CUDA 版 onnxruntime。CUDA 版和 CPU 版是不同的套件，安裝時就要選定。
+  - 沒有就用 CPU，介面要先顯示預估時間。
+- 重疊從 50% 降到 25%，時間可省約三分之一，但對品質的影響還沒測。
+- 也可以改用 PyTorch 原始權重，用原本較長的切段：轉譜本來就裝了 PyTorch，Windows 的 CUDA 也能直接用。品質和速度都還沒測。
+- 還缺一台有 NVIDIA 顯卡的 Windows 機器來實測。
 
 ## 不做
 
