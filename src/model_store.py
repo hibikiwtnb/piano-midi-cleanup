@@ -91,7 +91,7 @@ def download(model, progress=None, cancel=None, log=None):
         if log:
             log(tr('Downloading {} from {} (about {} MB)...').format(model.name, host, model.size_mb()))
         try:
-            _fetch(model, url, progress, cancel)
+            _fetch(model, url, _with_log(progress, log), cancel)
             return model.path
         except DownloadCancelled:
             raise
@@ -100,6 +100,20 @@ def download(model, progress=None, cancel=None, log=None):
             if log:
                 log(tr('  failed: {}').format(error))
     raise RuntimeError(tr('Could not download {}. {}').format(model.name, ' / '.join(errors)))
+
+
+def _with_log(progress, log):
+    """Also print the downloaded megabytes about every 5 %."""
+    shown = [-1]
+
+    def report(done, total):
+        step = int(20 * done / total)
+        if log and step != shown[0]:
+            shown[0] = step
+            log('  {:.0f} / {:.0f} MB'.format(done / 1e6, total / 1e6))
+        if progress:
+            progress(done, total)
+    return report
 
 
 def _fetch(model, url, progress, cancel):

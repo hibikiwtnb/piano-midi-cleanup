@@ -7,6 +7,7 @@ spectrogram is turned back into audio and overlap-added with a raised-cosine win
 
 import functools
 import sys
+import time
 
 import numpy as np
 
@@ -145,6 +146,8 @@ def separate_piano(audio_path, output_path, device='auto', progress=None, cancel
     output = np.zeros((2, samples + chunk), dtype=np.float32)
     weights = np.zeros(samples + chunk, dtype=np.float32)
     starts = list(range(0, max(samples - step, 1), step)) or [0]
+    log('{:.1f} s of audio, {} chunks'.format(samples / SAMPLE_RATE, len(starts)))
+    began = time.time()
     for index, start in enumerate(starts):
         if cancel is not None and cancel.is_set():
             return False
@@ -152,6 +155,9 @@ def separate_piano(audio_path, output_path, device='auto', progress=None, cancel
         piece[:, :min(chunk, samples - start)] = audio[:, start:start + chunk]
         output[:, start:start + chunk] += _istft(model.piano(_stft(piece, model.frames)), chunk) * window
         weights[start:start + chunk] += window
+        elapsed = time.time() - began
+        log('chunk {}/{}  elapsed {:.0f} s, ETA {:.0f} s'.format(
+            index + 1, len(starts), elapsed, elapsed / (index + 1) * (len(starts) - index - 1)))
         if progress:
             progress(index + 1, len(starts))
     nonzero = weights > 1e-8

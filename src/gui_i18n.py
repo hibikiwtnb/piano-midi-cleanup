@@ -533,6 +533,7 @@ _TEXT = {
 
 # Separation and transcription tab.
 _TEXT['en'].update({
+    'Console output': 'Console output',
     'Download now': 'Download now',
     'ready': 'ready',
     'not downloaded (about {} MB)': 'not downloaded (about {} MB)',
@@ -586,7 +587,6 @@ _TEXT['en'].update({
     'Transcribe': 'Transcribe',
     'Hand over to Processing': 'Hand over to Processing',
     'Waiting': 'Waiting',
-    'Log': 'Log',
     'mono': 'mono',
     'stereo': 'stereo',
     '{} channels': '{} channels',
@@ -601,6 +601,7 @@ _TEXT['en'].update({
     'Choose the output folder': 'Choose the output folder',
 })
 _TEXT['zh_TW'].update({
+    'Console output': '輸出',
     'Download now': '先下載',
     'ready': '已就緒',
     'not downloaded (about {} MB)': '未下載（約 {} MB）',
@@ -654,7 +655,6 @@ _TEXT['zh_TW'].update({
     'Transcribe': '轉錄',
     'Hand over to Processing': '交給後處理',
     'Waiting': '等待中',
-    'Log': '紀錄',
     'mono': '單聲道',
     'stereo': '立體聲',
     '{} channels': '{} 聲道',
@@ -669,6 +669,7 @@ _TEXT['zh_TW'].update({
     'Choose the output folder': '選擇輸出資料夾',
 })
 _TEXT['zh_CN'].update({
+    'Console output': '输出',
     'Download now': '先下载',
     'ready': '已就绪',
     'not downloaded (about {} MB)': '未下载（约 {} MB）',
@@ -722,7 +723,6 @@ _TEXT['zh_CN'].update({
     'Transcribe': '转录',
     'Hand over to Processing': '交给后处理',
     'Waiting': '等待中',
-    'Log': '记录',
     'mono': '单声道',
     'stereo': '立体声',
     '{} channels': '{} 声道',

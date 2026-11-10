@@ -1,5 +1,6 @@
 """Separation and transcription tab: from a song or piano recording to a MIDI file."""
 
+import contextlib
 import os
 import queue
 import threading
@@ -154,7 +155,7 @@ class TranscribeTab(ttk.Frame):
             self.step_labels.append((index, step, label))
         self.progress = ttk.Progressbar(run, mode='determinate', maximum=100)
         self.progress.pack(fill='x', pady=(8, 0))
-        log_frame = ttk.LabelFrame(run, text=tr('Log'), padding=4)
+        log_frame = ttk.LabelFrame(run, text=tr('Console output'), padding=4)
         log_frame.pack(fill='both', expand=True, pady=(8, 0))
         self.log = ScrolledText(log_frame, height=8, wrap='word', state='disabled')
         self.log.pack(fill='both', expand=True)
@@ -263,6 +264,12 @@ class TranscribeTab(ttk.Frame):
             self.settings['transcribe_output_dir'] = path
             self.save_settings(self.settings)
 
+    def write_raw(self, text):
+        self.log.configure(state='normal')
+        self.log.insert('end', text.replace('\r\n', '\n').replace('\r', '\n'))
+        self.log.see('end')
+        self.log.configure(state='disabled')
+
     def write_log(self, text):
         self.log.configure(state='normal')
         self.log.insert('end', text.rstrip('\n') + '\n')
@@ -356,9 +363,18 @@ class TranscribeTab(ttk.Frame):
         self.after(100, self.poll)
 
     def work(self, job):
-        """Background thread: only talks to the interface through self.messages."""
+        """Background thread: only talks to the interface through self.messages.
+
+        Everything the engines print (model loading, chunk timing, ByteDance's segment counter)
+        goes to the output box unchanged, as the Processing tab does with its report.
+        """
         put = self.messages.put
-        log = lambda text: put(('log', text))
+        writer = _QueueWriter(put)
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            self.run_job(job, put)
+
+    def run_job(self, job, put):
+        log = print
         try:
             for model in job['models']:
                 if not model.ready():
@@ -432,8 +448,8 @@ class TranscribeTab(ttk.Frame):
                 kind, *values = self.messages.get_nowait()
             except queue.Empty:
                 break
-            if kind == 'log':
-                self.write_log(values[0])
+            if kind == 'text':
+                self.write_raw(values[0])
             elif kind == 'progress':
                 self.progress.configure(value=values[0])
             elif kind == 'step':
@@ -467,3 +483,18 @@ class TranscribeTab(ttk.Frame):
             self.refresh()
         else:
             self.after(100, self.poll)
+
+
+class _QueueWriter:
+    """File-like object that forwards printed text to the tab's message queue."""
+
+    def __init__(self, put):
+        self.put = put
+
+    def write(self, text):
+        if text:
+            self.put(('text', text))
+        return len(text)
+
+    def flush(self):
+        pass
