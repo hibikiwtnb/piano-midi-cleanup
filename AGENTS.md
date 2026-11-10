@@ -19,8 +19,8 @@ These rules apply to the entire repository, not only hand splitting or multi-han
 - Keep each commit focused on one function, bug, or feature; do not combine unrelated changes.
 - Do not broaden the requested scope with opportunistic refactors or cleanup.
 - Before modifying established algorithmic behavior, identify the original semantic intent and inspect relevant git history. Do not reinterpret an algorithm merely because names, topology, ownership, or data structures changed.
-- Structural changes (naming/channel/topology/data model) and behavioral changes (cost/objective/heuristic/search) must be separated unless inseparable; if inseparable, document old semantics, new semantics, rationale, expected behavior differences, and regression coverage.
-- Algorithm changes that alter output need a representative A/B comparison, limited to what is needed to decide whether to merge the change; it is not a quality guarantee.
+- Structural changes (naming/channel/topology/data model) and behavioral changes (cost/objective/heuristic/search) must be separated unless inseparable; if inseparable, document old semantics, new semantics, rationale, and expected behavior differences.
+- Algorithm changes that alter output must describe old behavior, new behavior, the reason, and the output changes expected from the logic in the commit message. A/B comparisons are not required; run one only when the user asks or when the merge decision cannot be made without it.
 - When a regression appears, determine the root cause before adding compensating heuristics, rewards, thresholds, or additional complexity.
 - Keep local screenshots, audio renders, installers, comparison outputs, temporary debug scripts, and machine-specific shortcuts out of commits.
 - MIDI test data lives in the separate private sibling repository `../piano-midi-cleanup-data/` (formerly `testdata/`). Commit data baselines there before reprocessing; record the application revision and processing settings with each comparison. Do not overwrite original/baseline MIDI during experiments.
