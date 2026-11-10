@@ -12,13 +12,15 @@ These rules apply to the entire repository, not only hand splitting or multi-han
 
 ## Workflow
 
+- **This is a free public-good project with no technical guarantees** (see rule 0 in `docs/development-rules.md`). Do not run tests, benchmarks, or cross-platform or cross-machine checks to prove that something works, is compatible, is fast, or has not regressed. Run one only when its result changes a decision that cannot be made without it, and name that decision first. Otherwise write "unverified" and leave it to user reports.
+
 - **Do not create branches.** This project works directly on the existing `main` branch.
 - After completing requested changes, commit and push by default unless the user explicitly asks for an experiment only, no commit, or no push.
 - Keep each commit focused on one function, bug, or feature; do not combine unrelated changes.
 - Do not broaden the requested scope with opportunistic refactors or cleanup.
 - Before modifying established algorithmic behavior, identify the original semantic intent and inspect relevant git history. Do not reinterpret an algorithm merely because names, topology, ownership, or data structures changed.
 - Structural changes (naming/channel/topology/data model) and behavioral changes (cost/objective/heuristic/search) must be separated unless inseparable; if inseparable, document old semantics, new semantics, rationale, expected behavior differences, and regression coverage.
-- Algorithm changes require behavior-level regression tests and/or representative A/B comparisons. Passing unit tests or producing plausible-looking output is not sufficient.
+- Algorithm changes that alter output need a representative A/B comparison, limited to what is needed to decide whether to merge the change; it is not a quality guarantee.
 - When a regression appears, determine the root cause before adding compensating heuristics, rewards, thresholds, or additional complexity.
 - Keep local screenshots, audio renders, installers, comparison outputs, temporary debug scripts, and machine-specific shortcuts out of commits.
 - MIDI test data lives in the separate private sibling repository `../piano-midi-cleanup-data/` (formerly `testdata/`). Commit data baselines there before reprocessing; record the application revision and processing settings with each comparison. Do not overwrite original/baseline MIDI during experiments.
