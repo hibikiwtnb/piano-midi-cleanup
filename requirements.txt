@@ -9,3 +9,5 @@ piano_transcription_inference
 python-rtmidi
 pillow
 sounddevice>=0.5
+coremltools; sys_platform == 'darwin'
+onnxruntime; sys_platform != 'darwin'

@@ -406,13 +406,15 @@ class Panel:
         self.load_existing_report()
         self.main_tabs.select(1)
 
-    def transcription_ready(self, midi_path, audio_path):
+    def transcription_ready(self, midi_path, audio_path, process_after=False):
         """Fill the Processing tab with a fresh transcription and detect tempo from its audio."""
         self.midi.set(midi_path)
         self.source.set('audio')
         self.audio.set(audio_path)
         self.update_source()
         self.main_tabs.select(1)
+        if process_after:
+            self.run()
 
     def save_midi_output(self, name):
         self.settings['playback_output'] = name

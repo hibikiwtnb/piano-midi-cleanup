@@ -1,11 +1,14 @@
 """Separation and transcription tab: from a song or piano recording to a MIDI file."""
 
 import os
+import queue
+import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from gui_i18n import tr
+import model_store
 
 
 AUDIO_EXTENSIONS = ('.flac', '.wav', '.mp3', '.m4a', '.aif', '.aiff', '.ape')
@@ -64,11 +67,14 @@ class TranscribeTab(ttk.Frame):
         self.process_after = tk.BooleanVar(value=settings.get('transcribe_process_after', False))
         self.audio_info = tk.StringVar()
         self.last_audio = None
+        self.worker = None
+        self.cancel = threading.Event()
+        self.messages = queue.Queue()
         self.build()
         self.set_choice(self.separation, SEPARATION_ENGINES, settings.get('separation_engine'))
         self.set_choice(self.transcription, TRANSCRIPTION_ENGINES, settings.get('transcription_engine'))
         self.set_choice(self.device, DEVICES, settings.get('transcribe_device'))
-        for variable in (self.audio, self.output_dir, self.separation, self.regenerate):
+        for variable in (self.audio, self.output_dir, self.separation, self.transcription, self.regenerate):
             variable.trace_add('write', lambda *_: self.refresh())
         for variable in (self.separation, self.transcription, self.device, self.process_after):
             variable.trace_add('write', lambda *_: self.remember())
@@ -108,6 +114,11 @@ class TranscribeTab(ttk.Frame):
                 self.descriptions[str(variable)] = (variable, choices, description)
                 variable.trace_add('write', lambda *_, key=str(variable): self.describe(key))
 
+        self.models_label = ttk.Label(engines, foreground='#555555')
+        self.models_label.grid(row=3, column=1, columnspan=2, sticky='w', padx=6, pady=(6, 0))
+        self.download_button = ttk.Button(engines, text=tr('Download now'), command=self.download_only)
+        self.download_button.grid(row=3, column=3, sticky='e', pady=(6, 0))
+
         output = ttk.LabelFrame(self, text=tr('Output location'), padding=8)
         output.pack(fill='x', pady=(8, 0))
         ttk.Label(output, text=tr('Folder')).grid(row=0, column=0, sticky='w')
@@ -134,7 +145,7 @@ class TranscribeTab(ttk.Frame):
         buttons.pack(fill='x')
         self.start_button = ttk.Button(buttons, text=tr('Start'), command=self.start)
         self.start_button.pack(side='left')
-        self.cancel_button = ttk.Button(buttons, text=tr('Cancel'), state='disabled')
+        self.cancel_button = ttk.Button(buttons, text=tr('Cancel'), state='disabled', command=self.cancel_run)
         self.cancel_button.pack(side='left', padx=6)
         self.step_labels = []
         for index, step in enumerate(STEPS, 1):
@@ -229,7 +240,8 @@ class TranscribeTab(ttk.Frame):
             else:
                 name.configure(text='')
                 state.configure(text='')
-        self.start_button.configure(state='normal' if ready else 'disabled')
+        self.start_button.configure(state='normal' if ready and self.worker is None else 'disabled')
+        self.show_models()
 
     # Actions
 
@@ -257,7 +269,201 @@ class TranscribeTab(ttk.Frame):
         self.log.see('end')
         self.log.configure(state='disabled')
 
+    # Models
+
+    def separating(self):
+        return self.choice_key(self.separation, SEPARATION_ENGINES) != 'none'
+
+    def needed_models(self):
+        models = []
+        if self.separating():
+            import separation
+            models.append(separation.required_model())
+        models.append(model_store.MODELS['bytedance'])
+        return models
+
+    def show_models(self):
+        parts = []
+        for model in self.needed_models():
+            state = tr('ready') if model.ready() else tr('not downloaded (about {} MB)').format(model.size_mb())
+            parts.append('{}: {}'.format(model.name, state))
+        self.models_label.configure(text='   '.join(parts))
+        missing = any(not model.ready() for model in self.needed_models())
+        self.download_button.configure(state='normal' if missing and self.worker is None else 'disabled')
+
+    def confirm_downloads(self):
+        """Ask once before fetching missing weights; False if the user declines."""
+        missing = [model for model in self.needed_models() if not model.ready()]
+        if not missing:
+            return True
+        lines = ['{}: {} MB ({})'.format(model.name, model.size_mb(), ', '.join(model.source_hosts()))
+                 for model in missing]
+        return messagebox.askyesno(
+            tr('Download models'),
+            tr('These models are not on this computer yet and will be downloaded:') + '\n\n' +
+            '\n'.join(lines) + '\n\n' + tr('Saved to {}').format(model_store.MODELS_DIR),
+            parent=self)
+
+    def missing_package_message(self):
+        if not self.separating():
+            return None
+        import separation
+        package = separation.missing_package()
+        if package:
+            return tr('Separation needs the Python package {}. Install it with: python -m pip install {}').format(
+                package, package)
+        return None
+
+    # Running
+
+    def download_only(self):
+        if self.confirm_downloads():
+            self.launch(download_only=True)
+
     def start(self):
-        # Interface first: the engines are connected in a later change.
-        self.write_log(tr('The engines are not connected yet; this tab is an interface preview.'))
-        self.status.set(tr('The engines are not connected yet; this tab is an interface preview.'))
+        message = self.missing_package_message()
+        if message:
+            messagebox.showerror(tr('Separate & transcribe'), message, parent=self)
+            return
+        if self.confirm_downloads():
+            self.launch(download_only=False)
+
+    def cancel_run(self):
+        self.cancel.set()
+        self.write_log(tr('Cancelling...'))
+
+    def launch(self, download_only):
+        path = self.audio.get().strip()
+        separate = self.separating()
+        piano, midi = output_paths(path, separate, self.output_dir.get()) if path else (None, None)
+        job = {
+            'download_only': download_only,
+            'audio': path,
+            'piano': piano,
+            'midi': midi,
+            'models': self.needed_models(),
+            'device': self.choice_key(self.device, DEVICES),
+            'regenerate': self.regenerate.get(),
+        }
+        self.cancel.clear()
+        self.worker = threading.Thread(target=self.work, args=(job,), daemon=True)
+        self.start_button.configure(state='disabled')
+        self.cancel_button.configure(state='normal')
+        self.download_button.configure(state='disabled')
+        self.progress.configure(value=0)
+        self.show_steps({})
+        self.worker.start()
+        self.after(100, self.poll)
+
+    def work(self, job):
+        """Background thread: only talks to the interface through self.messages."""
+        put = self.messages.put
+        log = lambda text: put(('log', text))
+        try:
+            for model in job['models']:
+                if not model.ready():
+                    put(('step', None, None))
+                    model_store.download(model, cancel=self.cancel, log=log,
+                                         progress=lambda done, total: put(('progress', 100 * done / total)))
+                    log(tr('Saved to {}').format(model.path))
+            if job['download_only']:
+                put(('done', None))
+                return
+            regenerate = job['regenerate']
+            if job['piano']:
+                if os.path.exists(job['piano']) and not regenerate:
+                    put(('step', 'Separate', 'Skipped'))
+                    log(tr('{} exists; separation skipped.').format(os.path.basename(job['piano'])))
+                else:
+                    put(('step', 'Separate', 'Running'))
+                    import separation
+                    log(tr('Separating the piano with BS-RoFormer SW ({})...').format(separation.backend()))
+                    temporary = job['piano'] + '.partial.wav'
+                    finished = separation.separate_piano(
+                        job['audio'], temporary, job['device'], cancel=self.cancel, log=log,
+                        progress=lambda done, total: put(('progress', 100 * done / total)))
+                    if not finished:
+                        raise model_store.DownloadCancelled()
+                    os.replace(temporary, job['piano'])
+                    put(('step', 'Separate', 'Done'))
+            else:
+                put(('step', 'Separate', 'Not used'))
+            source = job['piano'] or job['audio']
+            if os.path.exists(job['midi']) and not regenerate:
+                put(('step', 'Transcribe', 'Skipped'))
+                log(tr('{} exists; transcription skipped.').format(os.path.basename(job['midi'])))
+            else:
+                put(('step', 'Transcribe', 'Running'))
+                put(('progress', 0))
+                log(tr('Transcribing {}...').format(os.path.basename(source)))
+                self.transcribe(source, job['midi'], job['device'])
+                put(('progress', 100))
+                put(('step', 'Transcribe', 'Done'))
+            put(('done', job['midi']))
+        except model_store.DownloadCancelled:
+            put(('cancelled', None))
+        except Exception as error:
+            put(('error', str(error)))
+        finally:
+            for path in (job['piano'], job['midi']):
+                if path:
+                    for partial in (path + '.partial.wav', os.path.splitext(path)[0] + '.partial.mid'):
+                        if os.path.exists(partial):
+                            os.remove(partial)
+
+    @staticmethod
+    def transcribe(audio_path, midi_path, device):
+        import librosa
+        import torch
+        from piano_transcription_inference import PianoTranscription, sample_rate
+        use_cuda = device != 'cpu' and torch.cuda.is_available()
+        transcriptor = PianoTranscription(device=torch.device('cuda' if use_cuda else 'cpu'),
+                                          checkpoint_path=str(model_store.MODELS['bytedance'].path))
+        audio, _ = librosa.load(audio_path, sr=sample_rate, mono=True)
+        temporary = os.path.splitext(midi_path)[0] + '.partial.mid'
+        transcriptor.transcribe(audio, temporary)
+        os.replace(temporary, midi_path)
+
+    def poll(self):
+        states = getattr(self, 'step_states', {})
+        finished = False
+        while True:
+            try:
+                kind, *values = self.messages.get_nowait()
+            except queue.Empty:
+                break
+            if kind == 'log':
+                self.write_log(values[0])
+            elif kind == 'progress':
+                self.progress.configure(value=values[0])
+            elif kind == 'step':
+                if values[0]:
+                    states[values[0]] = values[1]
+                    self.show_steps(states)
+            elif kind == 'error':
+                self.write_log(tr('Failed: {}').format(values[0]))
+                self.status.set(tr('Failed: {}').format(values[0]))
+                finished = True
+            elif kind == 'cancelled':
+                self.write_log(tr('Cancelled.'))
+                self.status.set(tr('Cancelled.'))
+                finished = True
+            elif kind == 'done':
+                finished = True
+                midi = values[0]
+                if midi is None:
+                    self.write_log(tr('Models are ready.'))
+                else:
+                    states['Hand over to Processing'] = 'Done'
+                    self.show_steps(states)
+                    self.write_log(tr('Done: {}').format(midi))
+                    self.status.set(tr('Done: {}').format(midi))
+                    self.on_midi_ready(midi, self.audio.get().strip(), self.process_after.get())
+        self.step_states = states
+        if finished:
+            self.worker = None
+            self.step_states = {}
+            self.cancel_button.configure(state='disabled')
+            self.refresh()
+        else:
+            self.after(100, self.poll)
