@@ -10,7 +10,7 @@ import mido
 from report_utils import update_report
 
 
-MIN_NOTE_DURATION_SECONDS = 0.03
+MIN_NOTE_DURATION_SECONDS = 0.05
 MIN_NOTE_VELOCITY = 35
 LOW_VELOCITY_AND_SHORT_VELOCITY = 50
 # Up to a 16th note.
