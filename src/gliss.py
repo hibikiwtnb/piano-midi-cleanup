@@ -356,7 +356,8 @@ def _sounding_any(notes, pitch, tick):
 
 
 def repair_run(run, ticks_per_beat, existing, fill):
-    """The notes to put back: sorted onto the scale, optionally filled, all one length."""
+    """The notes to put back: sorted onto the scale, optionally filled, evenly spaced from the first onset to the
+    last, all one length."""
     ordered = run['members']
     pitches = pitches_in_order(ordered, run['direction'])
     ticks = [note['start_ticks'] for note in ordered]
@@ -388,6 +389,11 @@ def repair_run(run, ticks_per_beat, existing, fill):
                 filled.append(pitch)
         result.append(placed[-1])
         placed = result
+    # A glissando strikes its keys one after another at an even rate; the transcription heard them in clumps of
+    # two or three at one onset (春日影 m52), which the score step reads as chords and cuts off the line.
+    first, last = placed[0]['tick'], placed[-1]['tick']
+    for index, note in enumerate(placed):
+        note['tick'] = round(first + (last - first) * index / (len(placed) - 1)) if len(placed) > 1 else first
     for note in placed:
         note['end'] = note['tick'] + length
     return placed, filled, held, length
@@ -487,9 +493,10 @@ def run_changes(rows, midi_path):
     seconds = tick_seconds(midi_file)
     changes = []
     for row in rows:
-        kept = {(note['tick'], note['pitch']): note for note in row['placed']}
+        # A run strikes each pitch once; its notes may have moved to the even grid, so they are matched by pitch.
+        kept = {note['pitch']: note for note in row['placed']}
         for note in row['run']['members']:
-            new = kept.get((note['start_ticks'], note['note']))
+            new = kept.get(note['note'])
             if new is None:
                 changes.append(dict(kind='deleted', stage='gliss', start=seconds(note['start_ticks']),
                                     end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
