@@ -14,6 +14,7 @@ out of the MIDI here and put back after the other steps, so those steps need no 
 """
 
 import json
+from collections import defaultdict
 from pathlib import Path
 import statistics
 
@@ -427,14 +428,38 @@ def release_run_hands(midi_file, runs):
     return released
 
 
+def drop_run_hand_notes(midi_file, runs):
+    """Notes struck during a glissando inside its range are removed: the sweeping hand strikes nothing else, and the
+    other hand cannot play keys the sweep is passing over.
+
+    The hand split moves notes off the run's hand (move_notes_off_gliss_hands), so a stray note of the run's hand
+    can reach this step on the other hand (春日影 m52: G4 and E5); hands are therefore not compared. Notes outside
+    the run's range, such as the other hand's bass, stay. Returns the removed notes per run.
+    """
+    notes = collect_notes(midi_file)
+    removed = []
+    indexes = defaultdict(set)
+    for run in runs:
+        pitches = [note['note'] for note in run['members']]
+        struck = [note for note in notes if run['start_tick'] <= note['start_ticks'] <= run['end_tick']
+                  and min(pitches) <= note['note'] <= max(pitches)]
+        for note in struck:
+            indexes[note['track_index']].update((note['start_index'], note['end_index']))
+        removed.append(struck)
+    for track_index, dropped in indexes.items():
+        midi_file.tracks[track_index] = rebuild_track_without_messages(midi_file.tracks[track_index], dropped)
+    return removed
+
+
 def restore_runs(midi_path, runs, fill=False):
     """Put the repaired runs back into midi_path. Returns one report row per run."""
     midi_file = mido.MidiFile(midi_path)
+    struck = drop_run_hand_notes(midi_file, runs)
     released = release_run_hands(midi_file, runs)
     existing = collect_notes(midi_file)
     additions = []
     rows = []
-    for run, released_notes in zip(runs, released):
+    for run, released_notes, struck_notes in zip(runs, released, struck):
         channel = CHANNELS[run['hand']] if run['hand'] else run['members'][0]['start_message'].channel
         placed, filled, held, length = repair_run(run, midi_file.ticks_per_beat, existing, fill)
         dropped = 0
@@ -460,7 +485,7 @@ def restore_runs(midi_path, runs, fill=False):
                                                             velocity=note['velocity'])))
             additions.append((note['end'], 0, mido.Message('note_off', channel=channel, note=note['pitch'], velocity=0)))
         rows.append(dict(run=run, channel=channel, placed=written, filled=filled, held=held, length=length,
-                         dropped=dropped, released=released_notes))
+                         dropped=dropped, released=released_notes, struck=struck_notes))
 
     index = _note_track(midi_file)
     events = []
@@ -503,6 +528,9 @@ def run_changes(rows, midi_path):
             elif new['end'] < note['end_ticks']:
                 changes.append(dict(kind='shortened', stage='gliss', start=seconds(new['end']),
                                     end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
+        for note in row.get('struck', []):
+            changes.append(dict(kind='deleted', stage='gliss', start=seconds(note['start_ticks']),
+                                end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
         for note in row['released']:
             changes.append(dict(kind='shortened', stage='gliss', start=seconds(note['new_end']),
                                 end=seconds(note['end_ticks']), pitch=note['note'], velocity=note['velocity']))
@@ -559,6 +587,8 @@ def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):
             details.append('not filled, key held: ' + ' '.join(_name(pitch) for pitch in row['held']))
         if row['dropped']:
             details.append('{} inside a held note, not written'.format(row['dropped']))
+        if row.get('struck'):
+            details.append('removed, struck in its range during the run: ' + ' '.join(_name(note['note']) for note in row['struck']))
         if row['released']:
             details.append('released at the start: ' + ' '.join(_name(note['note']) for note in row['released']))
         lines.append(line + ('; ' + '; '.join(details) if details else ''))
