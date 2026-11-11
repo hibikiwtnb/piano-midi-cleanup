@@ -4,10 +4,10 @@ import sys
 import mido
 
 from hand_split_channels import CHANNELS, collect_notes, group_notes
+from meter import bar_beats
 from midi_stats import note_name
 
 
-BEATS_PER_BAR = 4
 HAND_LABELS = {
     CHANNELS['right']: 'R',
     CHANNELS['second_right']: 'R2',
@@ -29,10 +29,11 @@ def note_text_lines(midi_path, bars=None):
     """One line per onset group: bar, beat, then hand, pitch and length in beats for each note, low to high."""
     midi_file = mido.MidiFile(midi_path)
     ticks_per_beat = midi_file.ticks_per_beat
+    beats_per_bar = bar_beats(midi_file)
     lines = []
     for group in group_notes(collect_notes(midi_file)):
         beat = group[0]['start_ticks'] / ticks_per_beat
-        bar = int(beat // BEATS_PER_BAR) + 1
+        bar = int(beat // beats_per_bar) + 1
         if bars and not bars[0] <= bar <= bars[1]:
             continue
         cells = ['{}{}({:.2f}b)'.format(
@@ -40,7 +41,7 @@ def note_text_lines(midi_path, bars=None):
             note_name(note['note']),
             (note['end_ticks'] - note['start_ticks']) / ticks_per_beat,
         ) for note in sorted(group, key=lambda note: note['note'])]
-        lines.append('m{} beat {:.2f}  {}'.format(bar, beat % BEATS_PER_BAR + 1, ' '.join(cells)))
+        lines.append('m{} beat {:.2f}  {}'.format(bar, beat % beats_per_bar + 1, ' '.join(cells)))
     return lines
 
 

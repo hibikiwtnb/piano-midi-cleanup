@@ -22,6 +22,7 @@ import numpy as np
 
 from clean_midi_rules import rebuild_track_without_messages, tick_seconds
 from hand_split_channels import CHANNELS, collect_notes
+from meter import bar_beats
 from trim_overlaps import write_note_ends
 
 WHITE_KEYS = (0, 2, 4, 5, 7, 9, 11)
@@ -519,7 +520,7 @@ def remove_records(midi_path):
 
 
 def format_gliss_stats(midi_path, rows, rejected, fill, ticks_per_beat):
-    bar_ticks = 4 * ticks_per_beat
+    bar_ticks = round(bar_beats(mido.MidiFile(midi_path)) * ticks_per_beat)
     lines = ['MIDI glissando stats', 'MIDI: {}'.format(midi_path),
              'Runs: {}, rejected as repeated chords: {}, left as major scales: {}'.format(
                  len(rows), sum(item['reason'] == 'repeated' for item in rejected),

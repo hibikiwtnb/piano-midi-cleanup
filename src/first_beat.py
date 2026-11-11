@@ -5,6 +5,7 @@ import math
 import mido
 
 from bpmfix_utils import estimate_first_beat, format_auto_first_beat_stats
+from meter import bar_beats
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -28,7 +29,7 @@ def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay, shift_ticks=No
     midi = mido.MidiFile(midi_path)
     source_tempo = midi_tempo(midi)
     target_tempo = int(mido.bpm2tempo(target_bpm))
-    bar_ticks = midi.ticks_per_beat * 4
+    bar_ticks = round(midi.ticks_per_beat * bar_beats(midi))
     user_offset_ticks = int(round(first_beat_delay * midi.ticks_per_beat * target_bpm / 60.0))
     scaled_tracks = []
     earliest_note_tick = None
@@ -60,8 +61,11 @@ def build_bpm_fixed_midi(midi_path, target_bpm, first_beat_delay, shift_ticks=No
         previous_tick = 0
         if track_index == 0:
             output_track.append(mido.MetaMessage('set_tempo', tempo=target_tempo, time=0))
-        for absolute_tick, message in events:
-            corrected_tick = max(0, absolute_tick + shift_ticks)
+        # The time signature states the meter of the whole file, so it stays at tick 0 instead of moving
+        # with the notes; the stable sort keeps the order of every other event.
+        placed = sorted(((0 if message.type == 'time_signature' else max(0, absolute_tick + shift_ticks), message)
+                         for absolute_tick, message in events), key=lambda item: item[0])
+        for corrected_tick, message in placed:
             message.time = corrected_tick - previous_tick
             previous_tick = corrected_tick
             output_track.append(message)

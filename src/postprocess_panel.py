@@ -15,6 +15,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from gui_i18n import LANGUAGES, get_language, set_language, setting_help, tr, tr_report
 import postprocess
+from meter import METERS
 from midi_stats import source_stats_path_for
 from pianoroll_canvas import PianoRollView
 from transcribe_tab import TranscribeTab
@@ -148,6 +149,7 @@ class Panel:
         self.source = tk.StringVar(value=self.settings.get('source', 'reuse'))
         self.bpm = tk.StringVar(value=self.settings.get('bpm', ''))
         self.audio = tk.StringVar(value=self.settings.get('audio', ''))
+        self.meter = tk.StringVar(value=self.settings.get('time_signature', '4/4'))
         self.switches = {name: tk.BooleanVar() for name, _, _ in SWITCHES}
         self.hands = tk.StringVar()
         self.fast_figure = {hand: tk.BooleanVar() for hand in HAND_ORDER}
@@ -347,7 +349,7 @@ class Panel:
 
     def change_language(self, _event=None):
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
-                             audio=self.audio.get(), last=self.current_preset(), language=self.language.get())
+                             audio=self.audio.get(), time_signature=self.meter.get(), last=self.current_preset(), language=self.language.get())
         save_settings(self.settings)
         set_language(self.language.get())
         self.build_ui()
@@ -364,6 +366,12 @@ class Panel:
                    command=lambda: self.main_tabs.select(self.roll)).grid(row=0, column=5, padx=(6, 0))
         ttk.Radiobutton(frame, text=tr('Reuse song_bpmfix.mid'), variable=self.source, value='reuse',
                         command=self.update_source).grid(row=1, column=1, sticky='w')
+        meter = ttk.Frame(frame)
+        meter.grid(row=1, column=2, columnspan=2, sticky='w')
+        ttk.Label(meter, text=tr('Time signature')).pack(side='left')
+        self.meter_box = ttk.Combobox(meter, textvariable=self.meter, values=METERS, width=5, state='readonly')
+        self.meter_box.pack(side='left', padx=(6, 0))
+        SettingTooltip(self.meter_box, 'time_signature')
         ttk.Radiobutton(frame, text=tr('Known BPM'), variable=self.source, value='bpm',
                         command=self.update_source).grid(row=2, column=1, sticky='w')
         self.bpm_entry = ttk.Entry(frame, textvariable=self.bpm, width=10)
@@ -634,6 +642,7 @@ class Panel:
         self.bpm_entry.configure(state='normal' if source == 'bpm' else 'disabled')
         self.audio_entry.configure(state='normal' if source == 'audio' else 'disabled')
         self.audio_button.configure(state='normal' if source == 'audio' else 'disabled')
+        self.meter_box.configure(state='disabled' if source == 'reuse' else 'readonly')
         for name in ('first_beat', 'key_signature'):
             self.step_checks[name].configure(state='disabled' if source == 'reuse' else 'normal')
 
@@ -702,6 +711,8 @@ class Panel:
             args += ['--bpm', self.bpm.get().strip()]
         elif source == 'audio':
             args += ['--audio', self.audio.get().strip()]
+        if source in ('bpm', 'audio'):
+            args += ['--time-signature', self.meter.get()]
         switches = preset['switches']
         for name, flag in (('first_beat', '--no-first-beat'), ('key_signature', '--no-key-signature'),
                            ('clean', '--no-clean'), ('high_phantoms', '--no-high-phantoms'), ('gliss', '--no-gliss'),
@@ -747,7 +758,7 @@ class Panel:
             messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
-                             audio=self.audio.get(), last=preset)
+                             audio=self.audio.get(), time_signature=self.meter.get(), last=preset)
         save_settings(self.settings)
         self.roll.stop()
         selected = self.midi.get().strip()

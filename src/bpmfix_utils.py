@@ -7,6 +7,7 @@ from pathlib import Path
 
 import mido
 
+from meter import bar_beats, is_compound, set_meter
 from node_utils import node_executable
 from report_utils import update_report
 
@@ -19,8 +20,7 @@ DEFAULT_MIDI_TEMPO = 500000
 ROUND_MAX_END_DRIFT_MS = 50.0
 
 # Automatic first beat: 8th-note phase from velocity-weighted onsets, on-beat half by
-# quarter-grid weight, downbeat by left-hand / bass onset weight per beat.
-BEATS_PER_BAR = 4
+# quarter-grid weight, downbeat by left-hand / bass onset weight per beat of the MIDI's bar.
 ON_BEAT_WINDOW_SECONDS = 0.03
 DOWNBEAT_WINDOW_SECONDS = 0.04
 BASS_MAX_PITCH = 54
@@ -195,7 +195,8 @@ def estimate_first_beat(midi_path):
     """Estimate the bar line nearest to 0 s (within half a bar) of a fixed-tempo, hand-split MIDI."""
     midi_file = mido.MidiFile(midi_path)
     beat = midi_source_tempo(midi_file) / 1e6
-    bar = beat * BEATS_PER_BAR
+    beats_per_bar = bar_beats(midi_file)
+    bar = beat * beats_per_bar
     seconds = 0.0
     onsets = []
     for message in midi_file:
@@ -225,12 +226,12 @@ def estimate_first_beat(midi_path):
     bass = [note for note in weighted if note[3] == LEFT_HAND_CHANNEL or note[2] <= BASS_MAX_PITCH]
     weights = [
         on_grid_weight(beat_phase + index * beat, bar, DOWNBEAT_WINDOW_SECONDS, bass)
-        for index in range(BEATS_PER_BAR)
+        for index in range(beats_per_bar)
     ]
     total = sum(weights) or 1.0
-    downbeat = max(range(BEATS_PER_BAR), key=lambda index: weights[index])
-    # Bass share of beats 1-4 counted from the chosen downbeat.
-    shares = [weights[(downbeat + index) % BEATS_PER_BAR] / total for index in range(BEATS_PER_BAR)]
+    downbeat = max(range(beats_per_bar), key=lambda index: weights[index])
+    # Bass share of each beat of the bar counted from the chosen downbeat.
+    shares = [weights[(downbeat + index) % beats_per_bar] / total for index in range(beats_per_bar)]
     # The bar line nearest to 0, so an already aligned MIDI is moved by almost nothing.
     first_beat = ((beat_phase + downbeat * beat + bar / 2) % bar) - bar / 2
 
@@ -247,7 +248,7 @@ def format_auto_first_beat_stats(midi_path, estimate, result):
         'MIDI: {}'.format(midi_path),
         'Estimated first beat: {:.3f}s'.format(estimate['first_beat_seconds']),
         '8th-grid onset coherence: {:.3f}'.format(estimate['eighth_coherence']),
-        'Bass onset share on beats 1-4: {}'.format(
+        'Bass onset share on beats 1-{}: {}'.format(len(estimate['bass_shares']),
             ' '.join('{:.2f}'.format(share) for share in estimate['bass_shares'])),
         'Shift ticks: {}'.format(result['shift_ticks']),
         'Padding bars: {}'.format(result['padding_bars']),
@@ -282,6 +283,8 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
         'Beat-phase coherence: {}'.format('N/A' if phase_coherence is None else '{:.3f}'.format(phase_coherence)),
         'Rounding: {}'.format(rounding),
         'Applied BPM: {bpm:.2f}'.format(**bpm_info),
+        'Time signature: {}'.format('{}/{}'.format(*bpm_info['meter']) if bpm_info.get('meter') else 'kept from MIDI'),
+        'Beat read as dotted quarter, BPM x1.5: {}'.format('yes' if bpm_info.get('dotted_quarter') else 'no'),
         'Estimated end drift: {}'.format('N/A (manual BPM)' if drift is None else '{:.0f} ms'.format(drift)),
         'Detection confidence: {}'.format('N/A (manual BPM)' if confidence is None else '{:.3f}'.format(confidence)),
         'Detected beats: {}'.format('N/A (manual BPM)' if beats is None else beats),
@@ -300,7 +303,27 @@ def write_bpmfix_report(audio_path, midi_path, output_path, bpm_info, report_pat
     return report_path
 
 
-def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, target_bpm=None):
+def beat_is_dotted_quarter(midi_path, bpm):
+    """Whether the onsets fall in threes per beat of bpm (a 6/8 beat counted as a dotted quarter)
+    rather than in twos (the quarter-note beat every step expects)."""
+    beat = 60.0 / bpm
+    seconds = 0.0
+    onsets = []
+    for message in mido.MidiFile(midi_path):
+        seconds += message.time
+        if message.type == 'note_on' and message.velocity > 0:
+            onsets.append((seconds, message.velocity))
+    if not onsets:
+        return False
+
+    def coherence(period):
+        return abs(sum(velocity * cmath.exp(2j * math.pi * start / period) for start, velocity in onsets))
+
+    return coherence(beat / 3) > coherence(beat / 2)
+
+
+def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, target_bpm=None, meter=None):
+    """meter: (numerator, denominator) written to the output MIDI; None keeps the MIDI's own."""
     output_path = bpmfix_path_for(midi_path)
     if target_bpm is None:
         print('Detecting BPM for {}'.format(audio_path))
@@ -309,12 +332,25 @@ def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, 
     else:
         bpm_info = bpm_info_from_manual_bpm(target_bpm)
 
+    bpm_info['meter'] = meter
+    bpm_info['dotted_quarter'] = False
+    if meter and is_compound(*meter) and beat_is_dotted_quarter(midi_path, bpm_info['bpm']):
+        # Bars and the 16th grid count quarter notes, so a dotted-quarter tempo becomes its quarter tempo.
+        bpm_info['dotted_quarter'] = True
+        if bpm_info.get('duration') and bpm_info.get('phase_bpm'):
+            bpm_info['phase_bpm'] *= 1.5
+            bpm_info.update(choose_applied_bpm(bpm_info['phase_bpm'], bpm_info['duration']))
+        else:
+            bpm_info['bpm'] = round(bpm_info['bpm'] * 1.5, 2)
+
     target_bpm = bpm_info['bpm']
     print(
         'Using BPM: {bpm:.2f} (source: {source})'.format(**bpm_info)
     )
     print('Writing BPM-fixed MIDI: {}'.format(output_path))
     bpm_info['original_bpm'] = fix_midi_bpm(midi_path, output_path, target_bpm)
+    if meter:
+        set_meter(output_path, *meter)
     write_bpmfix_report(
         audio_path,
         midi_path,

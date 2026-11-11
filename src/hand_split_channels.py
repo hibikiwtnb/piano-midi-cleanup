@@ -9,6 +9,8 @@ from collections import Counter, defaultdict
 from tkinter import filedialog, messagebox
 
 import mido
+
+from meter import bar_beats
 from report_utils import update_report
 
 
@@ -81,6 +83,7 @@ SECOND_RIGHT_REGISTER_COST = 10.0
 SECOND_PLAYER_SPARSE_NOTES = 2
 FIRST_PLAYER_MAX_NOTES = 4
 FIRST_PLAYER_MAX_SPAN = 12
+# Quarter beats per bar; split_hands_in_place sets it from the MIDI's time signature.
 BEATS_PER_BAR = 4
 
 RIGHT_HAND_CHANNEL = 0
@@ -1002,7 +1005,9 @@ def move_notes_off_gliss_hands(groups, gliss_spans, limits=None):
 def split_hands_in_place(midi_path, hands=2, limits=None, second_player_bars=None, gliss_spans=None):
     if second_player_bars is None:
         second_player_bars = SECOND_PLAYER_MIN_BARS
+    global BEATS_PER_BAR
     midi_file = mido.MidiFile(midi_path)
+    BEATS_PER_BAR = bar_beats(midi_file)
     notes = collect_notes(midi_file)
     groups = group_notes(notes)
     blobs = blob_lines(notes, midi_file.ticks_per_beat, hands=hands)

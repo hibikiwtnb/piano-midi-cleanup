@@ -21,6 +21,7 @@ from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
 from key_signature import apply_key_signatures, write_key_signatures
+from meter import bar_beats
 from midi_playback import MidiPlayback, default_output_name, display_port_name, open_output, output_names
 from midi_stats import note_name
 from pianoroll_snapshot import HAND_COLORS, OTHER_COLOR
@@ -426,6 +427,7 @@ class PianoRollView(ttk.Frame):
         self.pending_deleted, self.pending_channels, self.undo_stack = set(), {}, []
         self.update_undo_button()
         self.loaded_bpm = bpm
+        self.bar_sixteenths = round(bar_beats(mido.MidiFile(midi_path)) * 4)
         self.path, self.loaded_mtime = midi_path, mtime
         self.refresh_comparison()
         streams = defaultdict(list)
@@ -1146,17 +1148,18 @@ class PianoRollView(ttk.Frame):
         pps = self.pixels_per_second
         height = PITCHES * ROW_HEIGHT
         sixteenth = beat / 4
+        bar = getattr(self, 'bar_sixteenths', 16)
         first = math.floor(-offset / sixteenth)
         last = math.ceil((self.duration - offset) / sixteenth)
         key_times = [start for start, _ in self.key_signatures]
         previous_key = None
         for index in range(first, last + 1):
             x = (offset + index * sixteenth) * pps
-            if index % 16 == 0:
+            if index % bar == 0:
                 self.canvas.create_line(x, 0, x, height, fill=BAR_LINE, width=2, tags='grid')
                 self.ruler.create_line(x, 0, x, RULER_HEIGHT, fill=BAR_LINE)
                 if index >= 0:
-                    label = str(index // 16 + 1)
+                    label = str(index // bar + 1)
                     key_index = bisect_right(key_times, offset + index * sixteenth + 1e-9) - 1
                     if key_index >= 0:
                         key = self.key_signatures[key_index][1]

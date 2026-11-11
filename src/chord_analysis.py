@@ -24,6 +24,7 @@ import mido
 
 from chord_inference import NO_CHORD, chord_pitch_classes, frame_pitch_vectors, infer_key_chords
 from clean_midi_rules import tick_seconds
+from meter import bar_beats
 from node_utils import node_executable
 
 
@@ -31,7 +32,6 @@ FRAMES_PER_BEAT = 2
 # Bump when inference, naming rules or the saved segment format changes.
 CHORD_CACHE_VERSION = 1
 # The project assumes 4/4 after first beat alignment.
-BEATS_PER_BAR = 4
 # A first note this close before a bar line is an early downbeat, not a pickup.
 PICKUP_TOLERANCE_BEATS = 0.25
 # Frame vectors are unit length, so this sets how strongly one frame's notes outweigh the chord change cost.
@@ -297,13 +297,13 @@ def chord_runs(key_chords):
     return runs
 
 
-def first_bar_tick(notes, ticks_per_beat):
+def first_bar_tick(notes, ticks_per_beat, beats_per_bar=4):
     """The first bar line at or after the first note; notes before it are a pickup.
 
     First beat alignment puts the downbeat on a bar line, so the bar grid already tells
     the pickup apart from the first full bar.
     """
-    bar_ticks = BEATS_PER_BAR * ticks_per_beat
+    bar_ticks = beats_per_bar * ticks_per_beat
     first = notes[0].start_tick
     nearest = round(first / bar_ticks) * bar_ticks
     if abs(first - nearest) <= PICKUP_TOLERANCE_BEATS * ticks_per_beat:
@@ -363,6 +363,7 @@ class _Song:
     frame_count: int
     # First frame of the first full bar; chords start there.
     start_frame: int
+    beats_per_bar: int
 
 
 def _song(midi_file):
@@ -374,8 +375,10 @@ def _song(midi_file):
     song_end_tick = max(note.sound_end_tick for note in notes)
     frame_count = math.ceil(song_end_tick / frame_ticks)
     # Chords start at the first full bar; the pickup still sounds into it through the pedal.
-    start = round(first_bar_tick(notes, midi_file.ticks_per_beat) / frame_ticks)
-    return _Song(notes, seconds, midi_file.ticks_per_beat, frame_ticks, song_end_tick, frame_count, start)
+    beats_per_bar = bar_beats(midi_file)
+    start = round(first_bar_tick(notes, midi_file.ticks_per_beat, beats_per_bar) / frame_ticks)
+    return _Song(notes, seconds, midi_file.ticks_per_beat, frame_ticks, song_end_tick, frame_count, start,
+                 beats_per_bar)
 
 
 def _window_segments(song, first_frame, end_frame, keep_first=None, keep_end=None):
@@ -460,7 +463,7 @@ def update_chords(before_midi, after_midi, segments):
     changed = _changed_ticks(before, after)
     if changed is None:
         return list(segments)
-    bar_frames = BEATS_PER_BAR * FRAMES_PER_BEAT
+    bar_frames = round(after.beats_per_bar * FRAMES_PER_BEAT)
     bar_ticks = bar_frames * after.frame_ticks
     first_bar = math.floor(changed[0] / bar_ticks) - UPDATE_SPLICE_BARS
     end_bar = math.ceil(changed[1] / bar_ticks) + UPDATE_SPLICE_BARS
@@ -512,9 +515,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Print the chord segments of a MIDI file.')
     parser.add_argument('input_midi')
     args = parser.parse_args(argv)
-    ticks_per_beat = mido.MidiFile(args.input_midi).ticks_per_beat
+    midi_file = mido.MidiFile(args.input_midi)
+    ticks_per_beat = midi_file.ticks_per_beat
     for segment in analyze_chords(args.input_midi):
-        bar, beat = bar_beat(segment.start_tick, ticks_per_beat)
+        bar, beat = bar_beat(segment.start_tick, ticks_per_beat, bar_beats(midi_file))
         print('{:>4} {:5.2f}  {:<12} {:>6.2f}s  bass {:<3} {:<22} {}'.format(
             bar, beat, segment.name, segment.end - segment.start, segment.bass,
             ' '.join(segment.pitch_classes), ', '.join(segment.candidates[1:])))

@@ -6,11 +6,11 @@ from tkinter import filedialog, messagebox
 
 import mido
 
+from meter import bar_beats
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
 
-BEATS_PER_BAR = 4
 # A key change must be backed by more than this many bars that vote against the current key.
 CHANGE_COST = 4
 MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
@@ -38,7 +38,7 @@ def note_onsets(midi_file):
 
 def bar_counts(midi_file, onsets):
     """Onset counts per pitch class for every bar from the first bar with notes to the last."""
-    bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
+    bar_ticks = round(midi_file.ticks_per_beat * bar_beats(midi_file))
     if not onsets:
         return 0, []
     first_bar = min(tick for tick, _ in onsets) // bar_ticks
@@ -100,7 +100,7 @@ def detect_key_segments(midi_path):
     if not counts:
         return []
     path = choose_signatures(bar_votes(counts))
-    bar_ticks = midi_file.ticks_per_beat * BEATS_PER_BAR
+    bar_ticks = round(midi_file.ticks_per_beat * bar_beats(midi_file))
     segments = []
     for index, key in enumerate(path):
         notes = sum(counts[index])

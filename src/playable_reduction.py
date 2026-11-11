@@ -10,6 +10,7 @@ import mido
 
 from clean_midi_rules import rebuild_track_without_messages
 from hand_split_channels import CHANNELS, collect_notes, group_notes, hand_fits
+from meter import bar_beats
 from midi_stats import source_stats_path_for
 from report_utils import update_report
 
@@ -26,6 +27,7 @@ MAX_REMOVALS_PER_GROUP = 3
 DOUBLED_COST = 1
 SINGLE_COST = 3
 OUTER_COST = 5
+# Quarter beats per bar for report positions; reduce_in_place sets it from the MIDI's time signature.
 BEATS_PER_BAR = 4
 NOTE_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 
@@ -102,7 +104,9 @@ def note_name(note):
 def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DEFAULT_MAX_SPAN, hands=None):
     """hands: None for an unsplit two-hand MIDI, or the low and high hand names of one player in a split MIDI;
     only their notes are reduced, and moved between the two when the split does not fit."""
+    global BEATS_PER_BAR
     midi_file = mido.MidiFile(midi_path)
+    BEATS_PER_BAR = bar_beats(midi_file)
     channels = tuple(CHANNELS[hand] for hand in hands) if hands else None
     notes = [note for note in collect_notes(midi_file)
              if channels is None or note['start_message'].channel in channels]

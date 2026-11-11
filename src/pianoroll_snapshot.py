@@ -8,10 +8,12 @@ import mido
 from PIL import Image, ImageDraw, ImageFont
 
 from hand_split_channels import CHANNELS, collect_notes
+from meter import bar_beats
 from midi_stats import note_name
 from note_text_review import parse_bars
 
 
+# Quarter beats per bar; write_snapshots sets it from the MIDI's time signature.
 BEATS_PER_BAR = 4
 BARS_PER_IMAGE = 4
 MIN_PITCH_RANGE = 24
@@ -123,7 +125,9 @@ def default_output_dir(midi_path):
 
 
 def write_snapshots(midi_path, output_dir=None, bars=None, layouts=('landscape',)):
+    global BEATS_PER_BAR
     midi_file = mido.MidiFile(midi_path)
+    BEATS_PER_BAR = bar_beats(midi_file)
     notes = collect_notes(midi_file)
     ticks_per_beat = midi_file.ticks_per_beat
     last_bar = max(note['end_ticks'] for note in notes) // (ticks_per_beat * BEATS_PER_BAR) + 1 if notes else 1
