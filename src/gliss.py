@@ -30,8 +30,11 @@ BLACK_KEYS = (1, 3, 6, 8, 10)
 MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
 NOTE_NAMES = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
 # Runs on these scales are corrected; a run on any other scale of scale_candidates is only reported, unless the scale holds
-# every black key (black_with_gaps).
+# every black key (black_with_gaps) or the run is too fast to finger (FAST_SCALE_SECONDS_PER_DEGREE).
 CORRECTED_SCALES = ('white', 'black')
+# A major-scale run this fast is a glissando, whatever its key colours: fingered scales run at about 65 ms a note or
+# slower, CRYCHIC's D major glissandi at 23-28 ms a degree, Kokuhaku m133 (G-flat major) at about 18 ms.
+FAST_SCALE_SECONDS_PER_DEGREE = 0.04
 
 MIN_DEGREES = 8
 # DuET's test on 148 hand-made scores found 6-7 note runs to be false; the shortest hand-checked run has 8 notes.
@@ -282,14 +285,17 @@ def detect_runs(midi_file):
         member_ids = {id(note) for note in members.values()}
         repeated = sum(1 for note in ordered if _repeated_chord_note(note, notes, member_ids, seconds_per_beat))
         summary = dict(start_tick=ordered[0]['start_ticks'], scale=name, repeated=repeated, notes=len(ordered))
-        corrected = name in CORRECTED_SCALES or black_with_gaps(scale)
+        fast = duration / (span - 1) <= FAST_SCALE_SECONDS_PER_DEGREE
+        corrected = name in CORRECTED_SCALES or black_with_gaps(scale) or fast
         if repeated / len(ordered) >= MAX_REPEATED_SHARE or not corrected:
             summary['reason'] = 'repeated' if corrected else 'scale'
             rejected.append(summary)
             occupied.append((ordered[0]['start_seconds'], ordered[-1]['start_seconds'], direction))
             continue
         # A black-key run with gap keys is filled with black keys only; the white keys it struck stay in it.
-        scale_name, fill_scale = (name, scale) if name in CORRECTED_SCALES else ('black ({})'.format(name), BLACK_KEYS)
+        # Any other fast major-scale run is filled on its own scale.
+        scale_name, fill_scale = (name, scale) if name in CORRECTED_SCALES or not black_with_gaps(scale) \
+            else ('black ({})'.format(name), BLACK_KEYS)
         runs.append(dict(
             members=ordered, direction=direction, scale_name=scale_name, scale=fill_scale, degree_scale=scale,
             low_degree=lowest, high_degree=highest, start_seconds=ordered[0]['start_seconds'],

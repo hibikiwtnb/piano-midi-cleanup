@@ -81,6 +81,8 @@ PARAMETERS = (
     Parameter('gliss.min_notes', 'Glissando: at least notes', int, ((gliss, 'MIN_NOTES'),)),
     Parameter('gliss.max_seconds_per_degree', 'Glissando: slowest time per degree (s)', float,
               ((gliss, 'MAX_SECONDS_PER_DEGREE'),)),
+    Parameter('gliss.fast_scale_seconds_per_degree', 'Glissando: mixed-colour scale at most per degree (s)', float,
+              ((gliss, 'FAST_SCALE_SECONDS_PER_DEGREE'),)),
     Parameter('gliss.min_coverage', 'Glissando: share of degrees present', float, ((gliss, 'MIN_COVERAGE'),)),
     Parameter('gliss.max_repeated_share', 'Glissando: repeated chord share that rejects a run', float,
               ((gliss, 'MAX_REPEATED_SHARE'),)),
