@@ -329,12 +329,17 @@ def extract_runs(input_path, output_path):
 
 
 def assign_hands(runs, midi_path):
-    """The hand of each run from its starting pitch against the other notes played during it, in place."""
+    """The hand of each run from the middle of its range against the other notes played during it, in place.
+
+    The middle, not the starting pitch: an upward run from middle C to the top of the keyboard lies above the right
+    hand's chords and is the right hand's (春日影 m52 started at C#4, under the chords, and went to the left hand).
+    """
     notes = collect_notes(mido.MidiFile(midi_path))
     for run in runs:
         others = [note['note'] for note in notes if run['start_tick'] <= note['start_ticks'] <= run['end_tick']]
         boundary = statistics.median(others) if others else SPLIT_PITCH
-        run['hand'] = 'right' if run['start_pitch'] >= boundary else 'left'
+        pitches = [note['note'] for note in run['members']]
+        run['hand'] = 'right' if (min(pitches) + max(pitches)) / 2 >= boundary else 'left'
 
 
 def split_spans(runs):
