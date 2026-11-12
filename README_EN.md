@@ -140,6 +140,16 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 
 The old `windows\transcribe.cmd` and `macos/transcribe.command` still work: they take several solo-piano recordings at once (no separation) and write the raw MIDI, stats report, tempo-fixed version and processed result next to each.
 
+### From audio to MIDI with an AI agent
+
+Paste this to the agent, with `song.flac` replaced by your file:
+
+```text
+Following the README at https://github.com/hibikiwtnb/piano-midi-cleanup, turn song.flac into a cleaned MIDI with all default settings.
+```
+
+It runs `src/audio_to_midi.py`, which separates, transcribes and cleans, giving the same result as the panel with default settings. Open the GUI afterwards to check the first beat.
+
 ### You already have MIDI
 
 1. Open the GUI and choose any MIDI file you want to process. Keep its existing filename.
@@ -201,10 +211,11 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 
 The [design specification](docs/spec/README.md) documents every rule, threshold and known limit (Traditional Chinese). Current issues are in [open issues](docs/open-issues.md), and cleanup details are in [cleaning rules](docs/cleaning-rules.md).
 
-In these examples, `input.mid` and `input.flac` stand for your own files; replace them with actual paths, not the table's `*` patterns. Run the commands in the project folder. On macOS, first activate the shared environment where the packages were installed:
+`audio_to_midi.py` goes from audio to the processed result with all default settings and downloads missing models without asking; use `--no-separate` for solo piano and `--help` for the other options. In these examples, `song.flac`, `input.mid` and `input.flac` stand for your own files; replace them with actual paths, not the table's `*` patterns. Run the commands in the project folder. On macOS, first activate the shared environment where the packages were installed:
 
 ```bash
 . "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
+python src/audio_to_midi.py "song.flac"
 python src/postprocess.py "input.mid" --audio "input.flac"
 python src/postprocess.py "input.mid" --bpm 135 --hands 3
 python src/postprocess.py "input_bpmfix_cleaned.mid" --playable --snapshot portrait

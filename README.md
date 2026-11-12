@@ -140,6 +140,16 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 
 舊的 `windows\transcribe.cmd` 與 `macos/transcribe.command` 仍可使用：可一次選多個鋼琴音訊（不做分離），在音訊旁產生原始 MIDI、統計報告、速度修正版與處理結果。
 
+### 用 AI agent 從音訊做到 MIDI
+
+把下面這句貼給 agent，`song.flac` 換成你的檔案：
+
+```text
+照 https://github.com/hibikiwtnb/piano-midi-cleanup 的 README，把 song.flac 轉成整理好的 MIDI，設定全用預設。
+```
+
+它會執行 `src/audio_to_midi.py`，依序分離、轉錄、整理，結果和面板用預設設定跑出來的一樣。之後再開 GUI 檢查第一拍。
+
 ### 已經有 MIDI
 
 1. 開啟 GUI，選擇任何要整理的 MIDI 檔案，不需要改檔名。
@@ -201,10 +211,11 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 
 完整規則、門檻依據與已知限制見[設計規格](docs/spec/README.md)。目前待解問題見[待解決問題](docs/open-issues.md)，清理規則細節見[清理規則](docs/cleaning-rules.md)。
 
-統一執行器可直接用命令列跑完整流程。範例中的 `input.mid`、`input.flac` 代表你自己的檔案，請替換成實際路徑；命令列不要直接輸入上表的 `*`。以下在專案資料夾中執行；macOS 先啟用剛才安裝套件的共用環境：
+統一執行器可直接用命令列跑完整流程。`audio_to_midi.py` 從音訊一路跑到處理結果，全用預設設定，缺少的模型會直接下載；`--no-separate` 用於鋼琴獨奏，`--help` 列出其他選項。範例中的 `song.flac`、`input.mid`、`input.flac` 代表你自己的檔案，請替換成實際路徑；命令列不要直接輸入上表的 `*`。以下在專案資料夾中執行；macOS 先啟用剛才安裝套件的共用環境：
 
 ```bash
 . "$HOME/.local/share/piano-midi-cleanup-env/bin/activate"
+python src/audio_to_midi.py "song.flac"
 python src/postprocess.py "input.mid" --audio "input.flac"
 python src/postprocess.py "input.mid" --bpm 135 --hands 3
 python src/postprocess.py "input_bpmfix_cleaned.mid" --playable --snapshot portrait
