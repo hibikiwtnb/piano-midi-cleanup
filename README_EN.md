@@ -8,13 +8,13 @@ Scripts are provided to create a Windows shortcut or macOS app. Set up the Pytho
 
 ## What it does
 
+- The "Separate & transcribe" tab takes a song, separates the piano with BS-RoFormer SW, transcribes it with ByteDance's `piano_transcription_inference` model and hands the MIDI over to processing. Choose "No separation" for audio that is already solo piano.
 - Fixes the song BPM and aligns the first beat to a bar line.
 - Writes key signatures so score view changes key at modulations.
 - Removes obvious transcription noise with conservative rules.
 - Splits notes into 2 to 4 hands, marked by MIDI channel; in three-hand mode the second player joins in whole-bar segments (default: at least 4 bars).
 - Shortens overlaps inside one hand that were caused by sustain-pedal tails.
 - Provides a piano roll, note text review, piano roll PNGs and other inspection tools.
-- The "Separate & transcribe" tab takes a song, separates the piano with BS-RoFormer SW, transcribes it with ByteDance's `piano_transcription_inference` model and hands the MIDI over to processing. Choose "No separation" for audio that is already solo piano.
 
 Model weights are not shipped with the project. They are downloaded on first use, after you confirm.
 
@@ -118,17 +118,6 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 
 ## Everyday workflow
 
-### You already have MIDI
-
-1. Open the GUI and choose any MIDI file you want to process. Keep its existing filename.
-2. Choose the tempo source:
-   - **Set tempo (BPM)**: enter the song's known tempo. **Choose the file first, then enter the BPM**; changing the file clears the BPM field.
-   - **Detect tempo from audio**: choose the source audio to estimate its tempo.
-   - **Keep corrected tempo**: use an existing tempo-corrected file (`*_bpmfix.mid`), including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
-3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
-4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
-5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
-
 ### Start from a song or piano audio
 
 1. Open the GUI; the first tab is "Separate & transcribe". Enter the file path under "Input audio" or press "Choose...". flac, wav, mp3, m4a, aif, aiff and ape are supported. Entering a MIDI file shows an "Open in Processing" button.
@@ -142,6 +131,17 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 6. When it finishes, the MIDI is handed over to processing: the "Processing" tab opens with the MIDI filled in and the tempo source set to detection from the original audio. Press "Start processing", or tick "Process right after transcription" to have it run automatically.
 
 The old `windows\transcribe.cmd` and `macos/transcribe.command` still work: they take several solo-piano recordings at once (no separation) and write the raw MIDI, stats report, tempo-fixed version and processed result next to each.
+
+### You already have MIDI
+
+1. Open the GUI and choose any MIDI file you want to process. Keep its existing filename.
+2. Choose the tempo source:
+   - **Set tempo (BPM)**: enter the song's known tempo. **Choose the file first, then enter the BPM**; changing the file clears the BPM field.
+   - **Detect tempo from audio**: choose the source audio to estimate its tempo.
+   - **Keep corrected tempo**: use an existing tempo-corrected file (`*_bpmfix.mid`), including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
+3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
+4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
+5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
 
 ### First beat, preview and reruns
 
