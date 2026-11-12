@@ -2,7 +2,7 @@
 
 [English README](README_EN.md)
 
-目前版本 **1.0.2**。Piano MIDI Cleanup 把 AI 鋼琴轉譜的 MIDI 整理成更容易看譜、編輯和練習的版本。你可以在桌面介面中校正速度與小節線、清理疑似雜音、分配左右手，再用內建鋼琴試聽結果。
+目前版本 **1.5.4**。Piano MIDI Cleanup 從歌曲音訊分離出鋼琴、轉成 MIDI，再把 AI 鋼琴轉譜的 MIDI 整理成更容易看譜、編輯和練習的版本。你可以在桌面介面中校正速度與小節線、清理疑似雜音、分配左右手，再用內建鋼琴試聽結果。
 
 專案提供 Windows 捷徑與 macOS App 的建立腳本。先完成下方的 Python 環境安裝，再執行一次腳本，之後即可雙擊開啟。
 
@@ -14,9 +14,9 @@
 - 依音高與動作把音符分成 2 到 4 隻手，並用 MIDI channel 標記；三手時以整小節區段判斷是否加入第二位演奏者（預設至少 4 小節）。
 - 裁短同一隻手內因踏板延音造成的重疊，讓譜面比較乾淨。
 - 提供鋼琴捲簾、文字音符清單、捲簾 PNG 等檢查工具。
-- 附一個鋼琴音訊轉譜入口，使用 ByteDance 的 `piano_transcription_inference` 模型。
+- 「分離與轉錄」分頁：輸入歌曲，用 BS-RoFormer SW 分離出鋼琴，再用 ByteDance 的 `piano_transcription_inference` 模型轉成 MIDI，接著交給後處理。已經是鋼琴獨奏的音訊可以選「不分離」。
 
-本工具**不含來源分離**。如果輸入是歌曲混音，請先自行把鋼琴聲部分離出來；否則其他樂器的聲音也會被當成鋼琴轉錄。
+模型權重不隨專案散布，第一次使用時會先詢問，再自動下載。
 
 ## 開始使用
 
@@ -32,10 +32,10 @@
 ## 系統需求
 
 - **Python 3.11**，且必須有 **tkinter**。Windows 請從 [Python 官方下載頁](https://www.python.org/downloads/windows/)選擇 64-bit Python 3.11；macOS 可用 python.org 版本，或 Homebrew 的 `python@3.11` 加 `python-tk@3.11`。
-- Python 套件：`torch`、`numpy`、`mido`、`librosa`、`piano_transcription_inference`、`python-rtmidi`、`pillow`、`sounddevice`。macOS 安裝另含 `numba`、`llvmlite`、`essentia`。
+- Python 套件：`torch`、`numpy`、`mido`、`librosa`、`piano_transcription_inference`、`python-rtmidi`、`pillow`、`sounddevice`。分離在 macOS 用 `coremltools`，Windows 用 `onnxruntime`。macOS 安裝另含 `numba`、`llvmlite`、`essentia`。
 - **[ffmpeg](https://ffmpeg.org/download.html)** 需在 `PATH` 上，讀取 m4a、mp3 等壓縮格式時會用到。
 - **[Node.js](https://nodejs.org/en/download)**：Windows 的自動 BPM 偵測與和弦顯示需要；macOS 只有和弦顯示需要 Node.js。
-- 轉譜可用 CPU；有 NVIDIA GPU 時可改用 CUDA 版 PyTorch。Linux 不在本 README 的圖形介面支援範圍內。
+- 轉譜可用 CPU；有 NVIDIA GPU 時可改用 CUDA 版 PyTorch。分離在 Apple Silicon 很快（一首約 2–3 分鐘）；Windows 只用 CPU 時很慢，4 分鐘的歌可能要 20–40 分鐘。Linux 不在本 README 的圖形介面支援範圍內。
 
 ## Windows x64 安裝
 
@@ -45,10 +45,10 @@
 py -3.11 -m venv "%USERPROFILE%\.local\share\piano-midi-cleanup-env"
 "%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install --upgrade pip
 "%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5" onnxruntime
 ```
 
-需要 NVIDIA GPU 時，把第三行換成 PyTorch 官網目前的 CUDA wheel index，例如 `--index-url https://download.pytorch.org/whl/cu126`。
+需要 NVIDIA GPU 時，把第三行換成 PyTorch 官網目前的 CUDA wheel index，例如 `--index-url https://download.pytorch.org/whl/cu126`；分離要用 GPU 時，再把 `onnxruntime` 換成 `onnxruntime-gpu`。
 
 Windows 沒有 Essentia wheel，所以不安裝 `essentia`；自動 BPM 改用專案內附的 essentia.js，因此需要 Node.js。也請安裝 ffmpeg 並把它的 `bin` 資料夾加入 `PATH`。
 
@@ -72,7 +72,7 @@ Apple Silicon 不需要 Intel 的舊版套件鎖定，直接安裝目前可用�
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5" coremltools
 ```
 
 Apple Silicon 的自動 BPM 使用 Python Essentia；Node.js 只在顯示和弦軌時需要。
@@ -87,7 +87,7 @@ Intel Mac 使用最後一個支援 macOS x86_64 的 PyTorch，因此版本必須
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5"
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5" coremltools
 ```
 
 請不要只升級 `torch` 或 `numpy`，否則 Intel 環境可能無法啟動。
@@ -129,15 +129,19 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 4. 處理成功後，捲簾會自動顯示最新的處理結果，其檔名以 `_bpmfix_cleaned.mid` 結尾。要製作樂譜時，將這個 MIDI 匯入樂譜軟體。
 5. 在鋼琴捲簾中檢查音符、和弦與踏板；需要調整第一拍時，見下一節。
 
-### 從鋼琴音訊開始
+### 從歌曲或鋼琴音訊開始
 
-1. 先確認音訊是鋼琴獨奏或已分離的鋼琴聲部。
-2. Windows 雙擊 `windows\transcribe.cmd`；macOS 雙擊 `macos/transcribe.command`。兩者都會開啟檔案選擇視窗，可以一次選多個音訊檔。`src/transcribe.py` 目前也是用檔案對話框，**沒有**無介面的音訊命令列用法。
-3. 第一次轉譜會用 Python 自動下載約 **165 MB** 的模型權重，不需要 `wget`。下載失敗時會保留舊檔，之後可重試。
-4. 轉譜會在音訊旁產生同名的原始 MIDI、統計報告、速度修正版與處理結果（檔名規則見下表）。這一步只做 BPM 修正、規則清理與兩手初步分手；**不對齊第一拍、不寫調號、不裁短重疊**。
-5. 回到 GUI，選擇生成的處理結果，在捲簾檢查並保存第一拍位置，這也會寫入調號。要再調整清理、手數或截斷時，選「沿用已修正的速度」重新處理。
+1. 開啟 GUI，第一個分頁是「分離與轉錄」。在「輸入音訊」填入檔案路徑，或按「選擇…」。支援 flac、wav、mp3、m4a、aif、aiff、ape。填入 MIDI 時會出現「到處理分頁整理」按鈕。
+2. 選引擎：
+   - **分離引擎**：歌曲混音選「BS-RoFormer SW（六軌，取鋼琴）」；已經是鋼琴獨奏或分離好的鋼琴選「不分離」。
+   - **轉錄引擎**：Piano Transcription（字節）。整理規則是依這個模型的輸出調整的。
+   - **運算裝置**：預設「自動（GPU 優先）」。
+3. 輸出位置預設與音訊同資料夾。分離時產生 `*_piano.wav` 與 `*_piano.mid`，不分離時產生 `*.mid`。已存在的檔案會跳過，勾選「重新產生已存在的檔案」可強制重跑。
+4. 按「開始」。缺少模型時會先列出要下載的模型、大小與來源，同意後才下載（BS-RoFormer 約 330–350 MB，字節模型約 170 MB），下載後核對 SHA-256。也可以先按「先下載」只下載模型。
+5. 下方的「輸出」框顯示引擎原本的輸出，包括分離每一段的進度與預估剩餘時間。可以隨時按「取消」，未完成的檔案會刪掉。
+6. 完成後自動「交給後處理」：切到「處理」分頁，填好 MIDI，速度來源設為從原曲音訊偵測。按「開始處理」即可；勾選「轉錄完直接處理」則會接著自動處理。
 
-若音訊旁已經有同名的原始 MIDI，轉譜入口不會重新轉錄，只會補上缺少的統計與後處理檔案。
+舊的 `windows\transcribe.cmd` 與 `macos/transcribe.command` 仍可使用：可一次選多個鋼琴音訊（不做分離），在音訊旁產生原始 MIDI、統計報告、速度修正版與處理結果。
 
 ### 第一拍、預覽與重跑
 
@@ -170,7 +174,8 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 - **`tkinter` 載入失敗**：Windows 請用 python.org 版本；macOS Homebrew 請補裝 `python-tk@3.11`。
 - **m4a / mp3 讀不進來**：先安裝 ffmpeg 並確認 `ffmpeg` 指令在 `PATH` 上。
 - **和弦軌沒有內容**：macOS 與 Windows 都需要 Node.js。缺少 Node.js 時只影響和弦顯示；Windows 的自動 BPM 也無法使用。
-- **第一次轉譜很久或下載失敗**：模型約 165 MB，只用 Python 下載，沒有 `wget`。網路不穩時重試即可。
+- **第一次分離或轉譜很久、下載失敗**：模型合計約 500 MB，會依序嘗試多個來源。網路不穩時重試即可，已下載完成的模型不會重新下載。
+- **Windows 分離很慢**：只用 CPU 時，4 分鐘的歌可能要 20–40 分鐘。有 NVIDIA 顯卡時可改裝 `onnxruntime-gpu`；也可以先用其他工具分離，再選「不分離」。
 - **BPM 抓成一半或兩倍**：選「手動指定速度（BPM）」輸入正確速度。換檔案後 BPM 欄會清空，記得先選檔再輸入。
 - **第一拍不對**：在捲簾用 ±1 拍調整並儲存。低音切分、無低音前奏、3/4 拍等情況可能判錯。
 - **處理後看不到結果**：確認狀態顯示處理完成，再切到捲簾查看；若處理失敗，請查看報告中的錯誤訊息。
@@ -212,4 +217,4 @@ Copyright (c) 2026 hibikiwtnb and contributors.
 
 本專案原創程式碼採用 **GNU Affero General Public License v3.0 only**（`AGPL-3.0-only`），完整條款見 [LICENSE](LICENSE)。允許商業使用；分發本程式時須依授權提供相應原始碼，修改版若透過網路與使用者互動，須依第 13 條提供原始碼取得方式。軟體不附任何保證。
 
-轉譜使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0）。內建音源 Coopiano、取樣播放引擎 sfizz、和弦命名 Tonal.js、和弦推斷 note-seq、Windows 自動 BPM 使用的 Essentia.js 等第三方元件保留各自授權；來源與授權全文見 [sound_sources/README.md](sound_sources/README.md)、[sound_sources/sfizz/README.md](sound_sources/sfizz/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。本專案是個人專案，與 ByteDance 無關。
+轉譜使用 ByteDance 的 [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference)（MIT）與其模型權重（[Zenodo 4034264](https://zenodo.org/record/4034264)，CC BY 4.0）。內建音源 Coopiano、取樣播放引擎 sfizz、和弦命名 Tonal.js、和弦推斷 note-seq、Windows 自動 BPM 使用的 Essentia.js 等第三方元件保留各自授權；來源與授權全文見 [sound_sources/README.md](sound_sources/README.md)、[sound_sources/sfizz/README.md](sound_sources/sfizz/README.md)、`vendor/TONAL_LICENSE.txt`、`vendor/NOTE_SEQ_LICENSE.txt` 與 `vendor/ESSENTIA_LICENSE.txt`。分離使用 BS-RoFormer SW：macOS 為 [BS-ROFO-SW-Fixed-CoreML](https://github.com/jonkubis/BS-ROFO-SW-Fixed-CoreML)（MIT）的 Core ML 版，其他平台為 [elicwhite/bs-roformer-sw-6stem-onnx](https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx) 的 ONNX 版；權重由第三方提供，不隨本專案散布。本專案是個人專案，與 ByteDance 無關。

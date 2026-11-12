@@ -2,7 +2,7 @@
 
 [Chinese README](README.md)
 
-Version **1.0.2**. Piano MIDI Cleanup turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
+Version **1.5.4**. Piano MIDI Cleanup separates the piano from a song, transcribes it to MIDI, and turns AI piano transcription MIDI into a version that is easier to read, edit and practice. Use the desktop interface to align tempo and bars, clean suspect notes, assign hands and preview the result with the built-in piano.
 
 Scripts are provided to create a Windows shortcut or macOS app. Set up the Python environment below, run the script once, then double-click the shortcut or app to launch.
 
@@ -14,9 +14,9 @@ Scripts are provided to create a Windows shortcut or macOS app. Set up the Pytho
 - Splits notes into 2 to 4 hands, marked by MIDI channel; in three-hand mode the second player joins in whole-bar segments (default: at least 4 bars).
 - Shortens overlaps inside one hand that were caused by sustain-pedal tails.
 - Provides a piano roll, note text review, piano roll PNGs and other inspection tools.
-- Includes a piano-audio transcription entrypoint built on ByteDance's `piano_transcription_inference`.
+- The "Separate & transcribe" tab takes a song, separates the piano with BS-RoFormer SW, transcribes it with ByteDance's `piano_transcription_inference` model and hands the MIDI over to processing. Choose "No separation" for audio that is already solo piano.
 
-The tool does **not** separate sources. If the input is a full song mix, separate the piano part yourself first; otherwise other instruments will be transcribed as piano.
+Model weights are not shipped with the project. They are downloaded on first use, after you confirm.
 
 ## Getting started
 
@@ -32,10 +32,10 @@ If you move the folder or rebuild the Python environment, run the generator agai
 ## Requirements
 
 - **Python 3.11** with **tkinter**. On Windows choose 64-bit Python 3.11 from the [official Python downloads](https://www.python.org/downloads/windows/). On macOS use python.org Python, or Homebrew `python@3.11` plus `python-tk@3.11`.
-- Python packages: `torch`, `numpy`, `mido`, `librosa`, `piano_transcription_inference`, `python-rtmidi`, `pillow`, `sounddevice`. The macOS installs also include `numba`, `llvmlite` and `essentia`.
+- Python packages: `torch`, `numpy`, `mido`, `librosa`, `piano_transcription_inference`, `python-rtmidi`, `pillow`, `sounddevice`. Separation uses `coremltools` on macOS and `onnxruntime` on Windows. The macOS installs also include `numba`, `llvmlite` and `essentia`.
 - **[ffmpeg](https://ffmpeg.org/download.html)** on `PATH` for m4a, mp3 and similar compressed audio formats.
 - **[Node.js](https://nodejs.org/en/download)**: required on Windows for automatic BPM detection and chord display; on macOS only the chord track needs it.
-- Transcription can run on CPU. An NVIDIA GPU may use a CUDA PyTorch build instead. Linux is outside the GUI support described here.
+- Transcription can run on CPU. An NVIDIA GPU may use a CUDA PyTorch build instead. Separation is fast on Apple Silicon (about 2–3 minutes per song); on Windows with CPU only it is slow, possibly 20–40 minutes for a 4-minute song. Linux is outside the GUI support described here.
 
 ## Windows x64 setup
 
@@ -45,10 +45,10 @@ After installing Python, open **Command Prompt (cmd.exe)** from the Start menu a
 py -3.11 -m venv "%USERPROFILE%\.local\share\piano-midi-cleanup-env"
 "%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install --upgrade pip
 "%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
+"%USERPROFILE%\.local\share\piano-midi-cleanup-env\Scripts\python.exe" -m pip install mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5" onnxruntime
 ```
 
-For an NVIDIA GPU, replace the third line with PyTorch's current CUDA wheel index, for example `--index-url https://download.pytorch.org/whl/cu126`.
+For an NVIDIA GPU, replace the third line with PyTorch's current CUDA wheel index, for example `--index-url https://download.pytorch.org/whl/cu126`; for GPU separation, also replace `onnxruntime` with `onnxruntime-gpu`.
 
 Essentia has no Windows wheel, so it is not installed. Automatic BPM detection uses the bundled essentia.js instead and therefore needs Node.js. Install ffmpeg and add its `bin` folder to `PATH` as well.
 
@@ -72,7 +72,7 @@ Apple Silicon does not need the old Intel package pins. Install current versions
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5"
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install torch numpy numba llvmlite essentia mido librosa piano_transcription_inference python-rtmidi pillow "sounddevice>=0.5" coremltools
 ```
 
 Automatic BPM detection on Apple Silicon uses Python Essentia. Node.js is only needed for the chord track.
@@ -87,7 +87,7 @@ Intel Macs use the last PyTorch release for macOS x86_64, so the versions must s
 ```bash
 python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 ~/.local/share/piano-midi-cleanup-env/bin/python -m pip install --upgrade pip
-~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5"
+~/.local/share/piano-midi-cleanup-env/bin/python -m pip install "torch==2.2.2" "numpy<2" "numba==0.62.1" "llvmlite==0.45.1" "essentia==2.1b6.dev1389" mido librosa piano_transcription_inference "python-rtmidi==1.5.8" pillow "sounddevice>=0.5" coremltools
 ```
 
 Do not upgrade only `torch` or `numpy`; the Intel environment may stop working.
@@ -129,15 +129,19 @@ Without the app, double-click `macos/postprocess_panel.command`, or run:
 4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
 5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
 
-### Start from piano audio
+### Start from a song or piano audio
 
-1. Make sure the audio is solo piano or an already-separated piano part.
-2. Windows: double-click `windows\transcribe.cmd`. macOS: double-click `macos/transcribe.command`. Both open a file dialog and accept one or more audio files. `src/transcribe.py` currently also uses a file dialog; there is **no** headless audio command line.
-3. The first transcription downloads a model of about **165 MB** with Python; `wget` is not needed. A failed download keeps the old file, and you can retry.
-4. Transcription writes the original MIDI, report, tempo-corrected MIDI and processed result next to the audio, using its filename as the base (see the table below). This step only fixes the BPM, runs rule cleanup and does a provisional two-hand split; it does **not** align the first beat, write key signatures or trim overlaps.
-5. Return to the GUI, select the processed result, and check and save the first beat in the roll; this also writes key signatures. To adjust cleanup, hand count or trimming afterward, select **Keep corrected tempo** and process again.
+1. Open the GUI; the first tab is "Separate & transcribe". Enter the file path under "Input audio" or press "Choose...". flac, wav, mp3, m4a, aif, aiff and ape are supported. Entering a MIDI file shows an "Open in Processing" button.
+2. Choose the engines:
+   - **Separation engine**: "BS-RoFormer SW (6 stems, keep piano)" for a song mix; "No separation" for solo piano or an already separated piano stem.
+   - **Transcription engine**: Piano Transcription (ByteDance). The cleanup rules are tuned for this model's output.
+   - **Device**: "Auto (GPU first)" by default.
+3. Output goes next to the audio by default. With separation you get `*_piano.wav` and `*_piano.mid`; without it, `*.mid`. Existing files are skipped; tick "Regenerate existing files" to redo them.
+4. Press "Start". If models are missing, the tab first lists them with their size and source and downloads only after you agree (BS-RoFormer about 330–350 MB, ByteDance about 170 MB); each download is checked by SHA-256. "Download now" fetches the models without running anything.
+5. The "Console output" box shows the engines' own output, including each separation chunk's progress and time remaining. "Cancel" works at any time; unfinished files are deleted.
+6. When it finishes, the MIDI is handed over to processing: the "Processing" tab opens with the MIDI filled in and the tempo source set to detection from the original audio. Press "Start processing", or tick "Process right after transcription" to have it run automatically.
 
-If the original MIDI with the audio's base name already exists, the transcription entrypoint only fills in missing stats and post-processing files instead of transcribing again.
+The old `windows\transcribe.cmd` and `macos/transcribe.command` still work: they take several solo-piano recordings at once (no separation) and write the raw MIDI, stats report, tempo-fixed version and processed result next to each.
 
 ### First beat, preview and reruns
 
@@ -170,7 +174,8 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **tkinter fails to load**: use the python.org build on Windows; on macOS Homebrew, install `python-tk@3.11`.
 - **m4a / mp3 will not load**: install ffmpeg and make sure the `ffmpeg` command is on `PATH`.
 - **The chord track is empty**: Node.js is required on both macOS and Windows. Without Node.js only chord display is affected; on Windows automatic BPM also becomes unavailable.
-- **First transcription is slow or the download fails**: the model is about 165 MB and is downloaded with Python, not `wget`. Retry on an unstable connection.
+- **First separation or transcription is slow, or the download fails**: the models total about 500 MB and several sources are tried in order. Retry on an unstable connection; finished models are not downloaded again.
+- **Separation is slow on Windows**: with CPU only, a 4-minute song may take 20–40 minutes. With an NVIDIA GPU, install `onnxruntime-gpu` instead; or separate with another tool and choose "No separation".
 - **BPM is detected at half or double speed**: enter the correct value with **Set tempo (BPM)**. Changing the file clears the field, so choose the file first.
 - **The first beat is wrong**: adjust it by ±1 beat in the roll and save. Syncopated bass, an intro without bass, or 3/4 can confuse the estimate.
 - **The result is not shown after processing**: check that processing finished, then open the piano roll. If processing failed, check the report for the error message.
@@ -212,4 +217,4 @@ Copyright (c) 2026 hibikiwtnb and contributors.
 
 Original project code is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`); see [LICENSE](LICENSE). Commercial use is permitted. Distribution requires providing the Corresponding Source under the license terms, and modified versions that interact with users over a network must offer access to their Corresponding Source as required by section 13. The software comes without warranty.
 
-Transcription uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0). Bundled third-party components, including the Coopiano piano sound, the sfizz sample-playback engine, Tonal.js chord naming, note-seq chord inference and Essentia.js for Windows automatic BPM, retain their own licenses. See [sound_sources/README.md](sound_sources/README.md), [sound_sources/sfizz/README.md](sound_sources/sfizz/README.md), `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`. This is a personal project, not affiliated with ByteDance.
+Transcription uses ByteDance's [piano_transcription_inference](https://github.com/qiuqiangkong/piano_transcription_inference) (MIT) and its model weights ([Zenodo 4034264](https://zenodo.org/record/4034264), CC BY 4.0). Bundled third-party components, including the Coopiano piano sound, the sfizz sample-playback engine, Tonal.js chord naming, note-seq chord inference and Essentia.js for Windows automatic BPM, retain their own licenses. See [sound_sources/README.md](sound_sources/README.md), [sound_sources/sfizz/README.md](sound_sources/sfizz/README.md), `vendor/TONAL_LICENSE.txt`, `vendor/NOTE_SEQ_LICENSE.txt` and `vendor/ESSENTIA_LICENSE.txt`. Separation uses BS-RoFormer SW: on macOS the Core ML build from [BS-ROFO-SW-Fixed-CoreML](https://github.com/jonkubis/BS-ROFO-SW-Fixed-CoreML) (MIT), elsewhere the ONNX build from [elicwhite/bs-roformer-sw-6stem-onnx](https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx). The weights come from third parties and are not distributed with this project. This is a personal project, not affiliated with ByteDance.
