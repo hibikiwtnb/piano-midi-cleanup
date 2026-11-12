@@ -29,6 +29,14 @@ Prepare the Python environment once, then launch the tool from a desktop shortcu
 
 If you move the folder or rebuild the Python environment, run the generator again. The `.cmd` / `.command` files switch to the project folder themselves, so you do not need to `cd` first.
 
+### Install with an AI agent
+
+If you use an AI agent that can operate your computer, such as Claude Code or Codex, paste this line to it:
+
+```text
+Install Piano MIDI Cleanup (https://github.com/hibikiwtnb/piano-midi-cleanup) for me: follow its README to create the Python 3.11 environment for my operating system and processor, install the packages plus ffmpeg and Node.js, then run the launcher generator to create a double-clickable app or shortcut.
+```
+
 ## Requirements
 
 - **Python 3.11** with **tkinter**. On Windows choose 64-bit Python 3.11 from the [official Python downloads](https://www.python.org/downloads/windows/). On macOS use python.org Python, or Homebrew `python@3.11` plus `python-tk@3.11`.

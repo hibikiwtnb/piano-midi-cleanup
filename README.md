@@ -29,6 +29,14 @@
 
 之後如果搬移資料夾或重建 Python 環境，重新執行一次產生器即可。專案內的 `.cmd` / `.command` 檔會自行切換到專案資料夾，不需要先 `cd`。
 
+### 用 AI agent 安裝
+
+如果你有 Claude Code、Codex 這類能操作電腦的 AI agent，可以把下面這句貼給它：
+
+```text
+請幫我安裝 Piano MIDI Cleanup（https://github.com/hibikiwtnb/piano-midi-cleanup）：照它的 README，依我的作業系統和處理器建立 Python 3.11 環境、安裝套件和 ffmpeg、Node.js，最後執行啟動器產生器，建立可以雙擊開啟的 App 或捷徑。
+```
+
 ## 系統需求
 
 - **Python 3.11**，且必須有 **tkinter**。Windows 請從 [Python 官方下載頁](https://www.python.org/downloads/windows/)選擇 64-bit Python 3.11；macOS 可用 python.org 版本，或 Homebrew 的 `python@3.11` 加 `python-tk@3.11`。
