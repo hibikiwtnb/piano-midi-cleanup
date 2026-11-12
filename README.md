@@ -31,10 +31,10 @@
 
 ### 用 AI agent 安裝
 
-如果你有 Claude Code、Codex 這類能操作電腦的 AI agent，可以把下面這句貼給它：
+有 Claude Code、Codex 等 AI agent 的話，貼這句給它：
 
 ```text
-請幫我安裝 Piano MIDI Cleanup（https://github.com/hibikiwtnb/piano-midi-cleanup）：照它的 README，依我的作業系統和處理器建立 Python 3.11 環境、安裝套件和 ffmpeg、Node.js，最後執行啟動器產生器，建立可以雙擊開啟的 App 或捷徑。
+照 https://github.com/hibikiwtnb/piano-midi-cleanup 的 README 幫我安裝這個工具。
 ```
 
 ## 系統需求

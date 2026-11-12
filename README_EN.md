@@ -31,10 +31,10 @@ If you move the folder or rebuild the Python environment, run the generator agai
 
 ### Install with an AI agent
 
-If you use an AI agent that can operate your computer, such as Claude Code or Codex, paste this line to it:
+With an AI agent such as Claude Code or Codex, paste this:
 
 ```text
-Install Piano MIDI Cleanup (https://github.com/hibikiwtnb/piano-midi-cleanup) for me: follow its README to create the Python 3.11 environment for my operating system and processor, install the packages plus ffmpeg and Node.js, then run the launcher generator to create a double-clickable app or shortcut.
+Install the tool at https://github.com/hibikiwtnb/piano-midi-cleanup by following its README.
 ```
 
 ## Requirements
