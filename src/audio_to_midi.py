@@ -71,7 +71,8 @@ def convert(audio, args):
     print('MIDI: {}'.format(midi))
     if args.no_process:
         return 0
-    return postprocess.main([midi, '--audio', audio])
+    # The panel's default leaves pedal protection off; the postprocess.py command line turns it on.
+    return postprocess.main([midi, '--audio', audio, '--no-pedal-protection'])
 
 
 def main(argv=None):
