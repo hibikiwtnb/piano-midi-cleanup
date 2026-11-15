@@ -45,6 +45,9 @@
 - 以 Viterbi 沿時間選分界線，總空白最大，分界線每移動一個半音扣 0.5。
 - 空白音區越窄，分界線的約束越弱（clarity：空白半寬達 4 半音為完整約束，`BLOB_CLEAR_GAP`）。
 - 三、四手時，第二位演奏者的手是 upper blob 的承擔者；不可把 blob 改回只約束第一位演奏者的 `left/right`。
+- 四手時，Viterbi 的每拍分數另扣「兩手搆不到」的量（`FOUR_HAND_REACH_COST = 1`）：線下、線上各自的音（同一前後一拍視窗）以最佳的一刀切成兩手，較寬那隻手超過 `COMFORT_SPAN` 的半音數，每半音扣 1。clarity 仍只看實際量到的空白半寬，不受此項影響。
+  - 要回答的問題：四手的分界線是兩位演奏者的分界，不是「最寬的空白」。最寬的空白常是第一位演奏者自己左右手之間的空白（低音與中音伴奏之間），只看空白會把伴奏整段交給第二位演奏者，讓 `right` 幾乎沒有音、`second_left` 卻要彈中音伴奏。
+  - 不回答的問題：不決定哪隻手彈哪個音，不改手部拓撲（`left + right` 在線下、`second_left + second_right` 在線上），不改 `blob_cost` 的錯側計算。兩手與三手不受影響。
 
 ### 2.1 三手第二演奏者的 n 小節區段
 
@@ -158,6 +161,7 @@ Blob 分界線的 clarity 是每拍實際量到的空白音區證據。clarity �
 | 移動 | 0.01 × 該手中心音高變化 ÷ 距上次起音的秒數（最少 0.05 秒） | `MOVE_COST_WEIGHT`、`MIN_MOVE_SECONDS` |
 | 快速音群中的和弦 | 連續 3 個以上單音、每個間隔 < 0.25 秒時，該手多彈的每個音 3 ×（1 − 間隔 ÷ 0.25） | `FAST_RUN_*` |
 | 分界線 | 兩手時 `left` 在線下、`right` 在線上；三、四手時第一位演奏者的 `left/right` 在線下、第二位演奏者的手在線上。每個錯側音 4 × clarity | `BLOB_SIDE_COST = 4` |
+| 四手分界線的兩手可及性 | 只影響分界線的選擇（見 2），每側兩手跨度超過 12 的半音，每半音扣 1 | `FOUR_HAND_REACH_COST = 1` |
 | 第二位演奏者 | 三、四手時，每個分給第二右手或第二左手的音 1，只在需要時使用 | `SECOND_HAND_NOTE_COST = 1` |
 | 第二演奏者區段 | 三手時 OFF → ON 一次 8；ON 期間每小節 1；至少 N 小節 | `SECOND_PLAYER_ACTIVATION_COST = 8`、`SECOND_PLAYER_BAR_COST = 1`、`SECOND_PLAYER_MIN_BARS = 4` |
 | 第二右手音域 | 三、四手時，`second_right` 低於下界的音 10 × 距離²；三手 ON 時，第一位演奏者 `right` 達到或高於下界的音 10 ×（超出量 + 1）² | `SECOND_RIGHT_MIN_PITCH`、`SECOND_RIGHT_REGISTER_COST = 10` |

@@ -53,6 +53,8 @@ BLOB_LINE_MOVE_COST = 0.5
 # is narrower than BLOB_CLEAR_GAP semitones on each side.
 BLOB_SIDE_COST = 4.0
 BLOB_CLEAR_GAP = 4
+# Four hands: line score lost per semitone a player's side exceeds two hands' comfortable reach.
+FOUR_HAND_REACH_COST = 1.0
 
 # With three or four hands, each note given to the second player's hands costs this,
 # so the additional player is used only when needed.
@@ -315,6 +317,28 @@ def best_previous_lines(totals):
     return best
 
 
+def two_hand_overflow(pitches):
+    """Semitones by which the best two-hand split of sorted pitches exceeds COMFORT_SPAN per hand."""
+    if len(pitches) < 2:
+        return 0
+    best = min(max(pitches[cut - 1] - pitches[0] if cut else 0,
+                   pitches[-1] - pitches[cut] if cut < len(pitches) else 0)
+               for cut in range(len(pitches) + 1))
+    return max(0, best - COMFORT_SPAN)
+
+
+def two_player_reach_cost(pitches, line):
+    """Four hands: each side of the player line must be reachable by that player's two hands.
+
+    The widest empty band alone is often the first player's own left/right gap (bass
+    below accompaniment), which would hand the accompaniment to the second player.
+    This only penalises lines whose sides two hands cannot cover; it does not change
+    the topology (left + right below the line, second_left + second_right above).
+    """
+    index = bisect.bisect_left(pitches, line)
+    return (two_hand_overflow(pitches[:index]) + two_hand_overflow(pitches[index:])) * FOUR_HAND_REACH_COST
+
+
 def blob_lines(notes, ticks_per_beat, hands=2):
     """Per beat (line pitch, clarity): notes below the line form the lower blob, the rest the upper blob."""
     if not notes:
@@ -324,10 +348,17 @@ def blob_lines(notes, ticks_per_beat, hands=2):
     for note in notes:
         onsets[note['start_ticks'] // ticks_per_beat].append(note['note'])
 
-    beat_scores = []
+    beat_scores = []   # Viterbi scores
+    beat_gaps = []     # measured empty band, for clarity
     for beat in range(beats):
         window = onsets[max(0, beat - BLOB_CONTEXT_BEATS):beat + BLOB_CONTEXT_BEATS + 1]
-        beat_scores.append(line_scores(sorted(pitch for pitches in window for pitch in pitches)))
+        pitches = sorted(pitch for pitches in window for pitch in pitches)
+        scores = line_scores(pitches)
+        beat_gaps.append(scores)
+        if hands == 4:
+            scores = [score - two_player_reach_cost(pitches, BLOB_LOWEST_LINE + line)
+                      for line, score in enumerate(scores)]
+        beat_scores.append(scores)
 
     totals = list(beat_scores[0])
     back = []
@@ -341,7 +372,7 @@ def blob_lines(notes, ticks_per_beat, hands=2):
         path.append(best[path[-1]])
     path.reverse()
     blobs = [(BLOB_LOWEST_LINE + line, min(scores[line], BLOB_CLEAR_GAP) / BLOB_CLEAR_GAP)
-             for line, scores in zip(path, beat_scores)]
+             for line, scores in zip(path, beat_gaps)]
     if hands == 3:
         # A short rest in one blob is missing evidence, not a new player boundary.
         # Bridge only gaps bracketed by reliable evidence for the identical line;
