@@ -2,11 +2,11 @@
 
 ## 統一執行器
 
-程式：`src/postprocess.py`。依固定順序執行後處理，每一步可開關。
+程式：`src/postprocess.py`。依固定順序執行後處理，每一步可開關。`audio_to_midi.py` 同樣接受 `--time-signature`（`4/4`、`3/4`、`6/8`）；它會把拍號寫進轉譜 MIDI，再連同 `--audio` 交給 `postprocess.py`。
 
 | 順序 | 步驟 | 預設 | 開關 |
 |:---:|---|:---:|---|
-| 1 | BPM 修正、第一拍對齊、調號 | 給 `--bpm` 或 `--audio` 時執行 | `--no-first-beat`、`--first-beat 秒數`、`--no-key-signature` |
+| 1 | BPM 修正、第一拍對齊、調號 | 給 `--bpm` 或 `--audio` 時執行 | `--no-first-beat`、`--first-beat 秒數`、`--no-key-signature`、`--time-signature 拍號` |
 | 2 | 規則清理 | 開 | `--no-clean`、`--semitone-pairs` |
 | 3 | 可彈性清理（兩手時；三手改在分手後） | 關 | `--playable` |
 | 4 | 分手 | 開 | `--no-split`、`--hands 2/3/4` |

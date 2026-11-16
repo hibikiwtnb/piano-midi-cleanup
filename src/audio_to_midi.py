@@ -12,6 +12,7 @@ import argparse
 import os
 import sys
 
+import meter
 import model_store
 import postprocess
 from transcribe_tab import AUDIO_EXTENSIONS, TranscribeTab, output_paths
@@ -26,6 +27,11 @@ def build_parser():
     parser.add_argument('--cpu', action='store_true', help='Do not use a GPU.')
     parser.add_argument('--regenerate', action='store_true', help='Redo separation and transcription even if their files exist.')
     parser.add_argument('--no-process', action='store_true', help='Stop after transcription; do not run postprocess.py.')
+    parser.add_argument('--time-signature', choices=meter.METERS, metavar='METER',
+                        help='Time signature written to the MIDI and used for bars, first beat, key signatures and '
+                             'the hand split: {}. Default: the MIDI\'s own meter (4/4 for a fresh transcription). '
+                             'In 6/8 the BPM is the quarter-note tempo; a dotted-quarter tempo is detected and '
+                             'multiplied by 1.5.'.format(', '.join(meter.METERS)))
     return parser
 
 
@@ -68,11 +74,16 @@ def convert(audio, args):
             partial = os.path.splitext(midi)[0] + '.partial.mid'
             if os.path.exists(partial):
                 os.remove(partial)
+    if args.time_signature:
+        meter.set_meter(midi, *meter.parse_meter(args.time_signature))
     print('MIDI: {}'.format(midi))
     if args.no_process:
         return 0
     # The panel's default leaves pedal protection off; the postprocess.py command line turns it on.
-    return postprocess.main([midi, '--audio', audio, '--no-pedal-protection'])
+    command = [midi, '--audio', audio, '--no-pedal-protection']
+    if args.time_signature:
+        command += ['--time-signature', args.time_signature]
+    return postprocess.main(command)
 
 
 def main(argv=None):
