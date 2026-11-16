@@ -27,11 +27,12 @@ def build_parser():
     parser.add_argument('--cpu', action='store_true', help='Do not use a GPU.')
     parser.add_argument('--regenerate', action='store_true', help='Redo separation and transcription even if their files exist.')
     parser.add_argument('--no-process', action='store_true', help='Stop after transcription; do not run postprocess.py.')
-    parser.add_argument('--time-signature', choices=meter.METERS, metavar='METER',
+    parser.add_argument('--time-signature', choices=meter.METERS + ('auto',), default='auto', metavar='METER',
                         help='Time signature written to the MIDI and used for bars, first beat, key signatures and '
-                             'the hand split: {}. Default: the MIDI\'s own meter (4/4 for a fresh transcription). '
-                             'In 6/8 the BPM is the quarter-note tempo; a dotted-quarter tempo is detected and '
-                             'multiplied by 1.5.'.format(', '.join(meter.METERS)))
+                             'the hand split: {}, or auto (the default) to infer it from the audio. auto keeps the '
+                             'MIDI\'s own meter (4/4 after a fresh transcription) when the performance does not '
+                             'decide. In 6/8 the BPM is the quarter-note tempo; a dotted-quarter tempo is detected '
+                             'and multiplied by 1.5.'.format(', '.join(meter.METERS)))
     return parser
 
 
@@ -74,7 +75,7 @@ def convert(audio, args):
             partial = os.path.splitext(midi)[0] + '.partial.mid'
             if os.path.exists(partial):
                 os.remove(partial)
-    if args.time_signature:
+    if args.time_signature != 'auto':
         meter.set_meter(midi, *meter.parse_meter(args.time_signature))
     print('MIDI: {}'.format(midi))
     if args.no_process:

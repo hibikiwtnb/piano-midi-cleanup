@@ -165,8 +165,10 @@ def plan_steps(args):
         raise ValueError('--time-signature is written by BPMFix; give --bpm or --audio with it.')
     steps = []
     if args.bpm or args.audio:
+        meter_note = ', automatic time signature' if args.time_signature == 'auto' else (
+            ', ' + args.time_signature if args.time_signature else '')
         steps.append(('bpmfix', 'BPMFix ({}{})'.format('{} BPM'.format(args.bpm) if args.bpm else args.audio,
-                                                       ', ' + args.time_signature if args.time_signature else '')))
+                                                       meter_note)))
         if args.first_beat_seconds is not None:
             steps.append(('first_beat', 'First beat at {:.3f}s'.format(args.first_beat_seconds)))
         elif args.first_beat:
@@ -251,8 +253,10 @@ def _run_postprocess(args, stats_path):
             # With glissandi taken out, the MIDI without them is already in cleaned_path and is cleaned in place.
             before = note_snapshot(bpmfix_path if name == 'clean' and runs is None else cleaned_path)
         if name == 'bpmfix':
+            auto_meter = args.time_signature == 'auto'
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm,
-                          meter=parse_meter(args.time_signature) if args.time_signature else None)
+                          meter=parse_meter(args.time_signature) if args.time_signature and not auto_meter else None,
+                          auto_meter=auto_meter)
         elif name == 'first_beat':
             if args.first_beat_seconds is None:
                 auto_align_first_beat(bpmfix_path, report_path=stats_path)
@@ -326,11 +330,12 @@ def build_parser(parser_class=argparse.ArgumentParser):
     source.add_argument('--bpm', type=float, help='Known BPM; runs BPMFix from song.mid.')
     source.add_argument('--audio', help='Source audio for BPM detection; runs BPMFix from song.mid.')
     first_beat = parser.add_mutually_exclusive_group()
-    parser.add_argument('--time-signature', choices=METERS, metavar='METER',
-                        help='Time signature written by BPMFix: {}. Bars, first beat, key signatures and the hand '
-                             'split count bars of this length. In 6/8 the BPM is the quarter-note tempo; a '
-                             'dotted-quarter tempo is detected and multiplied by 1.5. Default: keep the MIDI\'s own '
-                             '(4/4 for a fresh transcription).'.format(', '.join(METERS)))
+    parser.add_argument('--time-signature', choices=METERS + ('auto',), metavar='METER',
+                        help='Time signature written by BPMFix: {}, or auto. Bars, first beat, key signatures and '
+                             'the hand split count bars of this length. In 6/8 the BPM is the quarter-note tempo; a '
+                             'dotted-quarter tempo is detected and multiplied by 1.5. auto infers the meter from '
+                             'the MIDI and the applied BPM, and keeps the MIDI\'s own when it is unclear. Default: '
+                             'keep the MIDI\'s own (4/4 for a fresh transcription).'.format(', '.join(METERS)))
     first_beat.add_argument('--no-first-beat', dest='first_beat', action='store_false',
                             help='Skip the automatic first beat alignment after BPMFix.')
     first_beat.add_argument('--first-beat', dest='first_beat_seconds', type=float, metavar='SECONDS',

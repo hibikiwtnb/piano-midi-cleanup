@@ -8,6 +8,7 @@ from pathlib import Path
 import mido
 
 from meter import bar_beats, is_compound, set_meter
+from meter_detect import detect_meter, format_detection
 from node_utils import node_executable
 from report_utils import update_report
 
@@ -271,7 +272,12 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
     else:
         rounding = 'skipped (rounded BPM end drift > {:.0f} ms)'.format(ROUND_MAX_END_DRIFT_MS)
 
-    return '\n'.join([
+    detection = bpm_info.get('meter_detection')
+    signature = '{}/{}'.format(*bpm_info['meter']) if bpm_info.get('meter') else 'kept from MIDI'
+    evidence = ''
+    if detection:
+        signature, evidence = format_detection(detection)
+    report = '\n'.join([
         'MIDI BPMFix stats',
         'Audio: {}'.format(audio_path or 'N/A'),
         'Input MIDI: {}'.format(midi_path),
@@ -283,12 +289,15 @@ def format_bpmfix_stats(audio_path, midi_path, output_path, bpm_info):
         'Beat-phase coherence: {}'.format('N/A' if phase_coherence is None else '{:.3f}'.format(phase_coherence)),
         'Rounding: {}'.format(rounding),
         'Applied BPM: {bpm:.2f}'.format(**bpm_info),
-        'Time signature: {}'.format('{}/{}'.format(*bpm_info['meter']) if bpm_info.get('meter') else 'kept from MIDI'),
+        'Time signature: {}'.format(signature),
         'Beat read as dotted quarter, BPM x1.5: {}'.format('yes' if bpm_info.get('dotted_quarter') else 'no'),
         'Estimated end drift: {}'.format('N/A (manual BPM)' if drift is None else '{:.0f} ms'.format(drift)),
         'Detection confidence: {}'.format('N/A (manual BPM)' if confidence is None else '{:.3f}'.format(confidence)),
         'Detected beats: {}'.format('N/A (manual BPM)' if beats is None else beats),
     ])
+    if evidence:
+        report += '\nTime signature evidence: {}'.format(evidence)
+    return report
 
 
 def write_bpmfix_report(audio_path, midi_path, output_path, bpm_info, report_path=None, append=False):
@@ -322,8 +331,12 @@ def beat_is_dotted_quarter(midi_path, bpm):
     return coherence(beat / 3) > coherence(beat / 2)
 
 
-def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, target_bpm=None, meter=None):
-    """meter: (numerator, denominator) written to the output MIDI; None keeps the MIDI's own."""
+def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, target_bpm=None, meter=None,
+                  auto_meter=False):
+    """meter: (numerator, denominator) written to the output MIDI; None keeps the MIDI's own.
+
+    auto_meter: infer the meter from this MIDI and the applied BPM; an explicit meter still wins.
+    """
     output_path = bpmfix_path_for(midi_path)
     if target_bpm is None:
         print('Detecting BPM for {}'.format(audio_path))
@@ -332,6 +345,15 @@ def apply_bpm_fix(audio_path, midi_path, report_path=None, append_report=False, 
     else:
         bpm_info = bpm_info_from_manual_bpm(target_bpm)
 
+    if auto_meter and meter is None:
+        detection = detect_meter(midi_path, bpm_info['bpm'])
+        bpm_info['meter_detection'] = detection
+        meter = detection['meter']
+        if meter:
+            print('Detected time signature: {}/{} (auto, {})'.format(*meter, detection['confidence']))
+        else:
+            print('Time signature not determined ({}); bars follow the MIDI\'s own. '
+                  'Give --time-signature to override.'.format(detection['reason']))
     bpm_info['meter'] = meter
     bpm_info['dotted_quarter'] = False
     if meter and is_compound(*meter) and beat_is_dotted_quarter(midi_path, bpm_info['bpm']):
