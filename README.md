@@ -148,7 +148,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 照 https://github.com/hibikiwtnb/piano-midi-cleanup 的 README，把 song.flac 轉成整理好的 MIDI，設定全用預設。
 ```
 
-它會執行 `src/audio_to_midi.py`，依序分離、轉錄、整理，結果和面板用預設設定跑出來的一樣。之後再開 GUI 檢查第一拍。
+它會執行 `src/audio_to_midi.py`，依序分離、轉錄、整理；拍號會自動從演奏判斷，不必先知道是 4/4、3/4 或 6/8。之後再開 GUI 檢查第一拍。
 
 ### 已經有 MIDI
 
@@ -202,7 +202,7 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 - **內建音源**：Coopiano 是物理建模音源，不需要下載鋼琴取樣。播放使用系統預設音訊裝置；Windows 遠端桌面工作階段必須有可用的播放裝置。
 - **Steinway Grand Piano（選用）**：若本機已有 Steinway Grand Piano 的 SFZ，播放輸出可選「Steinway Grand Piano」，由內附的 sfizz 直接取樣播放，不需要開 Logic。SFZ 預設找 `~/Documents/MuseScore3Evo/SoundFonts/Steinway Grand Piano.sfz`，也可用 `PIANO_MIDI_CLEANUP_SFZ` 指定；取樣不隨專案散布。
 - **播放環境**：Windows x64 與 macOS 的原生音源庫已隨專案提供；跨平台與遠端桌面的系統性播放驗證仍待補齊。
-- **只支援 4/4、3/4、6/8 與單一速度**：可在面板「拍號」選單，或 `postprocess.py`／`audio_to_midi.py` 的 `--time-signature` 指定 `4/4`、`3/4`、`6/8`（預設沿用 MIDI 原有拍號，新轉譜為 `4/4`；`6/8` 會以四分音符速度處理，偵測或輸入附點四分音符速度時自動乘以 1.5）。變速、自由速度或其他拍號會讓小節線失準。
+- **只支援 4/4、3/4、6/8 與單一速度**：可在面板「拍號」選單，或 `postprocess.py`／`audio_to_midi.py` 的 `--time-signature` 指定 `4/4`、`3/4`、`6/8`；`audio_to_midi.py` 預設自動判斷（`--time-signature auto`），無法可靠區分時沿用 MIDI 原有拍號（新轉譜為 `4/4`）並在報告註明。`6/8` 會以四分音符速度處理，偵測或輸入附點四分音符速度時自動乘以 1.5。變速、自由速度或其他拍號會讓小節線失準。
 - **不是完成樂譜**：輸出仍是 MIDI，不是排版好的樂譜或 MusicXML。轉譜錯誤、錯音與漏音仍需人工檢查。
 - **三手與四手**：分手支援 2 到 4 隻手。可彈性清理只在兩手時處理全部音符；三手時必須在分手後執行，且只處理第一位演奏者的 left 與 right，第二位演奏者的 second_right 保留不動。四手可以分手，但不支援可彈性清理。
 - **截斷預設不同**：GUI 的「依踏板狀態限制截斷」預設**關閉**；命令列預設**開啟**，可用 `--no-pedal-protection` 關閉。

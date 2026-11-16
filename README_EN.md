@@ -148,7 +148,7 @@ Paste this to the agent, with `song.flac` replaced by your file:
 Following the README at https://github.com/hibikiwtnb/piano-midi-cleanup, turn song.flac into a cleaned MIDI with all default settings.
 ```
 
-It runs `src/audio_to_midi.py`, which separates, transcribes and cleans, giving the same result as the panel with default settings. Open the GUI afterwards to check the first beat.
+It runs `src/audio_to_midi.py`, which separates, transcribes and cleans, and infers the time signature from the performance, so you do not have to know whether it is 4/4, 3/4 or 6/8. Open the GUI afterwards to check the first beat.
 
 ### You already have MIDI
 
@@ -202,7 +202,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **Built-in sound**: Coopiano is a physical-modeling instrument, so no piano samples are downloaded. Playback uses the OS default audio device; a Windows Remote Desktop session must have a usable playback device.
 - **Steinway Grand Piano (optional)**: if a Steinway Grand Piano SFZ is present, the playback output can use **Steinway Grand Piano**, rendered by the bundled sfizz engine without opening Logic. The app looks for `~/Documents/MuseScore3Evo/SoundFonts/Steinway Grand Piano.sfz`; set `PIANO_MIDI_CLEANUP_SFZ` to use another path. Samples are not distributed with the project.
 - **Playback environments**: native synth libraries ship for Windows x64 and macOS; systematic playback validation across platforms and Remote Desktop sessions remains outstanding.
-- **4/4, 3/4, 6/8 and one tempo only**: choose `4/4`, `3/4` or `6/8` in the panel's **Time signature** menu, or with `--time-signature` in `postprocess.py` / `audio_to_midi.py` (defaults to the MIDI's own meter, or `4/4` for a fresh transcription; `6/8` uses the quarter-note BPM and multiplies a dotted-quarter BPM by 1.5). Tempo changes, free tempo and other meters will make bar lines drift.
+- **4/4, 3/4, 6/8 and one tempo only**: choose `4/4`, `3/4` or `6/8` in the panel's **Time signature** menu, or with `--time-signature` in `postprocess.py` / `audio_to_midi.py`; `audio_to_midi.py` infers it by default (`--time-signature auto`) and keeps the MIDI's own meter (`4/4` for a fresh transcription) when the performance does not decide, saying so in the report. `6/8` uses the quarter-note BPM and multiplies a dotted-quarter BPM by 1.5. Tempo changes, free tempo and other meters will make bar lines drift.
 - **Not a finished score**: the output is still MIDI, not engraved notation or MusicXML. Wrong and missing notes still need human review.
 - **Three and four hands**: splitting supports 2 to 4 hands. Playable reduction handles every note with two hands; with three hands it must run after the split, and only the first player's left and right hands are reduced while the second player's second_right is left alone. Four-hand splitting is supported, but playable reduction is not.
 - **Different trim defaults**: the GUI's pedal-aware trim protection is **off** by default; the command line defaults to **on** and can disable it with `--no-pedal-protection`.
