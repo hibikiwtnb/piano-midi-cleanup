@@ -150,6 +150,14 @@ Following the README at https://github.com/hibikiwtnb/piano-midi-cleanup, turn s
 
 It runs `src/audio_to_midi.py`, which separates, transcribes and cleans, and infers the time signature from the performance, so you do not have to know whether it is 4/4, 3/4 or 6/8. Open the GUI afterwards to check the first beat.
 
+### Agent Skill: one sentence per song
+
+[`skill/SKILL.md`](skill/SKILL.md) is an Agent Skill (Claude Code, Codex and similar). Give it a song and a wish; the agent runs the built-in chain, reads the reports, adjusts only what the evidence supports (BPM, meter, first beat, thresholds, hands), delivers the cleaned MIDI with the places that still need a human check, and keeps a short per-song record so the next run can continue. Copy or link the `skill/` folder into the agent's skills directory, then say for example:
+
+```text
+Make a clean piano MIDI of song.flac and tell me what I should still check.
+```
+
 ### You already have MIDI
 
 1. Open the GUI and choose any MIDI file you want to process. Keep its existing filename.

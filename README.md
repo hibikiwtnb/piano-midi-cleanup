@@ -150,6 +150,14 @@ python3.11 -m venv ~/.local/share/piano-midi-cleanup-env
 
 它會執行 `src/audio_to_midi.py`，依序分離、轉錄、整理；拍號會自動從演奏判斷，不必先知道是 4/4、3/4 或 6/8。之後再開 GUI 檢查第一拍。
 
+### Agent Skill：一句話交代一首歌
+
+[`skill/SKILL.md`](skill/SKILL.md) 是給 Claude Code、Codex 等 agent 使用的 Skill。交代歌曲與需求後，agent 會跑內建流程、讀報告，只在報告有依據時調整 BPM、拍號、第一拍、門檻與手數，交付整理好的 MIDI 與仍需人工檢查的位置，並留下逐曲紀錄方便下次接續。把 `skill/` 資料夾複製或連結到 agent 的 skills 目錄，然後說：
+
+```text
+幫我把 song.flac 做成整理好的鋼琴 MIDI，並告訴我還要檢查哪裡。
+```
+
 ### 已經有 MIDI
 
 1. 開啟 GUI，選擇任何要整理的 MIDI 檔案，不需要改檔名。
