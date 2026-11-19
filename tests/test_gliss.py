@@ -296,30 +296,31 @@ class RepairTest(GlissTest):
         notes = [(index * STEP, pitch, 1, 60 if pitch == 84 else 80) for index, pitch in enumerate(pitches)]
         restored, _ = self.restored(notes, fill=True)
         added = [note for note in restored if note['note'] == 83][0]
-        self.assertEqual(added['start_ticks'], round(5.5 * STEP * TICKS_PER_BEAT))
+        # Repaired notes are spaced evenly from first to last onset across 14 notes (index 6 of 0..13).
+        self.assertEqual(added['start_ticks'], round(12 * STEP * TICKS_PER_BEAT * 6 / 13))
         self.assertEqual(added['velocity'], 70)
 
     def test_no_fill_on_a_key_that_is_held(self):
         holes = [pitch for pitch in WHITE_DOWN if pitch != 84]
-        write_midi(self.path, run_notes(0, holes))
+        write_midi(self.path, run_notes(1, holes))
         output = str(Path(self.folder.name) / 'out.mid')
         runs, _ = gliss.extract_runs(self.path, output)
         held = mido.MidiFile(output)
         held.tracks[0].insert(1, mido.Message('note_on', note=84, velocity=80, time=0))
-        held.tracks[0].insert(2, mido.Message('note_off', note=84, time=960))
+        held.tracks[0].insert(2, mido.Message('note_off', note=84, time=1440))
         held.save(output)
         rows = gliss.restore_runs(output, runs, fill=True)
         self.assertEqual(rows[0]['held'], [84])
         self.assertEqual(rows[0]['filled'], [])
 
     def test_run_note_stops_before_the_same_key_is_struck_again(self):
-        notes = run_notes(0, WHITE_DOWN) + [(0.05, 93, 1, 80)]
+        notes = run_notes(0, WHITE_DOWN) + [(1.35, 71, 1, 80)]
         write_midi(self.path, notes)
         output = str(Path(self.folder.name) / 'out.mid')
         runs, _ = gliss.extract_runs(self.path, output)
         rows = gliss.restore_runs(output, runs)
         result = collect_notes(mido.MidiFile(output))
-        top = sorted((note for note in result if note['note'] == 93), key=lambda note: note['start_ticks'])
+        top = sorted((note for note in result if note['note'] == 71), key=lambda note: note['start_ticks'])
         self.assertEqual(top[1]['end_ticks'] - top[1]['start_ticks'], 480)  # the other note keeps its length
         self.assertLessEqual(top[0]['end_ticks'], top[1]['start_ticks'])
         self.assertEqual(rows[0]['dropped'], 0)
@@ -436,14 +437,14 @@ class PipelineTest(GlissTest):
         self.assertEqual(sorted(note['note'] for note in self.run_tool()), sorted(WHITE_DOWN))
 
     def test_run_and_other_notes_get_different_hands(self):
-        # The chord is inside the run's register, where the split alone would give it to the right hand.
-        chord = [(0.5, 76, 1, 80), (0.5, 72, 1, 80)]
+        # The chord is outside the run's pitch range, but above middle C where the split alone would give it to the right hand.
+        chord = [(0.5, 67, 1, 80), (0.5, 64, 1, 80)]
         write_midi(self.path, run_notes(0, WHITE_DOWN) + chord)
         result = self.run_tool()
         by_hand = {}
         for note in result:
             by_hand.setdefault(note['start_message'].channel, []).append(note['note'])
-        self.assertEqual(sorted(by_hand[CHANNELS['left']]), [72, 76])
+        self.assertEqual(sorted(by_hand[CHANNELS['left']]), [64, 67])
         self.assertEqual(len(by_hand[CHANNELS['right']]), 14)
 
     def test_run_notes_keep_one_length_after_trim(self):
