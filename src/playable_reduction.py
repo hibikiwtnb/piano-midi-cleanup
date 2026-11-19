@@ -30,6 +30,9 @@ OUTER_COST = 5
 # Quarter beats per bar for report positions; reduce_in_place sets it from the MIDI's time signature.
 BEATS_PER_BAR = 4
 NOTE_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+# Off by default: a chord re-struck within this many beats of the previous onset is merged into the first strike.
+MERGE_FAST_CHORDS = 0
+MERGE_FAST_CHORD_WINDOW_BEATS = 0.3
 
 
 def playable_cuts(pitches, max_notes, max_span):
@@ -97,11 +100,78 @@ def position(note, ticks_per_beat):
     return 'm{} beat {:.2f}'.format(int(beats // BEATS_PER_BAR) + 1, beats % BEATS_PER_BAR + 1)
 
 
+def pitch_name(pitch):
+    return '{}{}'.format(NOTE_NAMES[pitch % 12], pitch // 12 - 1)
+
+
 def note_name(note):
-    return '{}{}'.format(NOTE_NAMES[note['note'] % 12], note['note'] // 12 - 1)
+    return pitch_name(note['note'])
 
 
-def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DEFAULT_MAX_SPAN, hands=None):
+def plan_fast_chord_merges(groups, ticks_per_beat):
+    """Chains of the same chord re-struck within MERGE_FAST_CHORD_WINDOW_BEATS of the previous onset.
+    Each chain keeps its first group and records the next onset the merged tails must not pass."""
+    window = MERGE_FAST_CHORD_WINDOW_BEATS * ticks_per_beat
+    merges = []
+    index = 0
+    while index < len(groups):
+        pitches = frozenset(note['note'] for note in groups[index])
+        if len(pitches) < 2:
+            index += 1
+            continue
+        end = index + 1
+        while end < len(groups) and frozenset(note['note'] for note in groups[end]) == pitches:
+            if groups[end][0]['start_ticks'] - groups[end - 1][0]['start_ticks'] > window:
+                break
+            end += 1
+        if end > index + 1:
+            merges.append({
+                'group': groups[index],
+                'repeats': groups[index + 1:end],
+                'pitches': sorted(pitches),
+                'next_ticks': groups[end][0]['start_ticks'] if end < len(groups) else None,
+            })
+        index = end
+    return merges
+
+
+def apply_fast_chord_merges(merges, removals, ticks_per_beat):
+    """Delete each repeat group and let the first strike's note end at the last repeat's end, not past the
+    next onset. A repeat's own note-off is kept for that, so the note-on and note-off still pair up."""
+    rows = []
+    for merge in merges:
+        removed = 0
+        extended = 0
+        for pitch in merge['pitches']:
+            keep = next(note for note in merge['group'] if note['note'] == pitch)
+            repeats = [next(note for note in group if note['note'] == pitch) for group in merge['repeats']]
+            chosen = None
+            if keep['start_index'] not in removals[keep['track_index']]:
+                for note in reversed(repeats):
+                    if merge['next_ticks'] is None or note['end_ticks'] <= merge['next_ticks']:
+                        chosen = note
+                        break
+            extending = chosen is not None and chosen['end_ticks'] > keep['end_ticks']
+            if extending:
+                removals[keep['track_index']].add(keep['end_index'])
+                extended += 1
+            for note in repeats:
+                removals[note['track_index']].add(note['start_index'])
+                if not extending or note is not chosen:
+                    removals[note['track_index']].add(note['end_index'])
+            removed += len(repeats)
+        rows.append({
+            'position': position(merge['group'][0], ticks_per_beat),
+            'pitches': merge['pitches'],
+            'repeats': len(merge['repeats']),
+            'removed': removed,
+            'extended': extended,
+        })
+    return rows
+
+
+def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DEFAULT_MAX_SPAN, hands=None,
+                    merge_fast_chords=None):
     """hands: None for an unsplit two-hand MIDI, or the low and high hand names of one player in a split MIDI;
     only their notes are reduced, and moved between the two when the split does not fit."""
     global BEATS_PER_BAR
@@ -112,6 +182,13 @@ def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DE
              if channels is None or note['start_message'].channel in channels]
     groups = group_notes(notes)
     removals = defaultdict(set)
+    merging = bool(MERGE_FAST_CHORDS if merge_fast_chords is None else merge_fast_chords)
+    merge_rows = []
+    merges = []
+    if merging:
+        merges = plan_fast_chord_merges(groups, midi_file.ticks_per_beat)
+        repeated = {id(group) for merge in merges for group in merge['repeats']}
+        groups = [group for group in groups if id(group) not in repeated]
     changes = []
     unsolved = []
     outer = 0
@@ -131,6 +208,9 @@ def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DE
             outer += note['note'] in (min(pitches), max(pitches))
         changes.append((group, removed))
 
+    if merging:
+        merge_rows = apply_fast_chord_merges(merges, removals, midi_file.ticks_per_beat)
+
     for track_index, track in enumerate(midi_file.tracks):
         midi_file.tracks[track_index] = rebuild_track_without_messages(track, removals[track_index])
     midi_file.save(midi_path)
@@ -146,6 +226,8 @@ def reduce_in_place(midi_path, max_notes=DEFAULT_MAX_NOTES_PER_HAND, max_span=DE
         'outer': outer,
         'unsolved': unsolved,
         'ticks_per_beat': midi_file.ticks_per_beat,
+        'merge_fast_chords': merging,
+        'fast_chord_merges': merge_rows,
     }
 
 
@@ -164,6 +246,16 @@ def format_reduction_stats(stats):
     ]
     if stats['hands']:
         lines.append('Notes moved between the two hands: {}'.format(stats['moved']))
+    if stats.get('merge_fast_chords'):
+        rows = stats['fast_chord_merges']
+        repeats = sum(row['repeats'] for row in rows)
+        notes_removed = sum(row['removed'] for row in rows)
+        lines.append('Fast repeated chords: {} places, {} repeated strikes, {} notes removed'.format(
+            len(rows), repeats, notes_removed))
+        for row in rows:
+            lines.append('- {}: {} repeated {} times (merged {}, {} notes removed)'.format(
+                row['position'], ' '.join(pitch_name(pitch) for pitch in row['pitches']),
+                row['repeats'] + 1, row['repeats'], row['removed']))
     for group, notes in stats['changes']:
         lines.append('- {}: removed {} from {}'.format(
             position(group[0], tpb),
@@ -176,8 +268,9 @@ def format_reduction_stats(stats):
 
 
 def apply_playable_reduction(midi_path, report_path=None, max_notes=DEFAULT_MAX_NOTES_PER_HAND,
-                             max_span=DEFAULT_MAX_SPAN, hands=None):
-    stats = reduce_in_place(midi_path, max_notes=max_notes, max_span=max_span, hands=hands)
+                             max_span=DEFAULT_MAX_SPAN, hands=None, merge_fast_chords=None):
+    stats = reduce_in_place(midi_path, max_notes=max_notes, max_span=max_span, hands=hands,
+                            merge_fast_chords=merge_fast_chords)
     report_path = report_path or source_stats_path_for(midi_path)
     report = format_reduction_stats(stats)
     update_report(report_path, report)

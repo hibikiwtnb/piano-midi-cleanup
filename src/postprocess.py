@@ -56,6 +56,8 @@ PARAMETERS = (
               ((playable_reduction, 'DEFAULT_MAX_SPAN'), (hand_split_channels, 'FIRST_PLAYER_MAX_SPAN'))),
     Parameter('playable.max_removals', 'Most notes removed per onset group', int,
               ((playable_reduction, 'MAX_REMOVALS_PER_GROUP'),)),
+    Parameter('playable.merge_fast_chords', 'Merge fast repeated chords (0/1)', int,
+              ((playable_reduction, 'MERGE_FAST_CHORDS'),)),
     Parameter('split.group_window', 'Onset group window, all steps (s)', float,
               ((hand_split_channels, 'GROUP_START_WINDOW_SECONDS'),)),
     Parameter('split.comfort_span', 'Free hand span (semitones)', int, ((hand_split_channels, 'COMFORT_SPAN'),)),
@@ -110,6 +112,8 @@ def parse_setting(text):
             raise argparse.ArgumentTypeError('split.second_player_bars must be at least 1.')
         if key == 'split.grouping_bars' and number not in (0, 1, 2, 4):
             raise argparse.ArgumentTypeError('split.grouping_bars must be 0, 1, 2 or 4.')
+        if key == 'playable.merge_fast_chords' and number not in (0, 1):
+            raise argparse.ArgumentTypeError('playable.merge_fast_chords must be 0 or 1.')
         return key, number
     except ValueError as error:
         if key == 'split.second_right_min_pitch':
