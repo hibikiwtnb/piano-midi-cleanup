@@ -149,7 +149,8 @@ class Panel:
         self.source = tk.StringVar(value=self.settings.get('source', 'reuse'))
         self.bpm = tk.StringVar(value=self.settings.get('bpm', ''))
         self.audio = tk.StringVar(value=self.settings.get('audio', ''))
-        self.meter = tk.StringVar(value=self.settings.get('time_signature', '4/4'))
+        self.meter = tk.StringVar()
+        self.meter_values = {}
         self.switches = {name: tk.BooleanVar() for name, _, _ in SWITCHES}
         self.hands = tk.StringVar()
         self.fast_figure = {hand: tk.BooleanVar() for hand in HAND_ORDER}
@@ -347,9 +348,12 @@ class Panel:
         viewer.insert('1.0', text)
         viewer.configure(state='disabled')
 
+    def selected_meter(self):
+        return self.meter_values.get(self.meter.get(), self.meter.get())
+
     def change_language(self, _event=None):
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
-                             audio=self.audio.get(), time_signature=self.meter.get(), last=self.current_preset(), language=self.language.get())
+                             audio=self.audio.get(), time_signature=self.selected_meter(), last=self.current_preset(), language=self.language.get())
         save_settings(self.settings)
         set_language(self.language.get())
         self.build_ui()
@@ -369,7 +373,14 @@ class Panel:
         meter = ttk.Frame(frame)
         meter.grid(row=1, column=2, columnspan=2, sticky='w')
         ttk.Label(meter, text=tr('Time signature')).pack(side='left')
-        self.meter_box = ttk.Combobox(meter, textvariable=self.meter, values=METERS, width=5, state='readonly')
+        meter_options = ('auto',) + METERS
+        self.meter_values = {tr('Auto') if value == 'auto' else value: value for value in meter_options}
+        meter_labels = {value: label for label, value in self.meter_values.items()}
+        current_meter = self.settings.get('time_signature', 'auto')
+        if current_meter not in meter_labels:
+            current_meter = 'auto'
+        self.meter.set(meter_labels[current_meter])
+        self.meter_box = ttk.Combobox(meter, textvariable=self.meter, values=tuple(self.meter_values), width=6, state='readonly')
         self.meter_box.pack(side='left', padx=(6, 0))
         SettingTooltip(self.meter_box, 'time_signature')
         ttk.Radiobutton(frame, text=tr('Known BPM'), variable=self.source, value='bpm',
@@ -712,7 +723,7 @@ class Panel:
         elif source == 'audio':
             args += ['--audio', self.audio.get().strip()]
         if source in ('bpm', 'audio'):
-            args += ['--time-signature', self.meter.get()]
+            args += ['--time-signature', self.selected_meter()]
         switches = preset['switches']
         for name, flag in (('first_beat', '--no-first-beat'), ('key_signature', '--no-key-signature'),
                            ('clean', '--no-clean'), ('high_phantoms', '--no-high-phantoms'), ('gliss', '--no-gliss'),
@@ -758,7 +769,7 @@ class Panel:
             messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
-                             audio=self.audio.get(), time_signature=self.meter.get(), last=preset)
+                             audio=self.audio.get(), time_signature=self.selected_meter(), last=preset)
         save_settings(self.settings)
         self.roll.stop()
         selected = self.midi.get().strip()
