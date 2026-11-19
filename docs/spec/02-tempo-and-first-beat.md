@@ -28,7 +28,7 @@
 
 ## 自動拍號判斷
 
-程式：`src/meter_detect.py`（`detect_meter`）。`audio_to_midi.py` 預設啟用（`--time-signature auto`），`postprocess.py` 也可用 `--time-signature auto`。一句話流程因此不需要使用者先知道拍號。
+程式：`src/meter_detect.py`（`detect_meter`）。`audio_to_midi.py` 預設啟用（`--time-signature auto`），`postprocess.py` 也可用 `--time-signature auto`，面板「拍號」選單預設「自動」（`auto`）並走相同路徑。一句話流程與面板預設都不需要使用者先知道拍號。
 
 ### 使用的訊號
 
@@ -48,7 +48,7 @@
 
 - 報告寫 `Time signature: undetermined (auto, <原因>)`，下一行列出各候選週期的相干性。
 - 小節、第一拍、調號與分手沿用 MIDI 原有拍號（新轉譜為 `4/4`）。
-- 命令列印出提示，可用 `--time-signature` 指定；面板「拍號」選單仍是手動覆寫入口。
+- 命令列印出提示，可用 `--time-signature` 指定；面板「拍號」選單預設「自動」，也可手動選 `4/4`、`3/4`、`6/8` 覆寫。
 
 明示的 `--time-signature` 或面板值永遠優先，不會被自動判斷覆蓋。判斷結果會寫進 `song_bpmfix.mid` 的拍號，之後每一步都讀同一個值。
 
