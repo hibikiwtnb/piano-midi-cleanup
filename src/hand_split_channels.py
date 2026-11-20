@@ -7,6 +7,7 @@ import sys
 import tkinter as tk
 from collections import Counter, defaultdict
 from tkinter import filedialog, messagebox
+from dialog_dirs import initial_dir, remember
 
 import mido
 
@@ -1120,13 +1121,14 @@ def apply_hand_split(midi_path, report_path=None, append_report=False, hands=2, 
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return filedialog.askopenfilename(
+    return remember(filedialog.askopenfilename(
+        initialdir=initial_dir(),
         title='Choose cleaned MIDI to mark channels',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def positive_int(text):

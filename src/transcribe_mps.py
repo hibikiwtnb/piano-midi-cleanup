@@ -2,6 +2,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import filedialog
+from dialog_dirs import initial_dir, remember
 
 import librosa
 import torch
@@ -100,13 +101,14 @@ def choose_audio_files():
     root = tk.Tk()
     root.withdraw()
 
-    return filedialog.askopenfilenames(
+    return remember(filedialog.askopenfilenames(
+        initialdir=initial_dir(),
         title='Choose audio file(s) to transcribe',
         filetypes=[
             ('Audio files', '*.flac *.mp3 *.wav *.ape *.m4a *.aif *.aiff'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def main():

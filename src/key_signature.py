@@ -3,6 +3,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from dialog_dirs import initial_dir, remember
 
 import mido
 
@@ -174,13 +175,14 @@ def apply_key_signatures(midi_path, report_path=None):
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return filedialog.askopenfilename(
+    return remember(filedialog.askopenfilename(
+        initialdir=initial_dir(),
         title='Choose bar-aligned MIDI for key signatures',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def main(argv=None):

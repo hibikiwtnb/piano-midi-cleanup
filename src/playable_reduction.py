@@ -5,6 +5,7 @@ import sys
 import tkinter as tk
 from collections import defaultdict
 from tkinter import filedialog, messagebox
+from dialog_dirs import initial_dir, remember
 
 import mido
 
@@ -282,13 +283,14 @@ def apply_playable_reduction(midi_path, report_path=None, max_notes=DEFAULT_MAX_
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return filedialog.askopenfilename(
+    return remember(filedialog.askopenfilename(
+        initialdir=initial_dir(),
         title='Choose cleaned MIDI to reduce to what two hands can play',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def main(argv=None):

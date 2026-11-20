@@ -5,6 +5,7 @@ import sys
 import tkinter as tk
 from collections import defaultdict
 from tkinter import filedialog, messagebox
+from dialog_dirs import initial_dir, remember
 
 import mido
 from report_utils import update_report
@@ -376,13 +377,14 @@ def apply_rule_cleaning(input_path, output_path=None, report_path=None, append_r
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return filedialog.askopenfilename(
+    return remember(filedialog.askopenfilename(
+        initialdir=initial_dir(),
         title='Choose MIDI to clean',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def main(argv=None):

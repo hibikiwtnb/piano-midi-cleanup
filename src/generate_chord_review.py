@@ -8,6 +8,7 @@ import tkinter as tk
 from collections import defaultdict
 from pathlib import Path
 from tkinter import filedialog, messagebox
+from dialog_dirs import initial_dir, remember
 
 import mido
 
@@ -386,13 +387,14 @@ def default_output_path(input_midi):
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return filedialog.askopenfilename(
+    return remember(filedialog.askopenfilename(
+        initialdir=initial_dir(),
         title='Choose MIDI to generate chord review',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    )
+    ))
 
 
 def main(argv=None):
