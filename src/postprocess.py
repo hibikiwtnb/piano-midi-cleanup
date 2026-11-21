@@ -224,7 +224,7 @@ def run_postprocess(args):
 
 
 def _run_postprocess(args, stats_path):
-    source_path = args.input_midi  # The selected MIDI itself, whatever its name.
+    source_path = source_midi_path(args.input_midi)
     bpmfix_path = bpmfix_path_for(source_path)
     cleaned_path = cleaned_path_for(bpmfix_path)
     steps = plan_steps(args)
@@ -322,9 +322,9 @@ def _run_postprocess(args, stats_path):
 def build_parser(parser_class=argparse.ArgumentParser):
     parser = parser_class(
         description='Run the post-processing steps on a transcribed MIDI in order, each one switchable. '
-                    'Outputs are named after the selected MIDI.',
+                    'song_bpmfix_cleaned.mid is rebuilt from song_bpmfix.mid on every run, so no MIDI is added.',
     )
-    parser.add_argument('input_midi', nargs='?', help='The MIDI to process; any file name.')
+    parser.add_argument('input_midi', nargs='?', help='song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid of one song.')
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--bpm', type=float, help='Known BPM; runs BPMFix from song.mid.')
     source.add_argument('--audio', help='Source audio for BPM detection; runs BPMFix from song.mid.')

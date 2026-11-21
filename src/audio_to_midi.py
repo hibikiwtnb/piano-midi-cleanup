@@ -22,7 +22,7 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('audio', nargs='+', help='Songs or piano recordings ({}).'.format(', '.join(AUDIO_EXTENSIONS)))
     parser.add_argument('--no-separate', action='store_true',
-                        help='The audio is already solo piano.')
+                        help='The audio is already solo piano (files named *_piano are never separated).')
     parser.add_argument('--output-dir', default='', help='Folder for the outputs (default: next to the audio).')
     parser.add_argument('--cpu', action='store_true', help='Do not use a GPU.')
     parser.add_argument('--regenerate', action='store_true', help='Redo separation and transcription even if their files exist.')
@@ -37,7 +37,8 @@ def build_parser():
 
 
 def convert(audio, args):
-    separate = not args.no_separate
+    stem = os.path.splitext(os.path.basename(audio))[0]
+    separate = not args.no_separate and not stem.lower().endswith('_piano')
     piano, midi = output_paths(audio, separate, args.output_dir)
     device = 'cpu' if args.cpu else 'auto'
     models = [model_store.MODELS['bytedance']]

@@ -544,7 +544,6 @@ _TEXT = {
 
 # Separation and transcription tab.
 _TEXT['en'].update({
-    'Choose song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid': 'Choose the MIDI file to clean up',
     'Console output': 'Console output',
     'Download now': 'Download now',
     'ready': 'ready',

@@ -171,9 +171,12 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
 
 ### First beat, preview and reruns
 
-- The roll initially shows the file you selected. After successful processing, the result becomes the selected MIDI and the roll shows it, so later edits, first-beat saves and reruns continue on it without choosing the file again.
-- **Save** writes the first beat, key signatures and note edits into the MIDI shown on screen, whatever its name; no other file is touched.
+- The roll initially shows the file you selected. After successful processing, it automatically shows the latest result.
+- **When the processed result is shown**, **Save** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and keeps showing the processed result.
+- **When the original MIDI is shown**, **Save** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
+- If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
 - To keep a manual first beat on later runs, select the aligned file and choose **No BPM processing**.
+- Every run rebuilds and overwrites the processed result from the tempo-corrected file. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.
 
 ## Output files
 

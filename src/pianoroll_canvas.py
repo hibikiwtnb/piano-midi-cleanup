@@ -4,6 +4,7 @@ import math
 from bisect import bisect_right
 import os
 import queue
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -14,11 +15,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import mido
 
+from bpmfix_utils import bpmfix_path_for
 from chord_analysis import analyze_chords, save_chord_cache, update_chords
 from clean_midi_rules import tick_seconds
 from first_beat import append_first_beat_stats, build_bpm_fixed_midi, midi_tempo
 from hand_split_channels import CHANNELS
-from key_signature import apply_key_signatures
+from key_signature import apply_key_signatures, write_key_signatures
 from meter import bar_beats
 from midi_playback import MidiPlayback, default_output_name, display_port_name, open_output, output_names
 from midi_stats import note_name
@@ -75,8 +77,12 @@ PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to
 
 
 def first_beat_target(midi_path):
-    """Saving the first beat writes the shown MIDI itself, whatever its name."""
-    return midi_path
+    """The corrected song_bpmfix.mid to edit; saving creates it when it does not exist yet."""
+    base = os.path.splitext(midi_path)[0]
+    for suffix in ('_bpmfix_cleaned', '_bpmfix'):
+        if base.endswith(suffix):
+            return bpmfix_path_for(base[:-len(suffix)] + '.mid')
+    return bpmfix_path_for(midi_path)
 
 
 def read_roll(midi_path):
@@ -1340,7 +1346,9 @@ class PianoRollView(ttk.Frame):
 
     # First beat.
     def first_beat_files(self):
-        return os.path.basename(self.target) if self.target else ''
+        shared = os.path.splitext(self.path)[0].endswith('_bpmfix_cleaned')
+        paths = [self.target] + ([self.path] if shared else [])
+        return '、'.join(os.path.basename(path) for path in paths)
 
     def apply(self):
         if not self.target:
@@ -1365,19 +1373,30 @@ class PianoRollView(ttk.Frame):
                 self.after_idle(self.set_status, tr('Saved'))
                 return
         shown = self.path
-        changes = load_changes(shown)
+        shared = os.path.splitext(shown)[0].endswith('_bpmfix_cleaned')
+        changes = load_changes(shown) if shared else None
         try:
-            result = build_bpm_fixed_midi(shown, bpm, offset)
-            append_first_beat_stats(shown, result)
+            if shown != self.target and (not shared or not os.path.isfile(self.target)):
+                # Explicit edits of an original always start from that original, not an old output;
+                # a cleaned MIDI without its song_bpmfix.mid creates one from itself.
+                shutil.copyfile(shown, self.target)
+            result = build_bpm_fixed_midi(self.target, bpm, offset)
+            append_first_beat_stats(self.target, result)
             # Shifting moves the old key signature events off the bar lines.
-            apply_key_signatures(shown)
-            if changes is not None:
-                shift = result['shift_ticks'] * 60.0 / (bpm * mido.MidiFile(shown).ticks_per_beat)
-                save_changes(shown, shift_changes(changes, shift))
+            segments = apply_key_signatures(self.target)
+            if shared:
+                # The shown cleaned MIDI shares the bpmfix timeline, so it takes the same shift.
+                build_bpm_fixed_midi(shown, bpm, offset, shift_ticks=result['shift_ticks'])
+                write_key_signatures(shown, segments)
+                if changes is not None:
+                    shift = result['shift_ticks'] * 60.0 / (bpm * mido.MidiFile(shown).ticks_per_beat)
+                    save_changes(shown, shift_changes(changes, shift))
         except (OSError, ValueError) as error:
             self.set_status(tr('寫入失敗：{}').format(error))
             return
-        target = shown
+        # Keep showing the cleaned file that was just saved; only a shown original, which is never written,
+        # moves on to the song_bpmfix.mid that took the new first beat.
+        target = shown if shared else self.target
         self.show(target)
         self.set_status(tr('Saved'))
         if self.on_first_beat:

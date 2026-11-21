@@ -778,7 +778,7 @@ class Panel:
         self.roll.stop()
         selected = self.midi.get().strip()
         target = postprocess.cleaned_path_for(selected if self.source.get() == 'reuse' else
-                                              postprocess.bpmfix_path_for(selected))
+                                              postprocess.bpmfix_path_for(postprocess.source_midi_path(selected)))
         self.run_preview = (selected, target)
         self.running = True
         self.run_button.configure(state='disabled')
@@ -813,14 +813,7 @@ class Panel:
                 message = tr('Finished.') if item[1] == 0 else tr('Stopped (exit {}).').format(item[1])
                 if item[1] == 0:
                     if self.run_preview and self.run_preview[0] == self.midi.get().strip():
-                        # Further work continues on the cleaned result: it becomes the selected MIDI.
-                        # Same song, so the BPM field is kept (selected_midi is set first).
-                        target = self.run_preview[1]
-                        self.selected_midi = target
-                        self.midi.set(target)
-                        self.preview_path = None
-                        self.settings['midi'] = target
-                        save_settings(self.settings)
+                        self.preview_path = self.run_preview[1]
                     self.load_existing_report(update_status=False)
                     report_changed = False
                 else:
