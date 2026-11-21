@@ -77,13 +77,13 @@
 
 ### 手動調整
 
-主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。捲簾起初顯示目前選取的檔案；處理成功後自動顯示 `song_bpmfix_cleaned.mid`，但若使用者在處理期間選了另一個檔案，則維持新選擇。
+主面板的鋼琴捲簾（第 8 章）可邊播放邊調 BPM 與第一拍，網格隨輸入即時預覽。捲簾起初顯示目前選取的檔案；處理成功後自動顯示最新的處理結果：處理 BPM 時是 `song_bpmfix_cleaned.mid`，不處理BPM 時是所選 MIDI 的 `_cleaned.mid`（例如 `song_cleaned.mid`），但若使用者在處理期間選了另一個檔案，則維持新選擇。
 
 - 顯示原始 `song.mid` 時儲存：建立或覆寫同曲的 `song_bpmfix.mid`，不修改原檔，儲存後預覽切到 `song_bpmfix.mid`。
 - 顯示 `song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid` 時儲存：寫入 `song_bpmfix.mid` 並重寫調號；顯示的是 cleaned 時，它也以同一個位移量與調號改寫，修改痕跡紀錄跟著平移，不必重新處理；儲存後繼續顯示原本的檔案（cleaned 仍顯示 cleaned）。
 - 顯示 `song_bpmfix_cleaned.mid` 而對應的 `song_bpmfix.mid` 不存在時，儲存以顯示中的 cleaned 建立 `song_bpmfix.mid`。
 
-之後重跑時選「沿用 `song_bpmfix.mid`」可保留手動對齊；若從原始 `song.mid` 重算並執行自動第一拍，手動結果可能被取代。是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
+之後重跑時選已對齊的檔案並選「不處理BPM」可保留手動對齊；若從原始 `song.mid` 重算並執行自動第一拍，手動結果可能被取代。是否自動調整第一拍依使用者選擇的處理步驟執行；不根據報告判斷是否曾手動調整，也不因此阻擋重建。
 
 命令列 `postprocess.py --first-beat 秒數` 以給定值做同樣的手動對齊（負值表示第一拍在 0 秒之前，與自動第一拍報告的數值同義），寫 `MIDI first beat stats`。同一段錄音的幾份轉譜給同一個值，就能保持共同時間軸。
 

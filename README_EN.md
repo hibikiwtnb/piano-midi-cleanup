@@ -166,7 +166,7 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
    - **Detect tempo from audio**: choose the source audio to estimate its tempo.
    - **No BPM processing**: the tempo and first beat are left alone; the MIDI you selected is processed as it is and saved next to it as "<name>_cleaned.mid".
 3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
-4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
+4. On success, the roll automatically shows the latest processed result: with BPM processing its name ends in `_bpmfix_cleaned.mid`, and without BPM processing it ends in `_cleaned.mid`. Import that MIDI into notation software to prepare a score.
 5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
 
 ### First beat, preview and reruns
@@ -176,7 +176,7 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
 - **When the original MIDI is shown**, **Save** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
 - If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
 - To keep a manual first beat on later runs, select the aligned file and choose **No BPM processing**.
-- Every run rebuilds and overwrites the processed result from the tempo-corrected file. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.
+- With BPM processing, every run rebuilds and overwrites the processed result from the tempo-corrected file; without BPM processing it is rebuilt from the selected MIDI. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.
 
 ## Output files
 
@@ -186,8 +186,9 @@ Here, `*` stands for your original base filename. Actual outputs keep that name;
 |:---|:---|:---|
 | `*.mid` | Original transcribed MIDI | Avoid editing it directly |
 | `*_stats.txt` | Statistics and run record | Each processing block is updated |
-| `*_bpmfix.mid` | Tempo-corrected MIDI; first beat and key signatures can be written here | Rebuild source; manual first beat is saved here |
-| `*_bpmfix_cleaned.mid` | Processed result after rule cleanup, hand split and optional trim | Overwritten on every run |
+| `*_bpmfix.mid` | Tempo-corrected MIDI; first beat and key signatures can be written here | BPM-processing path only; rebuild source for that path, and manual first beat is saved here |
+| `*_cleaned.mid` | Processed result without BPM processing: the selected MIDI is processed as it is, with no tempo-corrected file | Overwritten on every run |
+| `*_bpmfix_cleaned.mid` | Processed result after rule cleanup, hand split and optional trim | BPM-processing path only; overwritten on every run |
 | `*_bpmfix_cleaned.changes.json` | Processing record for the roll's version comparison | Tied to the same result |
 | `*.chords.json` | Chord-analysis cache for a viewed MIDI | Matched by MIDI content and analysis version |
 | `*_bpmfix_cleaned_pianoroll/` | Piano roll PNGs | Created only when snapshots are enabled |

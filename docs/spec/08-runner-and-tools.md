@@ -15,9 +15,9 @@
 
 ### 重建語義
 
-- 不給 `--bpm`／`--audio` 時沿用現有的 `song_bpmfix.mid`；重跑時要保留手動第一拍，應使用這個方式。若從原始 `song.mid` 以 `--bpm`／`--audio` 重算並執行自動第一拍，可能覆蓋手動對齊。
-- 每次都從 `song_bpmfix.mid` 重新產生 `song_bpmfix_cleaned.mid`；關閉清理時直接複製。改設定重跑不會疊加前次結果，也不會多出 MIDI。
-- 輸入可以是同一首的 `song.mid`、`song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid`。
+- 不給 `--bpm`／`--audio` 時不建立也不沿用 `song_bpmfix.mid`：直接處理所選的 MIDI，輸出「原檔名_cleaned.mid」（例如 `song.mid` 產生 `song_cleaned.mid`）。重跑時要保留手動第一拍，選已對齊的檔案再使用這個方式。
+- 給 `--bpm`／`--audio` 時才建立 `song_bpmfix.mid`，之後每次重跑都從它重新產生 `song_bpmfix_cleaned.mid`；關閉清理時直接複製。改設定重跑不會疊加前次結果，也不會多出 MIDI。若從原始 `song.mid` 重算並執行自動第一拍，可能覆蓋手動對齊。
+- 輸入可以是同一首的 `song.mid`、`song_bpmfix.mid` 或 `song_bpmfix_cleaned.mid`；不處理 BPM 時輸出以所選檔案命名。
 
 ### 不成立的組合
 
@@ -126,7 +126,7 @@
 - 同一區塊逐行更新：相同的行保留，值變更時更新，新增的項目加入，新版已不存在的項目移除。
 - 其他區塊保留；重複的舊區塊只留最新一份；內容完全相同時不寫檔。
 - 執行器先在最終報告旁建立暫存檔並寫入，全部步驟成功後才替換最終報告；任何步驟失敗時保留原報告並刪除暫存檔。
-- 重跑 BPM 修正時整份報告重寫。沿用 `song_bpmfix.mid` 時，保留原始統計、BPM 修正、第一拍、調號區塊，其餘重建。
+- 重跑 BPM 修正時整份報告重寫。不處理 BPM 時，保留原始統計、BPM 修正、第一拍、調號區塊，其餘重建。
 
 ## 檢查工具
 
