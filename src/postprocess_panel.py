@@ -419,7 +419,6 @@ class Panel:
         if selected == self.selected_midi:
             return
         self.selected_midi = selected
-        # A BPM belongs to one song; keeping it would apply it to the next file by accident.
         self.bpm.set('')
         self.preview_path = None
 
@@ -663,8 +662,11 @@ class Panel:
             self.step_checks[name].configure(state='disabled' if source == 'reuse' else 'normal')
 
     def update_hand_options(self, *_):
-        """Playable reduction covers two hands, or the first player's two hands with three or four."""
-        self.step_checks['playable'].configure(state='normal')
+        """Playable reduction covers two hands, or the first player's two hands of three; not four hands."""
+        supported = self.hands.get() != '4'
+        if not supported:
+            self.switches['playable'].set(False)
+        self.step_checks['playable'].configure(state='normal' if supported else 'disabled')
 
     def current_preset(self):
         return {
@@ -740,6 +742,8 @@ class Panel:
         if switches['trim']:
             if not preset['protect_pedal']:
                 args.append('--no-pedal-protection')
+            if not preset['fast_figure_hands']:
+                raise ValueError(tr('Choose at least one fast figure hand, or turn overlap trim off.'))
             args += ['--fast-figure-hands'] + preset['fast_figure_hands']
         if preset['snapshot']:
             args += ['--snapshot', preset['snapshot']]
