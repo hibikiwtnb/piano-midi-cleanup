@@ -8,7 +8,6 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from dialog_dirs import initial_dir, remember
 from gui_i18n import tr
 import model_store
 
@@ -249,17 +248,17 @@ class TranscribeTab(ttk.Frame):
 
     def choose_audio(self):
         current = self.audio.get().strip()
-        path = remember(filedialog.askopenfilename(
+        path = filedialog.askopenfilename(
             title=tr('Choose a song or a piano recording'),
-            initialdir=initial_dir(current),
+            initialdir=os.path.dirname(current) if current else None,
             filetypes=[(tr('Audio'), ' '.join('*' + e for e in AUDIO_EXTENSIONS)),
-                       ('MIDI', '*.mid *.midi'), (tr('All files'), '*')]))
+                       ('MIDI', '*.mid *.midi'), (tr('All files'), '*')])
         if path:
             self.audio.set(path)
 
     def choose_output_dir(self):
-        path = remember(filedialog.askdirectory(title=tr('Choose the output folder'),
-                                                initialdir=initial_dir(self.output_dir.get() or self.audio.get().strip())))
+        path = filedialog.askdirectory(title=tr('Choose the output folder'),
+                                       initialdir=self.output_dir.get() or None)
         if path:
             self.output_dir.set(path)
             self.settings['transcribe_output_dir'] = path

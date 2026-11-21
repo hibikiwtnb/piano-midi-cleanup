@@ -2,7 +2,6 @@ import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from dialog_dirs import initial_dir, remember
 
 from midi_stats import write_midi_stats
 
@@ -10,14 +9,13 @@ from midi_stats import write_midi_stats
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return remember(filedialog.askopenfilename(
-        initialdir=initial_dir(),
+    return filedialog.askopenfilename(
         title='Choose MIDI to analyze',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    ))
+    )
 
 
 def main():

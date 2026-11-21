@@ -6,7 +6,6 @@ import sys
 import tkinter as tk
 from collections import defaultdict
 from tkinter import filedialog, messagebox
-from dialog_dirs import initial_dir, remember
 
 import mido
 
@@ -386,14 +385,13 @@ def apply_overlap_trim(midi_path, report_path=None, fast_figure_hands=DEFAULT_FA
 def choose_midi():
     root = tk.Tk()
     root.withdraw()
-    return remember(filedialog.askopenfilename(
-        initialdir=initial_dir(),
+    return filedialog.askopenfilename(
         title='Choose hand-split MIDI to trim overlaps',
         filetypes=[
             ('MIDI files', '*.mid *.midi'),
             ('All files', '*.*'),
         ],
-    ))
+    )
 
 
 def main(argv=None):

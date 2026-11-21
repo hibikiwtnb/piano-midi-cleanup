@@ -10,8 +10,6 @@ import webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
-
-from dialog_dirs import initial_dir, remember
 from tkinter import font as tkfont
 from tkinter.scrolledtext import ScrolledText
 
@@ -609,9 +607,8 @@ class Panel:
         self.report_tree.column('value', width=max(450, longest_value + 20))
 
     def choose_midi(self):
-        path = remember(filedialog.askopenfilename(title=tr('Choose song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid'),
-                                          initialdir=initial_dir(self.midi.get().strip()),
-                                          filetypes=[(tr('MIDI files'), '*.mid *.midi'), (tr('All files'), '*.*')]))
+        path = filedialog.askopenfilename(title=tr('Choose song.mid, song_bpmfix.mid or song_bpmfix_cleaned.mid'),
+                                          filetypes=[(tr('MIDI files'), '*.mid *.midi'), (tr('All files'), '*.*')])
         if path:
             self.midi.set(path)
             self.load_existing_report()
@@ -643,10 +640,9 @@ class Panel:
         self.refresh_roll()
 
     def choose_audio(self):
-        path = remember(filedialog.askopenfilename(title=tr('Choose source audio for BPM detection'),
-                                          initialdir=initial_dir(self.audio.get().strip() or self.midi.get().strip()),
+        path = filedialog.askopenfilename(title=tr('Choose source audio for BPM detection'),
                                           filetypes=[(tr('Audio files'), '*.flac *.mp3 *.wav *.m4a *.aif *.aiff'),
-                                                     (tr('All files'), '*.*')]))
+                                                     (tr('All files'), '*.*')])
         if path:
             self.audio.set(path)
             self.source.set('audio')
