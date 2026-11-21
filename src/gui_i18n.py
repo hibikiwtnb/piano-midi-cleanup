@@ -80,7 +80,7 @@ _TEXT = {
         'landscape': 'Landscape', 'portrait': 'Portrait',
         'Choose...': 'Choose...', 'Piano Roll / First Beat': 'Preview / align first beat',
         'MIDI Output': 'Playback output device',
-        'Reuse song_bpmfix.mid': 'Keep corrected tempo', 'Known BPM': 'Set tempo (BPM)',
+        'Reuse song_bpmfix.mid': 'No BPM processing', 'Known BPM': 'Set tempo (BPM)',
         'Detect from audio': 'Detect tempo from audio', 'Steps': 'Processing steps', 'Thresholds': 'Detailed settings',
         'Hands': 'Number of hands', 'Fast figure hands': 'Trim rapid-note overlaps', 'Preset': 'Settings preset',
         'Save as...': 'Save preset...', 'Delete': 'Delete preset', 'Defaults': 'Restore defaults', 'Run': 'Start processing',
@@ -267,7 +267,7 @@ _TEXT = {
         'Language': '介面語言', 'right': '右手', 'second right': '第二右手',
         'second left': '第二左手', 'left': '左手', 'landscape': '橫向', 'portrait': '直向',
         'Piano Roll / First Beat': '試聽／對齊第一拍', 'MIDI Output': '試聽輸出裝置',
-        'Reuse song_bpmfix.mid': '沿用已修正的速度',
+        'Reuse song_bpmfix.mid': '不處理BPM',
         'Known BPM': '手動指定速度（BPM）', 'Detect from audio': '從音訊偵測速度',
         'Auto first beat (after BPMFix)': '自動對齊第一拍',
         'Key signatures (after BPMFix)': '自動設定調號', 'Rule cleaning': '清理疑似雜音',
@@ -476,7 +476,7 @@ _TEXT = {
         'Language': '界面语言', 'right': '右手', 'second right': '第二右手',
         'second left': '第二左手', 'left': '左手', 'landscape': '横向', 'portrait': '纵向',
         'Piano Roll / First Beat': '试听／对齐第一拍', 'MIDI Output': '试听输出设备',
-        'Reuse song_bpmfix.mid': '沿用已修正的速度',
+        'Reuse song_bpmfix.mid': '不处理BPM',
         'Known BPM': '手动指定速度（BPM）', 'Detect from audio': '从音频检测速度',
         'Auto first beat (after BPMFix)': '自动对齐第一拍',
         'Key signatures (after BPMFix)': '自动设置调号', 'Rule cleaning': '清理疑似杂音',
@@ -612,6 +612,7 @@ _TEXT['en'].update({
     'Choose the output folder': 'Choose the output folder',
 })
 _TEXT['zh_TW'].update({
+    '{} will be overwritten by {}. Continue?': '{} 會被 {} 覆寫，要繼續嗎？',
     'Console output': '輸出',
     'Download now': '先下載',
     'ready': '已就緒',
@@ -680,6 +681,7 @@ _TEXT['zh_TW'].update({
     'Choose the output folder': '選擇輸出資料夾',
 })
 _TEXT['zh_CN'].update({
+    '{} will be overwritten by {}. Continue?': '{} 会被 {} 覆盖，要继续吗？',
     'Console output': '输出',
     'Download now': '先下载',
     'ready': '已就绪',

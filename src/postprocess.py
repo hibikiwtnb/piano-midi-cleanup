@@ -180,7 +180,7 @@ def plan_steps(args):
         if args.key_signature:
             steps.append(('key_signature', 'Key signatures'))
     else:
-        steps.append(('reuse_bpmfix', 'Reuse the existing BPM-fixed MIDI'))
+        steps.append(('reuse_bpmfix', 'No BPM processing: use the selected MIDI as it is'))
     if args.gliss:
         steps.append(('gliss_extract', 'Find glissandi and keep them out of the next steps'))
     extras = [label for enabled, label in ((args.high_phantoms, 'high phantom notes'),
@@ -236,17 +236,14 @@ def _run_postprocess(args, stats_path):
             raise ValueError('Source MIDI does not exist: {}'.format(source_path))
         write_midi_stats(source_path, reset_report=True, report_path=stats_path)
     else:
-        input_is_source = os.path.abspath(args.input_midi) == os.path.abspath(source_path)
-        if not os.path.isfile(bpmfix_path):
-            if not input_is_source or not os.path.isfile(source_path):
-                raise ValueError('No BPM-fixed MIDI to reuse; give --bpm or --audio: {}'.format(bpmfix_path))
-            # A MIDI corrected by hand elsewhere keeps its own tempo and bars; the copy leaves it untouched.
-            shutil.copyfile(source_path, bpmfix_path)
-            steps[0] = ('reuse_bpmfix', 'Use this MIDI as the BPM-fixed MIDI, as it is')
-        elif input_is_source and os.path.isfile(source_path) \
-                and os.path.getmtime(source_path) > os.path.getmtime(bpmfix_path):
-            print('Warning: {} is newer than {}; this run uses the BPM-fixed MIDI, not the newer file.'.format(
-                os.path.basename(source_path), os.path.basename(bpmfix_path)))
+        # No BPM processing: the selected MIDI is used as it is, whichever version it is.
+        selected = os.path.abspath(args.input_midi)
+        if not os.path.isfile(selected):
+            raise ValueError('MIDI does not exist: {}'.format(args.input_midi))
+        if selected != os.path.abspath(bpmfix_path):
+            shutil.copyfile(selected, bpmfix_path)
+            print('No BPM processing: {} is used as it is (copied to {}).'.format(
+                os.path.basename(selected), os.path.basename(bpmfix_path)))
         keep_bpmfix_sections(stats_path)
 
     changes = []

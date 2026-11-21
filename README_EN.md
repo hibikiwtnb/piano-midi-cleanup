@@ -164,7 +164,7 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
 2. Choose the tempo source:
    - **Set tempo (BPM)**: enter the song's known tempo. **Choose the file first, then enter the BPM**; changing the file clears the BPM field.
    - **Detect tempo from audio**: choose the source audio to estimate its tempo.
-   - **Keep corrected tempo**: use an existing tempo-corrected file (`*_bpmfix.mid`), including manual first-beat edits. If this is your first run and that file does not exist, choose one of the first two options.
+   - **No BPM processing**: leave the tempo alone and process the MIDI you selected as it is. If it is not the tempo-corrected file (`*_bpmfix.mid`), it overwrites that file for the song; the panel asks first.
 3. Start with the default steps and press **Start processing**. To simplify difficult note groups, enable **Reduce notes for one player, two hands**. For three or four hands, change **Detailed settings → Assign hands → Number of hands**.
 4. On success, the roll automatically shows the latest processed result, whose name ends in `_bpmfix_cleaned.mid`. Import that MIDI into notation software to prepare a score.
 5. Check notes, chords and pedal in the roll; see the next section to adjust the first beat.
@@ -175,7 +175,7 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
 - **When the processed result is shown**, **Save** updates both the matching tempo-corrected file and the shown result, rewrites key signatures on both, shifts the change overlay, and keeps showing the processed result.
 - **When the original MIDI is shown**, **Save** creates or replaces its tempo-corrected file and **does not edit the original**, then previews the tempo-corrected file.
 - If the shown name ends in `_bpmfix` or `_bpmfix_cleaned`, a matching tempo-corrected file must exist before the first beat can be edited.
-- On later runs, choose **Keep corrected tempo** to retain manual alignment. Recomputing from the original MIDI with automatic first-beat alignment can replace it.
+- To keep a manual first beat on later runs, select the tempo-corrected file (`*_bpmfix.mid`) and choose **No BPM processing**. Selecting the original MIDI overwrites the tempo-corrected file and loses the alignment.
 - Every run rebuilds and overwrites the processed result from the tempo-corrected file. Keep the source audio, original MIDI and tempo-corrected file, rather than only the result.
 
 ## Output files
@@ -205,7 +205,7 @@ Running `clean_midi_rules` standalone also writes a matching `*_clean_report.txt
 - **BPM is detected at half or double speed**: enter the correct value with **Set tempo (BPM)**. Changing the file clears the field, so choose the file first.
 - **The first beat is wrong**: adjust it by ±1 beat in the roll and save. Syncopated bass, an intro without bass, or 3/4 can confuse the estimate.
 - **The result is not shown after processing**: check that processing finished, then open the piano roll. If processing failed, check the report for the error message.
-- **My manual first beat disappeared after a rerun**: choose **Keep corrected tempo** next time instead of recomputing automatic alignment from the original.
+- **My manual first beat disappeared after a rerun**: next time select the tempo-corrected file (`*_bpmfix.mid`) with **No BPM processing**, not the original.
 - **Playback is not export**: roll playback is realtime monitoring only. The tool does not write WAV, MP3 or other audio files.
 - **Built-in sound**: Coopiano is a physical-modeling instrument, so no piano samples are downloaded. Playback uses the OS default audio device; a Windows Remote Desktop session must have a usable playback device.
 - **Steinway Grand Piano (optional)**: if a Steinway Grand Piano SFZ is present, the playback output can use **Steinway Grand Piano**, rendered by the bundled sfizz engine without opening Logic. The app looks for `~/Documents/MuseScore3Evo/SoundFonts/Steinway Grand Piano.sfz`; set `PIANO_MIDI_CLEANUP_SFZ` to use another path. Samples are not distributed with the project.
