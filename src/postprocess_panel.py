@@ -813,7 +813,14 @@ class Panel:
                 message = tr('Finished.') if item[1] == 0 else tr('Stopped (exit {}).').format(item[1])
                 if item[1] == 0:
                     if self.run_preview and self.run_preview[0] == self.midi.get().strip():
-                        self.preview_path = self.run_preview[1]
+                        # Further work continues on the cleaned result: it becomes the selected MIDI.
+                        # Same song, so the BPM field is kept (selected_midi is set first).
+                        target = self.run_preview[1]
+                        self.selected_midi = target
+                        self.midi.set(target)
+                        self.preview_path = None
+                        self.settings['midi'] = target
+                        save_settings(self.settings)
                     self.load_existing_report(update_status=False)
                     report_changed = False
                 else:

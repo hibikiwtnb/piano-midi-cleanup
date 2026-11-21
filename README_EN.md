@@ -171,7 +171,7 @@ Make a clean piano MIDI of song.flac and tell me what I should still check.
 
 ### First beat, preview and reruns
 
-- The roll initially shows the file you selected. After successful processing, it automatically shows the latest result.
+- The roll initially shows the file you selected. After successful processing, the result becomes the selected MIDI and the roll shows it, so later edits, first-beat saves and reruns continue on it without choosing the file again.
 - **Save** writes the first beat, key signatures and note edits into the MIDI shown on screen, whatever its name; no other file is touched.
 - To keep a manual first beat on later runs, select the aligned file and choose **No BPM processing**.
 
