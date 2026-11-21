@@ -204,9 +204,6 @@ class TranscribeTab(ttk.Frame):
             if extension in AUDIO_EXTENSIONS:
                 self.settings['transcribe_audio'] = path
                 self.save_settings(self.settings)
-                # A file already named *_piano is taken as a separated stem.
-                if os.path.splitext(os.path.basename(path))[0].lower().endswith('_piano'):
-                    self.set_choice(self.separation, SEPARATION_ENGINES, 'none')
         folder = self.output_dir.get() or (os.path.dirname(path) if path else '')
         self.folder_label.configure(text=folder if self.output_dir.get() else
                                     (tr('Same folder as the audio') + ('  ' + folder if folder else '')))

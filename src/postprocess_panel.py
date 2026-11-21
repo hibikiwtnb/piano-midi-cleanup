@@ -778,7 +778,7 @@ class Panel:
         self.roll.stop()
         selected = self.midi.get().strip()
         target = postprocess.cleaned_path_for(selected if self.source.get() == 'reuse' else
-                                              postprocess.bpmfix_path_for(postprocess.source_midi_path(selected)))
+                                              postprocess.bpmfix_path_for(selected))
         self.run_preview = (selected, target)
         self.running = True
         self.run_button.configure(state='disabled')
