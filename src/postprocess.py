@@ -230,20 +230,18 @@ def _run_postprocess(args, stats_path):
     steps = plan_steps(args)
     names = [name for name, _ in steps]
     overrides = apply_parameters(args.settings)
+    base_path = bpmfix_path  # The MIDI the cleaning steps start from.
 
     if 'bpmfix' in names:
         if not os.path.isfile(source_path):
             raise ValueError('Source MIDI does not exist: {}'.format(source_path))
         write_midi_stats(source_path, reset_report=True, report_path=stats_path)
     else:
-        # No BPM processing: the selected MIDI is used as it is, whichever version it is.
-        selected = os.path.abspath(args.input_midi)
-        if not os.path.isfile(selected):
+        # No BPM processing: the selected MIDI is processed as it is; the output is named after it.
+        if not os.path.isfile(args.input_midi):
             raise ValueError('MIDI does not exist: {}'.format(args.input_midi))
-        if selected != os.path.abspath(bpmfix_path):
-            shutil.copyfile(selected, bpmfix_path)
-            print('No BPM processing: {} is used as it is (copied to {}).'.format(
-                os.path.basename(selected), os.path.basename(bpmfix_path)))
+        base_path = args.input_midi
+        cleaned_path = cleaned_path_for(base_path)
         keep_bpmfix_sections(stats_path)
 
     changes = []
@@ -252,7 +250,7 @@ def _run_postprocess(args, stats_path):
         before = None
         if name in ('clean', 'playable', 'trim'):
             # With glissandi taken out, the MIDI without them is already in cleaned_path and is cleaned in place.
-            before = note_snapshot(bpmfix_path if name == 'clean' and runs is None else cleaned_path)
+            before = note_snapshot(base_path if name == 'clean' and runs is None else cleaned_path)
         if name == 'bpmfix':
             auto_meter = args.time_signature == 'auto'
             apply_bpm_fix(args.audio, source_path, report_path=stats_path, append_report=True, target_bpm=args.bpm,
@@ -270,14 +268,14 @@ def _run_postprocess(args, stats_path):
         elif name == 'key_signature':
             apply_key_signatures(bpmfix_path, report_path=stats_path)
         elif name == 'gliss_extract':
-            runs, rejected = gliss.extract_runs(bpmfix_path, cleaned_path)
+            runs, rejected = gliss.extract_runs(base_path, cleaned_path)
         elif name == 'clean':
-            apply_rule_cleaning(bpmfix_path if runs is None else cleaned_path, cleaned_path, report_path=stats_path,
+            apply_rule_cleaning(base_path if runs is None else cleaned_path, cleaned_path, report_path=stats_path,
                                 append_report=True, semitone_pairs=args.semitone_pairs,
                                 high_phantoms=args.high_phantoms)
         elif name == 'copy':
             if runs is None:
-                shutil.copyfile(bpmfix_path, cleaned_path)
+                shutil.copyfile(base_path, cleaned_path)
         elif name == 'playable':
             apply_playable_reduction(cleaned_path, report_path=stats_path,
                                      max_notes=playable_reduction.DEFAULT_MAX_NOTES_PER_HAND,

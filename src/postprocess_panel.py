@@ -772,20 +772,13 @@ class Panel:
         except ValueError as error:
             messagebox.showerror(tr('Piano MIDI Cleanup'), str(error))
             return
-        selected = self.midi.get().strip()
-        bpmfix = postprocess.bpmfix_path_for(postprocess.source_midi_path(selected))
-        if self.source.get() == 'reuse' and os.path.isfile(bpmfix) \
-                and os.path.abspath(selected) != os.path.abspath(bpmfix) \
-                and not messagebox.askyesno(tr('Piano MIDI Cleanup'), tr('{} will be overwritten by {}. Continue?').format(
-                    os.path.basename(bpmfix), os.path.basename(selected)), parent=self.root):
-            return
         self.settings.update(midi=self.midi.get(), source=self.source.get(), bpm=self.bpm.get(),
                              audio=self.audio.get(), time_signature=self.selected_meter(), last=preset)
         save_settings(self.settings)
         self.roll.stop()
         selected = self.midi.get().strip()
-        target = postprocess.cleaned_path_for(
-            postprocess.bpmfix_path_for(postprocess.source_midi_path(selected)))
+        target = postprocess.cleaned_path_for(selected if self.source.get() == 'reuse' else
+                                              postprocess.bpmfix_path_for(postprocess.source_midi_path(selected)))
         self.run_preview = (selected, target)
         self.running = True
         self.run_button.configure(state='disabled')

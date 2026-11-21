@@ -612,7 +612,6 @@ _TEXT['en'].update({
     'Choose the output folder': 'Choose the output folder',
 })
 _TEXT['zh_TW'].update({
-    '{} will be overwritten by {}. Continue?': '{} 會被 {} 覆寫，要繼續嗎？',
     'Console output': '輸出',
     'Download now': '先下載',
     'ready': '已就緒',
@@ -681,7 +680,6 @@ _TEXT['zh_TW'].update({
     'Choose the output folder': '選擇輸出資料夾',
 })
 _TEXT['zh_CN'].update({
-    '{} will be overwritten by {}. Continue?': '{} 会被 {} 覆盖，要继续吗？',
     'Console output': '输出',
     'Download now': '先下载',
     'ready': '已就绪',
