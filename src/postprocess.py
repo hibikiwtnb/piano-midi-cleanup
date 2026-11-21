@@ -154,19 +154,10 @@ def keep_bpmfix_sections(stats_path):
 
 
 def plan_steps(args):
-    """The steps in order, as (name, description); raises ValueError on a combination that cannot run."""
+    """The steps in order, as (name, description). A step another one needs is added; nothing is refused."""
     if args.bpm is not None:
         if not math.isfinite(args.bpm) or not 60000000 / 0xffffff <= args.bpm <= 60000000:
             raise ValueError('BPM must be positive, finite, and representable as a MIDI tempo.')
-    if args.playable and args.hands == 4:
-        raise ValueError('Playable reduction works on two hands, or on the first player\'s two hands with --hands 3; '
-                         'four hands are not supported.')
-    if args.playable and args.hands == 3 and not args.split:
-        raise ValueError('Playable reduction with --hands 3 needs the hand split to find the first player\'s hands.')
-    if args.trim and not args.split:
-        raise ValueError('Overlap trimming works per hand; it needs the hand split.')
-    if args.time_signature and not (args.bpm or args.audio):
-        raise ValueError('--time-signature is written by BPMFix; give --bpm or --audio with it.')
     steps = []
     if args.bpm or args.audio:
         meter_note = ', automatic time signature' if args.time_signature == 'auto' else (
@@ -189,13 +180,14 @@ def plan_steps(args):
                  if args.clean else ('copy', 'No cleaning'))
     if args.playable and args.hands == 2:
         steps.append(('playable', 'Playable reduction'))
-    if args.split:
+    # With three or four hands, playable reduction works on the first player's two hands, found by the split.
+    if args.split or (args.playable and args.hands >= 3):
         steps.append(('split', 'Hand split ({} hands)'.format(args.hands)))
-    if args.playable and args.hands == 3:
+    if args.playable and args.hands >= 3:
         steps.append(('playable', 'Playable reduction ({})'.format(
             ', '.join(hand.replace('_', ' ') for hand in playable_reduction.THREE_HAND_PLAYER))))
     if args.trim:
-        steps.append(('trim', 'Overlap trim (fast figure: {})'.format(', '.join(args.fast_figure_hands))))
+        steps.append(('trim', 'Overlap trim (fast figure: {})'.format(', '.join(args.fast_figure_hands) or 'none')))
     if args.gliss:
         steps.append(('gliss_restore', 'Repair glissandi and put them back{}'.format(
             ', filling scale notes' if args.gliss_fill else '')))
@@ -280,7 +272,7 @@ def _run_postprocess(args, stats_path):
             apply_playable_reduction(cleaned_path, report_path=stats_path,
                                      max_notes=playable_reduction.DEFAULT_MAX_NOTES_PER_HAND,
                                      max_span=playable_reduction.DEFAULT_MAX_SPAN,
-                                     hands=playable_reduction.THREE_HAND_PLAYER if args.hands == 3 else None)
+                                     hands=playable_reduction.THREE_HAND_PLAYER if args.hands >= 3 else None)
         elif name == 'split':
             limits = (playable_reduction.DEFAULT_MAX_NOTES_PER_HAND, playable_reduction.DEFAULT_MAX_SPAN) \
                 if args.playable and args.hands == 2 else None
@@ -360,7 +352,7 @@ def build_parser(parser_class=argparse.ArgumentParser):
     parser.add_argument('--hands', type=int, choices=(2, 3, 4), default=2, help='Hands for the split (default: 2).')
     parser.add_argument('--no-trim', dest='trim', action='store_false', help='Skip overlap trimming.')
     parser.add_argument('--no-pedal-protection', action='store_true', help='Trim without checking pedal sustain.')
-    parser.add_argument('--fast-figure-hands', nargs='+', choices=sorted(CHANNELS), default=list(DEFAULT_FAST_FIGURE_HANDS),
+    parser.add_argument('--fast-figure-hands', nargs='*', choices=sorted(CHANNELS), default=list(DEFAULT_FAST_FIGURE_HANDS),
                         help='Overlap trim: hands that get the fast figure rule (default: right second_right).')
     parser.add_argument('--snapshot', choices=sorted(SNAPSHOT_LAYOUTS),
                         help='Also save piano roll images of the result.')
