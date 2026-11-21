@@ -13,6 +13,7 @@ These rules apply to the entire repository, not only hand splitting or multi-han
 ## Workflow
 
 - **This is a free public-good project with no technical guarantees** (see rule 0 in `docs/development-rules.md`). Do not run tests, benchmarks, or cross-platform or cross-machine checks to prove that something works, is compatible, is fast, or has not regressed. Run one only when its result changes a decision that cannot be made without it, and name that decision first. Otherwise write "unverified" and leave it to user reports.
+- **Never decide for the user whether an action is allowed** (rule 0.1). Do exactly what the user asks; stop only when it is technically impossible (missing file, unreadable input, not a number) and say why. Protect overwrites and deletions with a confirmation or Undo, not a ban; pull in or skip dependent steps instead of refusing; never silently clear a value the user entered. Remove such restrictions when you find them.
 
 - **Do not create branches.** This project works directly on the existing `main` branch.
 - After completing requested changes, commit and push by default unless the user explicitly asks for an experiment only, no commit, or no push.
