@@ -1,9 +1,4 @@
-"""Starting folders for file dialogs.
-
-On macOS, Tk's open dialog without -initialdir can come up showing a stale, nearly empty listing
-of the last folder (no MIDI files, most subfolders missing). Every dialog therefore gets an
-explicit starting folder: the folder of the current choice, else the last folder used, else home.
-"""
+"""Starting folders for file dialogs: the folder of the current choice, else the last folder used, else home."""
 
 import os
 from pathlib import Path
