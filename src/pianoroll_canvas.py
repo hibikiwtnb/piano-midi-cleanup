@@ -71,7 +71,6 @@ SELECTION_OUTLINE = '#111827'
 SELECTION_BOX = '#2f6fdb'
 DRAG_THRESHOLD = 4
 UNDO_LIMIT = 20
-READ_ONLY_ROLES = ('original', 'answer')  # Editing never touches the source MIDI or the answer.
 STAGE_REASONS = {'gliss': 'Glissando correction', 'clean': 'Rule cleaning', 'playable': 'Playable reduction (one player, 2 hands)',
                  'trim': 'Overlap trim'}
 PAGE_MARGIN = 40  # Playback turns the page when the playhead gets this close to the right edge.
@@ -754,12 +753,7 @@ class PianoRollView(ttk.Frame):
                                       width=1.5 if selected else 1)
 
     def editable(self):
-        if not self.selected:
-            return False
-        if self.shown_role in READ_ONLY_ROLES:
-            self.set_status(tr('The original MIDI and the answer are not edited here; show bpmfix or bpmfix_cleaned.'))
-            return False
-        return True
+        return bool(self.selected)
 
     def edit_selected(self, channel=None):
         """Delete the selection, or move it to channel, on screen only; Save writes it to the MIDI file."""
