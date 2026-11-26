@@ -151,7 +151,8 @@
 python src/note_text_review.py song_bpmfix.mid --musicxml song.musicxml   --bar-offset -2 --quality-json review.json --quality-markdown review.md
 ```
 
-- 三個維度彼此獨立：演奏可行性（起音音數、兩手切法與跨度、快速雙音、手位移）、音型自然度（四音 2+2 空隙和弦、八度音型缺一顆、單音旋律突然加倍、重複和弦單音半音偏移）、譜面整潔度（需 MusicXML：額外 voice、斷梁、延音鏈、短休止符）。純 MIDI 時譜面維度為 `not_evaluated`，不填 0 分。
+- 三個維度彼此獨立：演奏可行性（起音音數、兩手切法與跨度、快速雙音、手位移、單小節快速變化和弦、下譜表極高音）、音型自然度（四音 2+2 空隙和弦、八度音型缺一顆或夾單音、八度中突然增厚、遠距雙音、兩音琶音、近音雙音、單音旋律突然加倍、重複和弦單音半音偏移、快速短音群候選、裝飾音候選）、譜面整潔度（需 MusicXML：額外 voice、斷梁、延音鏈、短休止符）。純 MIDI 時譜面維度為 `not_evaluated`，不填 0 分。
+- 裝飾音、近音雙音、快速短音群等只是待審候選；其中快速短音群與部分音型需再比對音訊，報告會寫明僅憑 MIDI／譜面無法確定。所有旗標都不構成正確性判定。
 - 每一項疑點保留類型、原因、拍位／秒數、staff／voice（有譜面時），以及可追溯的 MIDI event（track、channel、pitch、start/end tick、秒數、力度）與建議複核類別（疑似多餘音／疑似漏音／疑似時值／僅記譜問題／演奏困難）。
 - 分數只是可解釋的風險排序，高風險不等於已證實錯音。工具只偵測，不刪音、不改 MIDI／MusicXML、不重排譜。
 - `--bar-offset N` 令 `顯示小節 = MIDI 小節 + N`；MusicXML 以顯示小節編號讀取。使用影片或譜面小節前，須先核實該曲 MIDI／影片／譜面的小節對應（例如前導空小節或 MIDI `bar_one_tick`），不可盲目套用固定偏移。

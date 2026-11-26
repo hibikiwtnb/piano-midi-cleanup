@@ -152,6 +152,61 @@ class MeasureQualityTest(unittest.TestCase):
         measure = next(entry for entry in result['measures'] if entry['display_measure'] == 1)
         self.assertIn('sustained_overlap', {issue['code'] for issue in measure['issues']})
 
+    def test_a_semitone_dyad_is_only_a_candidate(self):
+        result = self.analyze([(0, 60, 1), (0, 61, 1)])
+        self.assertIn('semitone_dyad_candidate', codes(result, 1))
+
+    def test_a_wide_two_note_figure_far_from_the_pattern_is_reported(self):
+        notes = [(4, 76, 0.5), (5, 26, 0.5), (5, 45, 0.5), (6, 50, 0.5), (7, 55, 0.5)]
+        result = self.analyze(notes)
+        measure = next(entry for entry in result['measures'] if entry['display_measure'] == 2)
+        issue = next(issue for issue in measure['issues'] if issue['code'] == 'octave_pattern_outlier')
+        self.assertIn('isolated_wide_leap', issue['tags'])
+        self.assertIn('suspicious_two_note_arpeggio', issue['tags'])
+
+    def test_rapid_changing_chords_are_reported_as_load(self):
+        notes = []
+        for index, chord in enumerate(((60, 64, 67), (59, 62, 67), (60, 63, 67),
+                                       (58, 62, 65), (57, 60, 64))):
+            notes.extend((index * 0.25, pitch, 0.2) for pitch in chord)
+        result = self.analyze(notes)
+        self.assertIn('rapid_chord_changes', codes(result, 1))
+
+    def test_a_fast_single_note_burst_is_marked_for_audio_review(self):
+        notes = [(0, 60, 0.1), (0.15, 62, 0.1), (0.3, 64, 0.1), (1, 65, 0.5)]
+        result = self.analyze(notes)
+        self.assertIn('fast_short_burst_candidate', codes(result, 1))
+
+    def test_an_octave_pattern_that_gains_an_extra_note_is_reported(self):
+        notes = [(0, 60, 0.5), (0, 72, 0.5), (0.5, 60, 0.5), (0.5, 64, 0.5), (0.5, 72, 0.5)]
+        result = self.analyze(notes)
+        self.assertIn('octave_run_thickened', codes(result, 1))
+
+    def test_an_xml_grace_note_is_always_a_candidate(self):
+        body = ('<attributes><divisions>4</divisions></attributes>'
+                + note_element('D', 5, 0, note_type='16th').replace(
+                    '<pitch>', '<grace slash="yes"/><pitch>')
+                + note_element('A', 4, 4))
+        result = self.analyze([(0, 69, 0.5), (0, 62, 1)], [body])
+        self.assertIn('grace_note_candidate', codes(result, 1))
+
+    def test_a_high_note_on_the_lower_staff_is_reported(self):
+        body = ('<attributes><divisions>4</divisions></attributes>'
+                + note_element('C', 5, 4, staff='2'))
+        result = self.analyze([(0, 72, 1)], [body])
+        self.assertIn('high_note_on_lower_staff', codes(result, 1))
+
+    def test_a_sparse_but_established_extra_voice_is_reported(self):
+        bodies = []
+        for index in range(7):
+            parts = '<attributes><divisions>4</divisions></attributes>'
+            parts += note_element('C', 4, 1, voice='1')
+            count = 1 if index == 3 else 4
+            parts += ''.join(note_element(step, 4, 1, voice='2') for step in ('E', 'F', 'G', 'A')[:count])
+            bodies.append(parts)
+        result = self.analyze([(beat, 60, 1) for beat in range(0, 28, 4)], bodies)
+        self.assertIn('sparse_extra_voice', codes(result, 4))
+
     def test_bar_offset_only_changes_the_displayed_measure(self):
         result = self.analyze([(4, pitch, 1) for pitch in (60, 64, 71, 75)], bar_offset=-2)
         self.assertIn('unusual_chord_spacing', codes(result, 0))

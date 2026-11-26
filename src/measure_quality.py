@@ -60,6 +60,13 @@ def _text(element, name, default=None):
     return default if child is None or child.text is None else child.text
 
 
+def _pitch_from_name(name):
+    steps = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
+    accidental = 1 if '#' in name else -1 if 'b' in name else 0
+    digits = ''.join(character for character in name[1:] if character.isdigit() or character == '-')
+    return (int(digits) + 1) * 12 + steps.get(name[0], 0) + accidental
+
+
 def _midi_sha256(path):
     digest = hashlib.sha256()
     with open(path, 'rb') as source:
@@ -303,6 +310,12 @@ def analyze_midi(midi_path, bar_offset=0):
     _detect_hand_shifts(groups, measures, ticks_per_beat, beats_per_bar)
     _detect_melodic_doubling(groups, measures, ticks_per_beat, beats_per_bar)
     _detect_repeated_chord_shifts(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_semitone_dyads(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_octave_run_singles(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_octave_thickening(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_rapid_chord_changes(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_fast_bursts(groups, measures, ticks_per_beat, beats_per_bar)
+    _detect_isolated_wide_leaps(groups, measures, ticks_per_beat, beats_per_bar)
 
     for measure in measures.values():
         measure['display_measure'] = measure['measure'] + bar_offset
@@ -480,6 +493,195 @@ def _detect_repeated_chord_shifts(groups, measures, ticks_per_beat, beats_per_ba
         _score_measure(measure)
 
 
+def _detect_semitone_dyads(groups, measures, ticks_per_beat, beats_per_bar):
+    for group in groups:
+        pitches = sorted(note['note'] for note in group)
+        if len(pitches) > 4:
+            continue
+        pair = next(((pitches[index], pitches[index + 1]) for index in range(len(pitches) - 1)
+                     if pitches[index + 1] - pitches[index] <= 2), None)
+        if pair is None:
+            continue
+        measure_number = _measure_number(group[0], ticks_per_beat, beats_per_bar)
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        selected = [note for note in group if note['note'] in pair]
+        _merge_issue(measure, _issue(
+            'naturalness', 'semitone_dyad_candidate', 20,
+            'A close-interval dyad {} starts together; keep it if the harmony needs it, otherwise check whether '
+            'one pitch was recognised a semitone off.'.format(' / '.join(note_name(pitch) for pitch in pair)),
+            '疑似音高辨識錯誤', _beat_in_bar(group[0], ticks_per_beat, beats_per_bar),
+            group[0]['start_seconds'], _group_reference(selected, ticks_per_beat),
+            extra={'interval_semitones': 1}))
+        _score_measure(measure)
+
+
+def _detect_octave_run_singles(groups, measures, ticks_per_beat, beats_per_bar):
+    for index, group in enumerate(groups):
+        if len(group) != 1 or index == 0 or index + 1 >= len(groups):
+            continue
+        before, after = groups[index - 1], groups[index + 1]
+        if after[0]['start_seconds'] - group[0]['start_seconds'] > OCTAVE_RUN_WINDOW_SECONDS:
+            continue
+        pitches = [note['note'] for note in before + after]
+        pairs = _octave_pairs(pitches)
+        if not pairs:
+            continue
+        pitch = group[0]['note']
+        if not any(abs(pitch - value) <= 5 for pair in pairs for value in pair):
+            continue
+        nearby = [entry for entry in groups
+                  if abs(entry[0]['start_seconds'] - group[0]['start_seconds']) <= 1.0
+                  and _octave_pairs([note['note'] for note in entry])]
+        if len(nearby) < 2:
+            continue
+        measure_number = _measure_number(group[0], ticks_per_beat, beats_per_bar)
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        if any(issue['code'] == 'suspected_missing_octave_note' and issue['beat'] ==
+               round(_beat_in_bar(group[0], ticks_per_beat, beats_per_bar), 3) for issue in measure['issues']):
+            continue
+        _merge_issue(measure, _issue(
+            'naturalness', 'octave_run_single_note', 40,
+            'Single note {} appears beside an octave run; check whether the other octave note is missing or '
+            'this single note is a stray note.'.format(note_name(pitch)),
+            '疑似漏音', _beat_in_bar(group[0], ticks_per_beat, beats_per_bar), group[0]['start_seconds'],
+            _group_reference(group, ticks_per_beat)))
+        _score_measure(measure)
+
+
+def _detect_octave_thickening(groups, measures, ticks_per_beat, beats_per_bar):
+    for index, group in enumerate(groups):
+        pitches = [note['note'] for note in group]
+        if len(pitches) < 3 or not _octave_pairs(pitches):
+            continue
+        if index == 0:
+            continue
+        previous = groups[index - 1]
+        previous_pitches = [note['note'] for note in previous]
+        if not _octave_pairs(previous_pitches):
+            continue
+        if group[0]['start_seconds'] - previous[0]['start_seconds'] > OCTAVE_RUN_WINDOW_SECONDS:
+            continue
+        measure_number = _measure_number(group[0], ticks_per_beat, beats_per_bar)
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        _merge_issue(measure, _issue(
+            'naturalness', 'octave_run_thickened', 30,
+            'An octave pattern gains an extra note, becoming {}; check whether the added note is part of '
+            'the chord or a stray note.'.format(', '.join(note_name(pitch) for pitch in sorted(pitches))),
+            '疑似多餘音', _beat_in_bar(group[0], ticks_per_beat, beats_per_bar),
+            group[0]['start_seconds'], _group_reference(group, ticks_per_beat)))
+        _score_measure(measure)
+
+
+def _detect_rapid_chord_changes(groups, measures, ticks_per_beat, beats_per_bar):
+    by_measure = defaultdict(list)
+    for group in groups:
+        if len(group) >= 3:
+            by_measure[_measure_number(group[0], ticks_per_beat, beats_per_bar)].append(group)
+    for measure_number, chords_groups in by_measure.items():
+        if len(chords_groups) < 4:
+            continue
+        chords = {frozenset(note['note'] for note in group) for group in chords_groups}
+        if len(chords) < 3:
+            continue
+        span_ticks = chords_groups[-1][0]['start_ticks'] - chords_groups[0][0]['start_ticks']
+        if span_ticks > 4 * ticks_per_beat:
+            continue
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        first = chords_groups[0][0]
+        _merge_issue(measure, _issue(
+            'playability', 'rapid_chord_changes', 40,
+            '{} different chords of three or more notes change within one bar; check the hand movement and '
+            'whether the passage is comfortable at the real tempo.'.format(len(chords)),
+            '演奏困難', _beat_in_bar(first, ticks_per_beat, beats_per_bar), first['start_seconds'],
+            _group_reference(chords_groups[0], ticks_per_beat),
+            extra={'chord_count': len(chords), 'group_count': len(chords_groups)}))
+        _score_measure(measure)
+
+
+def _detect_fast_bursts(groups, measures, ticks_per_beat, beats_per_bar):
+    run = []
+
+    def flush():
+        if len(run) < 3:
+            return
+        pitches = [group[0]['note'] for group in run]
+        if len(set(pitches)) < 2:
+            return
+        first = run[0][0]
+        measure_number = _measure_number(first, ticks_per_beat, beats_per_bar)
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        _merge_issue(measure, _issue(
+            'naturalness', 'fast_short_burst_candidate', 30,
+            '{} distinct single notes follow within about a sixteenth-note burst; compare the audio before '
+            'deciding whether they are real or hallucinated notes.'.format(len(run)),
+            '疑似多餘音', _beat_in_bar(first, ticks_per_beat, beats_per_bar), first['start_seconds'],
+            _group_reference([note for group in run for note in group], ticks_per_beat), extra={'note_count': len(run)}))
+        _score_measure(measure)
+
+    for group in groups:
+        if len(group) != 1:
+            flush()
+            run = []
+            continue
+        fast = not run or group[0]['start_seconds'] - run[-1][0]['start_seconds'] <= 0.2
+        if fast:
+            run.append(group)
+        else:
+            flush()
+            run = [group]
+    flush()
+
+
+def _detect_isolated_wide_leaps(groups, measures, ticks_per_beat, beats_per_bar):
+    for index, group in enumerate(groups):
+        pitches = sorted(note['note'] for note in group)
+        if len(pitches) != 2:
+            continue
+        interval = pitches[1] - pitches[0]
+        if 3 <= interval <= 11:
+            nearby = [note['note'] for offset in (-1, 1)
+                      for other in (index + offset,) if 0 <= other < len(groups)
+                      for note in groups[other]]
+            if nearby and max(abs(pitch - value) for pitch in pitches for value in nearby) >= 7:
+                measure_number = _measure_number(group[0], ticks_per_beat, beats_per_bar)
+                measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+                _merge_issue(measure, _issue(
+                    'naturalness', 'suspicious_two_note_arpeggio', 25,
+                    'Two-note figure {} is isolated from the nearby pattern; check the hand assignment and '
+                    'whether one note belongs to the other hand.'.format(
+                        ' / '.join(note_name(pitch) for pitch in pitches)),
+                    '演奏困難', _beat_in_bar(group[0], ticks_per_beat, beats_per_bar),
+                    group[0]['start_seconds'], _group_reference(group, ticks_per_beat),
+                    extra={'tags': ['suspicious_two_note_arpeggio']}))
+                _score_measure(measure)
+            continue
+        if interval < 19:
+            continue
+        nearby = []
+        for offset in (-2, -1, 1, 2):
+            other = index + offset
+            if 0 <= other < len(groups):
+                nearby.extend(note['note'] for note in groups[other])
+        if not nearby:
+            continue
+        outlier = max(pitches, key=lambda pitch: min(abs(pitch - value) for value in nearby))
+        distance = min(abs(outlier - value) for value in nearby)
+        if distance < 12:
+            continue
+        measure_number = _measure_number(group[0], ticks_per_beat, beats_per_bar)
+        measure = measures.setdefault(measure_number, _empty_measure(measure_number))
+        _merge_issue(measure, _issue(
+            'naturalness', 'octave_pattern_outlier', 45,
+            'Two-note figure {} has one note {} semitones away from the nearby pattern; check whether this '
+            'is a wrong pitch or a hand-assignment artefact.'.format(
+                ' / '.join(note_name(pitch) for pitch in pitches), distance),
+            '疑似音高辨識錯誤', _beat_in_bar(group[0], ticks_per_beat, beats_per_bar),
+            group[0]['start_seconds'], _group_reference(group, ticks_per_beat),
+            extra={'tags': ['isolated_wide_leap', 'suspicious_two_note_arpeggio'],
+                   'outlier_pitch': outlier, 'distance_semitones': distance}))
+        _score_measure(measure)
+
+
 def _score_measure(measure):
     weights = {dimension: [] for dimension in DIMENSIONS}
     for issue in measure['issues']:
@@ -570,6 +772,7 @@ def parse_musicxml(path):
                 'voice': voice,
                 'type': note_type,
                 'pitch_name': pitch_name,
+                'grace': _child(element, 'grace') is not None,
                 'beams': beam_values,
                 'tie': tie_types,
             })
@@ -601,8 +804,11 @@ def analyze_musicxml_structure(xml_measures):
             by_staff_voice[note['staff']][note['voice']].append(note)
         for staff, voices in by_staff_voice.items():
             result['voices'][staff] = sorted(voices)
-            dominant = max(voices, key=lambda voice: (len(voices[voice]),
-                                                      max(note['onset'] + note['duration'] for note in voices[voice])))
+            if '1' in voices and len(voices['1']) >= 2:
+                dominant = '1'
+            else:
+                dominant = max(voices, key=lambda voice: (len(voices[voice]),
+                                                          max(note['onset'] + note['duration'] for note in voices[voice])))
             for voice, notes in voices.items():
                 if voice == dominant:
                     continue
@@ -626,10 +832,32 @@ def analyze_musicxml_structure(xml_measures):
                             staff, voice, dominant),
                         '僅記譜問題', staff=staff, voice=voice,
                         extra={'pitches': [note['pitch_name'] for note in notes]}))
+                elif len(notes) <= 2 and coverage < 0.5 * 4 * divisions:
+                    result['issues'].append(_issue(
+                        'notation', 'sparse_extra_voice', 30,
+                        'Staff {} voice {} has only {} short note(s) beside voice {}; check whether an '
+                        'isolated note forced an extra voice.'.format(staff, voice, len(notes), dominant),
+                        '僅記譜問題', staff=staff, voice=voice,
+                        extra={'pitches': [note['pitch_name'] for note in notes],
+                               'beats': [round(note['onset'] / divisions + 1, 3) for note in notes]}))
+                elif len(notes) >= 3:
+                    established = (stats['measures'] >= max(3, len(xml_measures) * 0.2)
+                                   and coverage >= 0.6 * 4 * divisions)
+                    if not established:
+                        result['issues'].append(_issue(
+                            'notation', 'unnecessary_extra_voice', 45,
+                            'Staff {} has {} notes in voice {} beside the main voice {}; check whether this '
+                            'extra voice is needed or makes the passage hard to read.'.format(
+                                staff, len(notes), voice, dominant),
+                            '僅記譜問題', staff=staff, voice=voice,
+                            extra={'pitches': [note['pitch_name'] for note in notes],
+                                   'beats': [round(note['onset'] / divisions + 1, 3) for note in notes]}))
         _xml_beam_breaks(measure, result)
         _xml_tie_chains(measure, result)
         _xml_short_rests(measure, result)
         _xml_gapped_chords(measure, result)
+        _xml_grace_notes(measure, result)
+        _xml_extreme_staff_register(measure, result)
         results[number] = result
     return results
 
@@ -706,20 +934,52 @@ def _xml_short_rests(measure, result):
                     '僅記譜問題', beat=event['onset'] / divisions + 1, staff=staff, voice=voice))
 
 
+def _xml_grace_notes(measure, result):
+    divisions = measure['divisions']
+    for note in measure['notes']:
+        if not note.get('grace'):
+            continue
+        result['issues'].append(_issue(
+            'naturalness', 'grace_note_candidate', 30,
+            'Grace note {} before the main note; check the onset spacing of the chord and the audio before '
+            'treating it as a real ornament.'.format(note['pitch_name']),
+            '疑似多餘音', beat=note['onset'] / divisions + 1, staff=note['staff'], voice=note['voice'],
+            extra={'pitches': [note['pitch_name']]}))
+
+
+def _xml_extreme_staff_register(measure, result):
+    divisions = measure['divisions']
+    high = [note for note in measure['notes']
+            if note['staff'] == '2' and _pitch_from_name(note['pitch_name']) >= 69]
+    low = [note for note in measure['notes']
+           if note['staff'] == '1' and _pitch_from_name(note['pitch_name']) <= 36]
+    if high:
+        result['issues'].append(_issue(
+            'playability', 'high_note_on_lower_staff',
+            45 if max(_pitch_from_name(note['pitch_name']) for note in high) >= 72 else 35,
+            'The lower staff reaches {}; check whether this note belongs to the right hand or is a wrong '
+            'pitch.'.format(', '.join(note['pitch_name'] for note in high)),
+            '演奏困難', beat=high[0]['onset'] / divisions + 1, staff='2', voice=high[0]['voice'],
+            extra={'pitches': [note['pitch_name'] for note in high],
+                   'beats': [round(note['onset'] / divisions + 1, 3) for note in high]}))
+    if low:
+        result['issues'].append(_issue(
+            'playability', 'low_note_on_upper_staff', 35,
+            'The upper staff reaches {}; check the hand assignment.'.format(
+                ', '.join(note['pitch_name'] for note in low)),
+            '演奏困難', beat=low[0]['onset'] / divisions + 1, staff='1', voice=low[0]['voice'],
+            extra={'pitches': [note['pitch_name'] for note in low]}))
+
+
 def _xml_gapped_chords(measure, result):
     divisions = measure['divisions']
     by_onset = defaultdict(list)
     for note in measure['notes']:
         by_onset[(note['onset'], note['staff'])].append(note)
-    steps = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
     for (onset, staff), notes in by_onset.items():
         by_pitch = {}
         for note in notes:
-            name = note['pitch_name']
-            accidental = 1 if '#' in name else -1 if 'b' in name else 0
-            step = steps.get(name[0], 0)
-            octave = int(''.join(character for character in name[1:] if character.isdigit() and character != '#'))
-            pitch = (octave + 1) * 12 + step + accidental
+            pitch = _pitch_from_name(note['pitch_name'])
             by_pitch.setdefault(pitch, note)
         if len(by_pitch) != 4:
             continue
