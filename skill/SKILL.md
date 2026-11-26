@@ -66,6 +66,24 @@ python src/note_text_review.py "<folder>/<song>_piano_bpmfix_cleaned.mid"   --qu
 
 Add `--musicxml "<score>.musicxml"` when a score exists; only then are voices, beams, ties and short rests checked. Otherwise the notation dimension is `not_evaluated`, not a pass. If the owner refers to bars in the final video or score, verify the MIDI/video/score bar mapping first (lead-in bars, `midi_bar_one_tick`, pickup measures); pass the verified `--bar-offset` and do not assume a fixed +2/-2. Read the top priority bars, report which bar and which note to check, and keep every note: a high risk is a reason for human review, not proof that the note is wrong. Never let this step delete or edit notes.
 
+### Repair decision, only when the user asks to fix a flagged spot
+
+The review above locates and describes notes; it does not decide that a note is wrong. When the user asks to fix a flagged spot, compare explicit candidates per note instead of scoring the whole bar and deleting the odd-looking note. Do not turn this into a scoring framework or an automatic deletion rule in code; it is a reasoning checklist for the Agent.
+
+For every flagged chord or run:
+
+1. Build one hypothesis per plausible action, not just "delete". Include: keep as is; delete note A; delete note B; change a pitch; add a missing voice or octave partner; move a note to the other hand or staff; or fix the notation only (voice, tie, rest, beam) without changing pitch or timing. Name the exact event (track, channel, tick, pitch, velocity) for each candidate.
+2. Gather evidence for each candidate from the data actually available:
+   - Velocity: is the note clearly softer than the notes struck with it or in the same voice? Treat this as a lead, not a veto; transcribed velocity is not always reliable.
+   - Local pattern: across the surrounding beats and repeated phrases, which choice keeps the octaves, single-line melody, chord shapes or accompaniment figures regular, and which choice breaks a figure that is otherwise consistent?
+   - Harmony and melody: do the interval, key, chord function and melodic direction support the note? A real dissonance is not an error just because it sounds tense.
+   - Playability: does a candidate remove an implausible leap or a chord span one hand cannot reach while keeping the melody and harmony? "Hard to play" alone is not proof of a wrong note.
+   - Audio (when available): does the recording have that pitch and onset, or does a candidate match a spectral peak better? Do not count an overtone or another instrument as an independent piano note. When no audio is available, say so and mark the decision unverified.
+3. Compare the outcomes in words: for "delete A" and "delete B", state what each improves and what each breaks. A valid conclusion may be keep all, notation-only, add or move a note, or "not enough evidence, leave it for the user".
+4. Write a per-note decision record: bar and beat from the verified bar map, hand, original event (pitch, velocity, tick), candidate action, evidence for and against, the chosen action and why, the effect on sound and playability, and confidence or the open question. Save it with the song record so another Agent or the user can reproduce the choice.
+5. Do not invent a "ground truth" from the current data: MIDI and MusicXML disagreeing only proves the two files differ, and a note missing from the current MIDI is not, by itself, proof that it must be deleted. Do not require an original or pre-edit MIDI that may not exist.
+6. Only when the user asked to fix: make the smallest change the evidence supports, keep the owner's velocity, timing and pedal, and save a versioned copy with the before/after record. If the evidence is insufficient or the choice is a musical judgement (which of two valid voicings, whether a clash is intended), leave the source untouched and give the candidates to the user.
+
 ## 6. Deliver
 
 Give the user, in plain language: the final `_bpmfix_cleaned.mid` path, the tempo and meter used (and that meter or first beat was an assumption when it was), what was removed or repaired in a sentence, and the short list of places to check by ear or eye (bar numbers from the reports: glissandi, wide hand spans, re-struck chords, uncertain first beat). Mention anything you could not verify (the tool gives no accuracy guarantee). Do not paste whole reports.
