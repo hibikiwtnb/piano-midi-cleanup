@@ -52,6 +52,15 @@ def main(argv=None):
     parser.add_argument('input_midi', help='Bar-aligned MIDI to read.')
     parser.add_argument('--bars', type=parse_bars, help='Bar range such as 95-97, or one bar such as 96.')
     parser.add_argument('-o', '--output', help='Write to this text file instead of printing.')
+    parser.add_argument('--musicxml', help='MusicXML of the same passage; enables notation checks (read-only).')
+    parser.add_argument('--bar-offset', type=int, default=0,
+                        help='display measure = MIDI measure + this offset; MusicXML uses display measures.')
+    parser.add_argument('--quality-json', metavar='PATH',
+                        help='Write the structured per-measure review JSON (read-only).')
+    parser.add_argument('--quality-markdown', metavar='PATH',
+                        help='Write the human-readable per-measure review (read-only).')
+    parser.add_argument('--top', type=int, default=15,
+                        help='Measures in the Markdown priority list (default 15).')
     args = parser.parse_args(argv)
 
     text = '\n'.join(note_text_lines(args.input_midi, args.bars)) + '\n'
@@ -61,6 +70,18 @@ def main(argv=None):
         print('Writing note text: {}'.format(args.output))
     else:
         sys.stdout.write(text)
+
+    if args.quality_json or args.quality_markdown:
+        import measure_quality
+        result = measure_quality.analyze(args.input_midi, args.musicxml, args.bar_offset)
+        if args.quality_json:
+            measure_quality.write_json(result, args.quality_json)
+            print('Writing quality JSON: {}'.format(args.quality_json))
+        if args.quality_markdown:
+            report = measure_quality.write_markdown(result, args.quality_markdown, args.top)
+            with open(args.quality_markdown, 'w', encoding='utf-8') as file:
+                file.write(report + '\n')
+            print('Writing quality report: {}'.format(args.quality_markdown))
     return 0
 
 

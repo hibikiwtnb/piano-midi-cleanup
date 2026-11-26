@@ -56,11 +56,21 @@ Rerun command (keeps the manual first beat and meter because no `--audio` or `--
 python src/postprocess.py "<folder>/<song>_piano_bpmfix_cleaned.mid" --no-pedal-protection --set KEY=VALUE
 ```
 
-## 5. Deliver
+## 5. Suspect-bar check before delivery
+
+The per-measure review is read-only evidence, not a repair command. Run it on the bar-aligned MIDI before handing back a score draft:
+
+```
+python src/note_text_review.py "<folder>/<song>_piano_bpmfix_cleaned.mid"   --quality-json "<folder>/measure_review.json" --quality-markdown "<folder>/measure_review.md"
+```
+
+Add `--musicxml "<score>.musicxml"` when a score exists; only then are voices, beams, ties and short rests checked. Otherwise the notation dimension is `not_evaluated`, not a pass. If the owner refers to bars in the final video or score, verify the MIDI/video/score bar mapping first (lead-in bars, `midi_bar_one_tick`, pickup measures); pass the verified `--bar-offset` and do not assume a fixed +2/-2. Read the top priority bars, report which bar and which note to check, and keep every note: a high risk is a reason for human review, not proof that the note is wrong. Never let this step delete or edit notes.
+
+## 6. Deliver
 
 Give the user, in plain language: the final `_bpmfix_cleaned.mid` path, the tempo and meter used (and that meter or first beat was an assumption when it was), what was removed or repaired in a sentence, and the short list of places to check by ear or eye (bar numbers from the reports: glissandi, wide hand spans, re-struck chords, uncertain first beat). Mention anything you could not verify (the tool gives no accuracy guarantee). Do not paste whole reports.
 
-## 6. Per-song record and continuing
+## 7. Per-song record and continuing
 
 Write `run-record.md` in the song's output folder in the data repository (template: `skill/run-record-template.md`): input, tool version and commit, command lines run, settings changed with the evidence and the result, unresolved points. Commit it in the data repository with the application commit and settings in the message. On a later request for the same song, read the record first, reuse the existing outputs, and rerun only the step the new request changes.
 

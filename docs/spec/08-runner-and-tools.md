@@ -135,13 +135,27 @@
 | 工具 | 用途 |
 |---|---|
 | `src/midi_stats.py` | 音符數、極短音（< 0.05 秒）、低力度音（≤ 30）、音域、平均力度、最多同時按鍵數 |
-| `src/note_text_review.py` | 每個起音組一行文字：小節、拍位、每個音的手、音名與長度（拍） |
+| `src/note_text_review.py` | 每個起音組一行文字：小節、拍位、每個音的手、音名與長度（拍）；可另產逐小節只讀品質審閱 |
 | `src/pianoroll_snapshot.py` | 每 4 小節一張捲簾 PNG，顏色區分手；橫向或直向 |
 | `src/pianoroll_video.py` | 捲簾錄影：見下節 |
 | `src/generate_chord_review.py` | 開發中。輸出每拍的和弦候補表（Tonal.js 判斷） |
 | `src/chord_analysis.py` | 現行卷簾和弦分析，也可由命令列輸出和弦段落；與舊候補表工具不同 |
 
 「最多同時按鍵數」依 MIDI 音長計算，不加踏板延音；上游音長已含延音時，這個數字會高估實際按鍵，不能單憑它判定彈不到。
+
+### 逐小節品質審閱（只讀）
+
+程式：`src/note_text_review.py`，分析在 `src/measure_quality.py`。原文字輸出與 `--bars`、`-o` 行為不變；只有加上 `--quality-json` 或 `--quality-markdown` 時才分析，且不寫回 MIDI／MusicXML。
+
+```text
+python src/note_text_review.py song_bpmfix.mid --musicxml song.musicxml   --bar-offset -2 --quality-json review.json --quality-markdown review.md
+```
+
+- 三個維度彼此獨立：演奏可行性（起音音數、兩手切法與跨度、快速雙音、手位移）、音型自然度（四音 2+2 空隙和弦、八度音型缺一顆、單音旋律突然加倍、重複和弦單音半音偏移）、譜面整潔度（需 MusicXML：額外 voice、斷梁、延音鏈、短休止符）。純 MIDI 時譜面維度為 `not_evaluated`，不填 0 分。
+- 每一項疑點保留類型、原因、拍位／秒數、staff／voice（有譜面時），以及可追溯的 MIDI event（track、channel、pitch、start/end tick、秒數、力度）與建議複核類別（疑似多餘音／疑似漏音／疑似時值／僅記譜問題／演奏困難）。
+- 分數只是可解釋的風險排序，高風險不等於已證實錯音。工具只偵測，不刪音、不改 MIDI／MusicXML、不重排譜。
+- `--bar-offset N` 令 `顯示小節 = MIDI 小節 + N`；MusicXML 以顯示小節編號讀取。使用影片或譜面小節前，須先核實該曲 MIDI／影片／譜面的小節對應（例如前導空小節或 MIDI `bar_one_tick`），不可盲目套用固定偏移。
+
 
 ### 捲簾錄影（`pianoroll_video.py`）
 
