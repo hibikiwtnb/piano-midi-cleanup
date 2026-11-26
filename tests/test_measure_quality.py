@@ -138,6 +138,20 @@ class MeasureQualityTest(unittest.TestCase):
         self.assertEqual(issue['offset_semitones'], 1)
         self.assertTrue(issue['returns'])
 
+    def test_fast_octave_double_stops_are_reported_as_load(self):
+        notes = []
+        for index, top in enumerate((79, 81, 83)):
+            notes.extend([(index * 0.25, top - 12, 0.2), (index * 0.25, top, 0.2)])
+        result = self.analyze(notes)
+        self.assertIn('fast_parallel_double_stops', codes(result, 1))
+
+    def test_pedal_like_sustained_overlap_is_not_called_unplayable(self):
+        notes = [(0, 60, 4), (1, 62, 3), (2, 64, 2)]
+        result = self.analyze(notes)
+        self.assertNotIn('unplayable_onset_group', codes(result, 1))
+        measure = next(entry for entry in result['measures'] if entry['display_measure'] == 1)
+        self.assertIn('sustained_overlap', {issue['code'] for issue in measure['issues']})
+
     def test_bar_offset_only_changes_the_displayed_measure(self):
         result = self.analyze([(4, pitch, 1) for pitch in (60, 64, 71, 75)], bar_offset=-2)
         self.assertIn('unusual_chord_spacing', codes(result, 0))
