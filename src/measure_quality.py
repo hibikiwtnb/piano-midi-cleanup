@@ -62,7 +62,7 @@ def _text(element, name, default=None):
 
 def _pitch_from_name(name):
     steps = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
-    accidental = 1 if '#' in name else -1 if 'b' in name else 0
+    accidental = name.count('#') - name.count('b')
     digits = ''.join(character for character in name[1:] if character.isdigit() or character == '-')
     return (int(digits) + 1) * 12 + steps.get(name[0], 0) + accidental
 
@@ -723,6 +723,7 @@ def parse_musicxml(path):
             if division_text:
                 divisions = int(division_text)
         position = 0
+        last_onset = 0
         notes = []
         rests = []
         for element in measure_element:
@@ -737,9 +738,10 @@ def parse_musicxml(path):
                 continue
             duration = int(_text(element, 'duration') or 0)
             chord = _child(element, 'chord') is not None
-            onset = position - duration if chord else position
             if not chord:
+                last_onset = position
                 position += duration
+            onset = last_onset
             staff = _text(element, 'staff') or '1'
             voice = _text(element, 'voice') or '1'
             note_type = _text(element, 'type') or ''
@@ -752,8 +754,8 @@ def parse_musicxml(path):
                 continue
             step = _text(pitch_element, 'step') or ''
             octave = _text(pitch_element, 'octave') or ''
-            alter = _text(pitch_element, 'alter')
-            pitch_name = '{}{}{}'.format(step, '#' * int(alter) if alter else '', octave)
+            alter = int(_text(pitch_element, 'alter') or 0)
+            pitch_name = '{}{}{}'.format(step, '#' * alter if alter > 0 else 'b' * -alter, octave)
             beams = [_text(beam, '') for beam in ()]
             beam_values = []
             for beam in element:
