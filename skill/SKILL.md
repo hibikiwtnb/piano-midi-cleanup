@@ -68,21 +68,22 @@ Add `--musicxml "<score>.musicxml"` when a score exists; only then are voices, b
 
 ### Repair decision, only when the user asks to fix a flagged spot
 
-The review above locates and describes notes; it does not decide that a note is wrong. When the user asks to fix a flagged spot, compare explicit candidates per note instead of scoring the whole bar and deleting the odd-looking note. Do not turn this into a scoring framework or an automatic deletion rule in code; it is a reasoning checklist for the Agent.
+The review locates and describes notes; it does not decide that a note is wrong. Work in two layers.
 
-For every flagged chord or run:
+**Program (deterministic, read-only):** `python src/repair_strategy.py "<midi>" --musicxml "<score>.musicxml" --bar-offset N --measures A-B -o routing.json`. For every issue it attaches that code's strategy (`--list-strategies` prints all of them; `--check-coverage` fails when a review code has none) and, for MIDI issues, every candidate the strategy names: keep, delete each note, move each note an octave, shift a semitone, add an octave partner, move hand, notation only, simplify. Each candidate carries the same metrics: `playable` and `widest_hand_span` after the best two-hand split, `max_leap_to_neighbours` (largest distance from any resulting pitch to the nearest pitch of the previous and next onset), `best_pattern_match` (pitch-set Jaccard with the most similar of the three onsets either side), `best_pitch_class_match`, `unsupported_pitch_classes` (pitch classes sounding nowhere else within one bar either side), and for the touched note `velocity_minus_group_median`, `onset_offset_ms` and `length_beats`. Nothing is applied. Score-only codes (voices, beams, ties, rests, grace notes, sustained overlap) route to notation-only fixes that never touch the MIDI.
 
-1. Build one hypothesis per plausible action, not just "delete". Include: keep as is; delete note A; delete note B; change a pitch; add a missing voice or octave partner; move a note to the other hand or staff; or fix the notation only (voice, tie, rest, beam) without changing pitch or timing. Name the exact event (track, channel, tick, pitch, velocity) for each candidate.
-2. Gather evidence for each candidate from the data actually available:
-   - Velocity: is the note clearly softer than the notes struck with it or in the same voice? Treat this as a lead, not a veto; transcribed velocity is not always reliable.
-   - Local pattern: across the surrounding beats and repeated phrases, which choice keeps the octaves, single-line melody, chord shapes or accompaniment figures regular, and which choice breaks a figure that is otherwise consistent?
-   - Harmony and melody: do the interval, key, chord function and melodic direction support the note? A real dissonance is not an error just because it sounds tense.
-   - Playability: does a candidate remove an implausible leap or a chord span one hand cannot reach while keeping the melody and harmony? "Hard to play" alone is not proof of a wrong note.
-   - Audio (when available): does the recording have that pitch and onset, or does a candidate match a spectral peak better? Do not count an overtone or another instrument as an independent piano note. When no audio is available, say so and mark the decision unverified.
-3. Compare the outcomes in words: for "delete A" and "delete B", state what each improves and what each breaks. A valid conclusion may be keep all, notation-only, add or move a note, or "not enough evidence, leave it for the user".
-4. Write a per-note decision record: bar and beat from the verified bar map, hand, original event (pitch, velocity, tick), candidate action, evidence for and against, the chosen action and why, the effect on sound and playability, and confidence or the open question. Save it with the song record so another Agent or the user can reproduce the choice.
-5. Do not invent a "ground truth" from the current data: MIDI and MusicXML disagreeing only proves the two files differ, and a note missing from the current MIDI is not, by itself, proof that it must be deleted. Do not require an original or pre-edit MIDI that may not exist.
-6. Only when the user asked to fix: make the smallest change the evidence supports, keep the owner's velocity, timing and pedal, and save a versioned copy with the before/after record. If the evidence is insufficient or the choice is a musical judgement (which of two valid voicings, whether a clash is intended), leave the source untouched and give the candidates to the user.
+**Agent (musical judgement), per flagged group:**
+
+1. Read the strategy's `causes`, `keep_when` and `agent` lines for the code; several codes on one group are one problem, decide it once.
+2. Rank the candidates by independent evidence, not by one number:
+   - A wrong octave keeps the pitch class and reduces the leap a lot (for example 24 to 12) while the pattern match rises: move the octave, do not delete. Deleting is right only when the pitch class itself is unsupported in the bar and the note is soft or late.
+   - A stray note: unsupported pitch class, velocity clearly below the group (about 15 or more under the median at similar dynamics), and an onset offset of tens of milliseconds. One of these alone is a lead; two independent ones make a candidate; a pattern break makes it a fix.
+   - A missing octave: both neighbouring onsets are octaves of the same line and adding the partner raises the pattern match without making the group unplayable. If audio exists, an upper partner shares a harmonic of the lower note, so audio cannot confirm it.
+   - Playability: prefer re-assigning hands (sound unchanged) before any pitch change; a 10-12 semitone reach or a fast jump is hard, not wrong.
+3. When metrics mislead, say so. Known traps: leading tones and chromatic passing notes are "unsupported" in a one-bar window but resolve by step; two-note groups show span 0 because each note can go to its own hand; a repeated open voicing scores best as keep; pedal-held notes inflate density.
+4. Write the per-note decision: bar and beat from the verified bar map, hand, event (tick, pitch, velocity), the candidates compared with their numbers, why the chosen one wins and what the runner-up would break, effect on sound, confidence. A conclusion may be keep, notation-only, octave move, delete, add or "insufficient evidence, keep".
+5. Do not use the current MIDI and MusicXML disagreeing as proof of a musical error, and do not require an original or pre-edit MIDI. Audio, when available, is a cross-check; never ask the user to judge single notes by ear.
+6. Only when the user asked to fix: apply the batch of decisions supported by at least two independent kinds of evidence to a versioned copy, keep the owner's velocity, timing and pedal, re-run the review on the copy (the strategy's `verify` line), and hand back one list of changes. Leave the rest unchanged with the reason.
 
 ## 6. Deliver
 
